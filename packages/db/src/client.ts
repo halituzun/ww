@@ -2,11 +2,13 @@ import { createClient, type ClickHouseClient } from '@clickhouse/client';
 
 export type { ClickHouseClient };
 
+// exactOptionalPropertyTypes açık: çağıranlar opsiyonel alanları yayabilsin diye
+// `| undefined` açıkça belirtilir.
 export interface ChConfig {
-  url?: string;
-  database?: string;
-  username?: string;
-  password?: string;
+  url?: string | undefined;
+  database?: string | undefined;
+  username?: string | undefined;
+  password?: string | undefined;
 }
 
 // Varsayılan portlar docker-compose.yml ile eşleşir (8124: bu makinede 8123 başka projede).
