@@ -1,0 +1,8 @@
+node_modules/
+dist/
+.turbo/
+coverage/
+workspace/
+secrets/
+*.log
+.DS_Store
