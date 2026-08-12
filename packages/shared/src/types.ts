@@ -1,0 +1,25 @@
+// WebSocket olay zarfı — docs/08-panel.md sözleşmesi.
+export interface WsEnvelope<T = unknown> {
+  event: string;
+  projectId: string;
+  seq: number;
+  ts: string;
+  data: T;
+}
+
+// api_usage satırı — docs/02-clickhouse-semasi.md ile birebir (created_at DB katmanında eklenir).
+export interface ApiUsageRow {
+  usage_id: string;
+  project_id: string;
+  agent_id: string;
+  task_id: string;
+  provider_id: string;
+  model: string;
+  purpose: 'completion' | 'embedding' | 'health_check';
+  prompt_tokens: number;
+  completion_tokens: number;
+  cost_usd: number;
+  latency_ms: number;
+  status: 'ok' | 'error' | 'timeout' | 'rate_limited' | 'fallback_used';
+  error_kind: string;
+}
