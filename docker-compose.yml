@@ -1,0 +1,25 @@
+# ww servisleri. Host portları bilinçli olarak standart dışı:
+# makinede başka projelerin Redis (6379) ve ClickHouse (8123) container'ları var.
+services:
+  clickhouse:
+    image: clickhouse/clickhouse-server:24.8
+    ports: ["8124:8123", "9001:9000"]
+    environment:
+      CLICKHOUSE_DB: ww
+      CLICKHOUSE_USER: ww
+      CLICKHOUSE_PASSWORD: ww   # lokal geliştirme; imaj, kullanıcı verilmeyince ağ erişimini kapatıyor
+    ulimits:
+      nofile: { soft: 262144, hard: 262144 }
+    volumes: ["ch-data:/var/lib/clickhouse"]
+    healthcheck:
+      test: ["CMD", "clickhouse-client", "--query", "SELECT 1"]
+      interval: 5s
+      retries: 20
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes"]
+    ports: ["6380:6379"]
+    volumes: ["redis-data:/data"]
+volumes:
+  ch-data:
+  redis-data:
