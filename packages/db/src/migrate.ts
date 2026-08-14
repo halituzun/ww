@@ -27,6 +27,14 @@ async function loadFiles(): Promise<MigrationFile[]> {
 }
 
 const checksum = (sql: string): string => createHash('sha256').update(sql).digest('hex');
+const DATABASE_IDENTIFIER = /^[A-Za-z_][A-Za-z0-9_]*$/;
+
+function validateDatabaseIdentifier(database: string): string {
+  if (!DATABASE_IDENTIFIER.test(database)) {
+    throw new Error(`geçersiz ClickHouse database adı: ${database}`);
+  }
+  return database;
+}
 
 // İfadeler ";" + satır sonu ile ayrılır; SQL string'i içinde ";\n" kullanılmamalıdır.
 // Tam satır yorumları ifadeden ayıklanır (ifadeye yapışık baş yorumlar CREATE'i düşürmesin).
@@ -43,7 +51,7 @@ const statements = (sql: string): string[] =>
     .filter((s) => s.length > 0);
 
 export async function runMigrations(opts: MigrateOptions = {}): Promise<{ applied: string[] }> {
-  const database = opts.database ?? process.env['WW_CH_DB'] ?? 'ww';
+  const database = validateDatabaseIdentifier(opts.database ?? process.env['WW_CH_DB'] ?? 'ww');
   const conn = { url: opts.url, username: opts.username, password: opts.password };
 
   const admin = createCh({ ...conn, database: 'default' });

@@ -7,6 +7,12 @@ export interface WsEnvelope<T = unknown> {
   data: T;
 }
 
+export interface HealthReport {
+  ok: boolean;
+  clickhouse: boolean;
+  redis: boolean;
+}
+
 // api_usage satırı — docs/02-clickhouse-semasi.md ile birebir (created_at DB katmanında eklenir).
 export interface ApiUsageRow {
   usage_id: string;
