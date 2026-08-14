@@ -28,6 +28,8 @@
 
 ## Faz 0 — Temel Altyapı {#faz-0}
 
+**Durum:** Tamamlandı ✅ (2026-08-14)
+
 **Kapsam:**
 
 - Monorepo iskeleti: pnpm + Turborepo; `apps/server`, `apps/panel` (boş kabuk),

@@ -8,6 +8,24 @@ Temel ilke: **Her şey veritabanı üzerinden yürür.** Planlar, tartışmalar,
 işlerini oradan alır, bağlamlarını oradan kurar, sonuçlarını oraya yazar.
 Hiçbir bağlam asla unutulmaz.
 
+## Geliştirme
+
+Gereksinimler: Node.js 22+, pnpm 11.1.3 ve Docker Desktop (veya Docker Engine +
+Compose). Yerel servisler ClickHouse'u `localhost:8124`, Redis'i `localhost:6380`,
+API'yi `localhost:4000`, paneli `localhost:5173` adresinde çalıştırır.
+
+```bash
+pnpm install
+docker compose up -d
+WW_REQUIRE_INTEGRATION=1 pnpm test
+pnpm dev
+```
+
+Varsayılan bağlantılar `WW_CH_URL` ve `WW_REDIS_URL` ile değiştirilebilir; örneğin
+`WW_CH_URL=http://localhost:8124 WW_REDIS_URL=redis://localhost:6380 pnpm dev`.
+Container kipinde anahtar deposu için 32 baytlık hex anahtarı `WW_MASTER_KEY` olarak
+verin. API portunu `WW_PORT`, panel proxy hedefini `VITE_API_PROXY_TARGET` belirler.
+
 ## Belgeler
 
 Tüm mimari ve tasarım dokümanları `docs/` altındadır:

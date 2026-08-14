@@ -127,7 +127,7 @@ Normalizasyon kuralları:
 
 - Anahtarlar **asla** ClickHouse'a yazılmaz; `api_providers.key_ref` yalnızca
   referanstır.
-- Depo: `secrets/keys.enc.json` — libsodium `secretbox` ile şifreli; ana anahtar
+- Depo: `secrets/keys.enc.json` — `node:crypto` AES-256-GCM ile şifreli; ana anahtar
   ilk kurulumda üretilir ve macOS Keychain'e konur (`security add-generic-password`),
   container kipinde `WW_MASTER_KEY` ortam değişkeni.
 - Panelden anahtar girişi: HTTPS-localhost üzerinden POST → server bellekte çözer,
