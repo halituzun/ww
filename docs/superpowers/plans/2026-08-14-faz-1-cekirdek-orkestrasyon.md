@@ -137,32 +137,34 @@ from domain code, Redis delivery claims, or exactly-once language.
 
 ### Implement
 
-- [ ] Add `SYSTEM_SENTINEL`, receipt states, communication event types, stable rule
+- [x] Add `SYSTEM_SENTINEL`, receipt states, communication event types, stable rule
   IDs, payload provenance classes, and typed enums without duplicating string unions.
-- [ ] Define strict Zod schemas and inferred types for `PartyRefV1`, all ten
+- [x] Define strict Zod schemas and inferred types for `PartyRefV1`, all ten
   `MessagePayloadV1` variants, `AgentMessageEnvelopeV1`, authenticated principal
   snapshot, and `SendMessageInputV1` (which has no sender role field).
-- [ ] Enforce envelope invariants in one `parseAgentMessageEnvelopeV1(unknown)`:
+- [x] Enforce envelope invariants in one `parseAgentMessageEnvelopeV1(unknown)`:
   protocol 1 only, `kind === payload.type`, reply requirement for `answer`, task
   references for report/verdict, deadlines after creation, and broadcast limits.
-- [ ] Define immutable schemas for `TaskBriefV1`, `AssignmentAttemptV1`,
+- [x] Define immutable schemas for `TaskBriefV1`, `AssignmentAttemptV1`,
   `TaskCausalCursorV1`, `PromptInputSnapshotV1`, and `TaskHandoffV1`.
-- [ ] Define `PolicyDecision`, `AuditFinding`, `TaskTransitionRequestV1`,
+- [x] Define `PolicyDecision`, `AuditFinding`, `TaskTransitionRequestV1`,
   `ToolCapabilityV1`, and structured verdict contracts.
-- [ ] Extend `ApiUsageRow` and provider metadata contract fields with invocation,
+- [x] Extend `ApiUsageRow` and provider metadata contract fields with invocation,
   brief, attempt, prompt snapshot, and fallback attempt.
-- [ ] Scaffold new packages by copying the package/TS/Vitest/barrel pattern from
+- [x] Scaffold new packages by copying the package/TS/Vitest/barrel pattern from
   `packages/shared`; add explicit Turbo integration env passthrough and keep tests
   uncached where DB/Redis is used.
 
 ### Verification
 
-- [ ] Unknown protocol, unknown key, malformed UUID/time, kind mismatch, forged
+- [x] Unknown protocol, unknown key, malformed UUID/time, kind mismatch, forged
   sender fields, missing reply target, and malformed verdict all fail closed.
-- [ ] Valid payload variants round-trip through canonical JSON with stable hashes.
-- [ ] `pnpm --filter @ww/shared build && pnpm --filter @ww/shared test &&
+- [x] Valid payload variants round-trip through canonical JSON with stable hashes.
+- [x] `pnpm --filter @ww/shared build && pnpm --filter @ww/shared test &&
   pnpm --filter @ww/shared lint`.
-- [ ] Grep confirms no `as AgentMessageEnvelopeV1` boundary cast.
+- [x] Grep confirms no `as AgentMessageEnvelopeV1` boundary cast.
+
+Evidence: shared 139 tests, providers 28 tests, root 234 tests total, integration-required zero skips, and three independent final reviews clean.
 
 ### Anti-patterns
 

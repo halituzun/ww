@@ -13,7 +13,43 @@
         "WW_CH_PASS",
         "WW_CH_URL",
         "WW_CH_USER",
-        "WW_REDIS_URL"
+        "WW_REDIS_URL",
+        "WW_REQUIRE_INTEGRATION"
+      ]
+    },
+    "@ww/memory#test": {
+      "dependsOn": ["^build"],
+      "cache": false,
+      "passThroughEnv": [
+        "WW_CH_DB",
+        "WW_CH_PASS",
+        "WW_CH_URL",
+        "WW_CH_USER",
+        "WW_REQUIRE_INTEGRATION"
+      ]
+    },
+    "@ww/agents#test": {
+      "dependsOn": ["^build"],
+      "cache": false,
+      "passThroughEnv": [
+        "WW_CH_DB",
+        "WW_CH_PASS",
+        "WW_CH_URL",
+        "WW_CH_USER",
+        "WW_REDIS_URL",
+        "WW_REQUIRE_INTEGRATION"
+      ]
+    },
+    "@ww/scheduler#test": {
+      "dependsOn": ["^build"],
+      "cache": false,
+      "passThroughEnv": [
+        "WW_CH_DB",
+        "WW_CH_PASS",
+        "WW_CH_URL",
+        "WW_CH_USER",
+        "WW_REDIS_URL",
+        "WW_REQUIRE_INTEGRATION"
       ]
     },
     "@ww/server#test": {

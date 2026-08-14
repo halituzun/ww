@@ -1,6 +1,7 @@
 {
-  "name": "@ww/shared",
+  "name": "@ww/executor",
   "version": "0.0.1",
+  "private": true,
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -9,10 +10,6 @@
     "dev": "tsc -p tsconfig.json --watch --preserveWatchOutput",
     "test": "vitest run",
     "lint": "eslint src"
-  },
-  "dependencies": {
-    "@noble/hashes": "^2.3.0",
-    "zod": "^4.4.3"
   },
   "devDependencies": {
     "typescript": "^5.7.0",

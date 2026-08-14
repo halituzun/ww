@@ -1,17 +1,22 @@
 // İç format ↔ sağlayıcı formatı çevirileri (docs/04-model-katmani.md → tool-use normalizasyonu).
 // Saf fonksiyonlar: SDK'ya bağımlı değildir, birim testlerle doğrulanır.
+import {
+  PromptToolCallV1Schema,
+  type PromptMessageRole,
+  type PromptToolCallV1,
+} from '@ww/shared';
 import type { ChatMessage, NormalizedToolCall, ToolDef } from '../types.js';
 
 /* ---------------------------------- OpenAI --------------------------------- */
 
 export interface OpenAiMessage {
-  role: 'system' | 'user' | 'assistant' | 'tool';
+  role: PromptMessageRole;
   content: string | null;
   tool_call_id?: string;
   tool_calls?: { id: string; type: 'function'; function: { name: string; arguments: string } }[];
 }
 
-export function toOpenAiMessages(messages: ChatMessage[]): OpenAiMessage[] {
+export function toOpenAiMessages(messages: readonly ChatMessage[]): OpenAiMessage[] {
   return messages.map((m) => {
     if (m.role === 'tool') {
       return { role: 'tool', content: m.content, tool_call_id: m.toolCallId ?? '' };
@@ -57,7 +62,7 @@ export interface AnthropicBlock {
   text?: string;
   id?: string;
   name?: string;
-  input?: Record<string, unknown>;
+  input?: unknown;
   tool_use_id?: string;
   content?: string;
 }
@@ -68,7 +73,7 @@ export interface AnthropicMessage {
 }
 
 // Anthropic'te system ayrı parametredir; birden çok system mesajı birleştirilir.
-export function toAnthropicMessages(messages: ChatMessage[]): {
+export function toAnthropicMessages(messages: readonly ChatMessage[]): {
   system: string | undefined;
   messages: AnthropicMessage[];
 } {
@@ -114,7 +119,7 @@ export function fromAnthropicContent(blocks: AnthropicBlock[]): {
   for (const b of blocks) {
     if (b.type === 'text' && b.text) texts.push(b.text);
     if (b.type === 'tool_use') {
-      toolCalls.push({ id: b.id ?? '', name: b.name ?? '', args: b.input ?? {} });
+      toolCalls.push({ id: b.id ?? '', name: b.name ?? '', args: b.input });
     }
   }
   return { content: texts.length ? texts.join('') : null, toolCalls };
@@ -122,12 +127,20 @@ export function fromAnthropicContent(blocks: AnthropicBlock[]): {
 
 /* ---------------------------------- ortak ---------------------------------- */
 
-// Modeller bazen bozuk JSON üretir; çağrıyı düşürmek yerine boş argümanla devam et.
-function parseArgs(raw: string): Record<string, unknown> {
+// Provider çıktısını kayıpsız biçimde untrusted tut. Bozuk JSON, daha sonra
+// güvenilir prompt/handoff sözleşmesine sessizce boş nesne olarak giremez.
+function parseArgs(raw: string): unknown {
   try {
-    const v: unknown = JSON.parse(raw || '{}');
-    return typeof v === 'object' && v !== null ? (v as Record<string, unknown>) : {};
+    return JSON.parse(raw) as unknown;
   } catch {
-    return {};
+    return raw;
   }
+}
+
+/**
+ * Phase 7 provider-to-prompt handoff boundary. Provider tool output is
+ * untrusted until this strict runtime parse succeeds.
+ */
+export function toPromptToolCallV1(call: NormalizedToolCall): PromptToolCallV1 {
+  return PromptToolCallV1Schema.parse(call);
 }

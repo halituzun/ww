@@ -1,17 +1,18 @@
 // Provider soyutlaması — docs/04-model-katmani.md arayüzü ile birebir.
 
+import type {
+  PromptMessageV1,
+  ProviderInvocationProvenanceV1,
+} from '@ww/shared';
+
 export interface NormalizedToolCall {
-  id: string;
-  name: string;
-  args: Record<string, unknown>;
+  readonly id: string;
+  readonly name: string;
+  // Provider output remains untrusted until toPromptToolCallV1 validates it.
+  readonly args: unknown;
 }
 
-export interface ChatMessage {
-  role: 'system' | 'user' | 'assistant' | 'tool';
-  content: string;
-  toolCallId?: string; // role='tool' iken hangi çağrının sonucu
-  toolCalls?: NormalizedToolCall[]; // role='assistant' iken modelin istediği çağrılar
-}
+export type ChatMessage = PromptMessageV1;
 
 export interface ToolDef {
   name: string;
@@ -19,7 +20,7 @@ export interface ToolDef {
   parameters: Record<string, unknown>; // JSON Schema
 }
 
-export interface CompletionMeta {
+export interface CompletionMeta extends Partial<ProviderInvocationProvenanceV1> {
   projectId: string;
   agentId: string;
   taskId?: string;
@@ -28,7 +29,7 @@ export interface CompletionMeta {
 
 export interface CompletionRequest {
   model: string;
-  messages: ChatMessage[];
+  messages: readonly ChatMessage[];
   tools?: ToolDef[];
   maxTokens?: number;
   temperature?: number;

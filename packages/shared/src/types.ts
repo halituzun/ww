@@ -1,3 +1,6 @@
+import { z } from 'zod';
+import { EntityIdSchema } from './identity.js';
+
 // WebSocket olay zarfı — docs/08-panel.md sözleşmesi.
 export interface WsEnvelope<T = unknown> {
   event: string;
@@ -28,4 +31,22 @@ export interface ApiUsageRow {
   latency_ms: number;
   status: 'ok' | 'error' | 'timeout' | 'rate_limited' | 'fallback_used';
   error_kind: string;
+  // Phase 1 communication provenance. Optional until provider wiring lands in Phase 7.
+  invocation_id?: string;
+  task_brief_id?: string;
+  assignment_attempt_id?: string;
+  prompt_input_snapshot_id?: string;
+  fallback_attempt?: number;
 }
+
+export const ProviderInvocationProvenanceV1Schema = z.strictObject({
+  invocationId: EntityIdSchema,
+  taskBriefId: EntityIdSchema,
+  assignmentAttemptId: EntityIdSchema,
+  promptInputSnapshotId: EntityIdSchema,
+  fallbackAttempt: z.number().int().nonnegative(),
+}).readonly();
+
+export type ProviderInvocationProvenanceV1 = z.infer<
+  typeof ProviderInvocationProvenanceV1Schema
+>;
