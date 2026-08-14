@@ -112,7 +112,8 @@ React Flow tabanlı canlı organizasyon şeması:
   konsey revizyon turu → yeni plan sürümü Türkçe özetle onaya gelir.
 - **Soru kutusu**: `waiting_user` görevlerin soruları listelenir; kullanıcı
   PM'i beklemeden herhangi bir agent sorusunu görüp doğrudan cevaplayabilir.
-  Cevap ilgili `session_id`'ye `answer` olarak düşer, görev devam eder.
+  Cevap ilgili `session_id`'ye `answer` olarak düşer ve zorunlu
+  `replyToMessageId` ile tam olarak bir pending soruya bağlanır; görev devam eder.
 
 ## Denetim Ekranı
 
@@ -132,13 +133,14 @@ görüldü işareti panelde lokal tutulur.
 ## WebSocket Olay Sözleşmesi
 
 Tek soket, zarf formatı (`packages/shared` tipleri — panel ve server aynı tipi
-derler):
+derler). Aşağıdaki opaque cursor hedefi Faz 3 uygulama planında kesinleştirilir;
+Faz 0 `events.seq` alanı public istemci sözleşmesi değildir:
 
 ```ts
 interface WsEnvelope<T = unknown> {
   event: WsEventName;
   projectId: string;
-  seq: number;          // events.seq — boşluk görülürse REST ile tamamlama
+  cursor: string;       // opaque, proje kapsamlı Faz 3 replay cursor'u
   ts: string;           // ISO
   data: T;
 }
@@ -161,4 +163,6 @@ type WsEventName =
   çizelgesi açıkken abone olunur.
 - Kaynak: server, ClickHouse yazımından sonra Redis pub/sub'a basar; gateway
   soketlere dağıtır ([Mimari → Tutarlılık](01-mimari.md#tutarlılık-kuralları)).
-- REST tamamlama ucu: `GET /projects/:id/events?after_seq=N`.
+- İstemci global/ardışık sayı boşluğu yorumlamaz; snapshot high-water'ı ve son
+  opaque cursor'u saklayıp reconnect sırasında dedupe/replay yapar.
+- REST tamamlama ucu: `GET /projects/:id/events?after_cursor=<opaque>`.

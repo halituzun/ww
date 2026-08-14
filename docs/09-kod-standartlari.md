@@ -2,7 +2,8 @@
 
 > Üretilen projelerin MVVM şablonları, starter template'ler, adlandırma/kod
 > standartları ve denetçi agent kontrol listeleri.
-> İlgili: [Agent Sistemi](03-agent-sistemi.md) · [Executor](05-executor.md)
+> İlgili: [Agent Sistemi](03-agent-sistemi.md) · [Executor](05-executor.md) ·
+> [İletişim Sözleşmesi](13-agent-iletisim-sozlesmesi.md)
 
 ## İçindekiler
 
@@ -11,6 +12,7 @@
 3. [Starter Template'ler](#starter-templateler)
 4. [Adlandırma ve Kod Standartları](#adlandırma-ve-kod-standartları)
 5. [Denetçi Kontrol Listeleri](#denetçi-kontrol-listeleri)
+6. [İletişim Denetimi](#communication_audit--iletişim-denetim-profili)
 
 ---
 
@@ -146,3 +148,17 @@ ekranına düşer, her bulgu düzeltme görevine bağlanır ([08 — Denetim](08
 - [ ] Adlandırma/dosya yerleşimi standarda uygun mu?
 - [ ] Gereksiz bağımlılık eklenmiş mi?
 - [ ] Var olan davranışı bozan değişiklik var mı (diff dışına taşan etki)?
+
+### `communication_audit` — iletişim denetim profili
+
+- [ ] Her mesaj desteklenen protokol/payload sürümüyle doğrulanmış mı?
+- [ ] Gönderen rolü, alıcı ve mesaj türü policy kararıyla yetkili mi?
+- [ ] Soru/cevap `replyToMessageId`; retry/yan etki idempotency anahtarıyla bağlı mı?
+- [ ] Worker, verifier ve provider aynı immutable `taskBriefId`yi kullanmış mı?
+- [ ] Geçmiş göreve cutoff sonrası plan, kural, prompt veya hafıza sızmış mı?
+- [ ] Redis bildirimi olmasa bile durable inbox ve receipt zinciri tamamlanmış mı?
+- [ ] Verdict/finding; kural sürümü, kanıt ve düzeltme göreviyle izlenebilir mi?
+
+Bu kontrollerin şema/yetki/FSM bölümü deterministik guard'larda; anlam ve kanıt
+bölümü mevcut `standards_auditor` rolünün bu profilinde çalışır. Ayrıntılar:
+[13 — Agent İletişim Sözleşmesi](13-agent-iletisim-sozlesmesi.md).

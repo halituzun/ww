@@ -176,7 +176,8 @@ yazılır. Redis kaybı = yalnızca hız kaybı, veri kaybı değil.
 
 1. **Yazım sırası**: önce ClickHouse (kalıcı gerçek), sonra Redis (tampon/yayın).
    Panel bir olayı WebSocket'ten kaçırırsa REST ile `events`'ten tamamlar
-   (her olay zarfında monoton `seq` alanı vardır).
+   (Faz 3'te tanımlanacak opaque, proje kapsamlı cursor/high-water ile). Faz 0
+   `events.seq` alanı public istemci cursor sözleşmesi değildir.
 2. **Durum güncellemeleri**: `tasks` ve `agents` ReplacingMergeTree'dir; güncelleme =
    artan `version` (server'da monoton sayaç: `toUnixTimestamp64Milli(now64())`) ile
    yeni satır. Okumalar her zaman `FINAL` yerine `ORDER BY version DESC LIMIT 1 BY id`
@@ -201,4 +202,4 @@ Senaryolar ve davranış:
 | **Görev asılı kaldı** | Heartbeat TTL (30 sn) dolunca zamanlayıcı görevi geri alır; `attempt` artar; `max_attempts` aşılırsa tırmandırma. |
 
 Kurtarma testi, mock provider ile entegrasyon test setinin parçasıdır
-([11 — Yol Haritası, Faz 1](11-yol-haritasi.md#faz-1)).
+([11 — Yol Haritası, Faz 2](11-yol-haritasi.md#faz-2)).

@@ -1,7 +1,8 @@
 # 11 — Yol Haritası
 
 > Fazlar, her fazın "bitti" tanımı ve doğrulama senaryosu.
-> İlgili: [Mimari](01-mimari.md) · [Şema](02-clickhouse-semasi.md) · [Agent Sistemi](03-agent-sistemi.md)
+> İlgili: [Mimari](01-mimari.md) · [Şema](02-clickhouse-semasi.md) ·
+> [Agent Sistemi](03-agent-sistemi.md) · [İletişim Sözleşmesi](13-agent-iletisim-sozlesmesi.md)
 
 ## İçindekiler
 
@@ -60,10 +61,19 @@
   web starter template.
 - `packages/agents`: worker döngüsü (tool-use çevrimi), verifier döngüsü,
   basit PM (konsey yok — görevleri elle/senaryodan alır), `report_result`,
-  `ask_question` (PM'e), mesaj protokolünün çekirdeği.
+  `ask_question` (PM'e), sürümlemeli mesaj zarfı, routing, durable inbox/receipt,
+  idempotency ve iletişim yetki guard'ı.
 - `packages/scheduler`: kuyruk tüketici, claim kilidi, atama algoritmasının
   çekirdeği (bağımlılık + dosya kilidi + worker/verifier seçimi), heartbeat,
-  durum makinesi geçişleri.
+  tek sahipli durum makinesi geçişleri, immutable `TaskBriefV1`, her çalıştırma için
+  `AssignmentAttemptV1` ve yeniden atama için typed handoff.
+- Faz 1 migration'ı: görev brifleri, mesaj korelasyon/provenance alanları,
+  canonical payload, alıcı bazlı receipt/effect ledger, iletişim event türleri ve
+  yapılandırılmış audit finding temeli. Mevcut seed'leri değiştirmeden PM-direct
+  worker/PM iletişimini öğreten ve marker testleriyle korunan prompt v2'leri.
+  Current attempt'i task fold'una bağlayan append-only `task_causal_entries`.
+- Provider meta/`api_usage`: invocation, brief, assignment, prompt-input snapshot
+  ve fallback attempt provenance'ı.
 - Minimal REST: proje aç, görev ekle, durum sorgula (panel yok; curl/CLI ile).
 
 **Bitti tanımı / doğrulama (mock ile uçtan uca):**
@@ -73,6 +83,14 @@
   kapı (tsc+eslint+vitest) koşar → commit'ler atılır → `tasks/events/artifacts`
   kayıtları beklenen zincirde. Tamamı deterministik, gerçek API'siz.
 - Ping-pong freni testi: mock verifier hep reddeder → 3. denemede `escalated`.
+- İletişim testi: soru yalnız `replyToMessageId` ile doğru cevabı alır; yinelenen
+  teslim yan etkiyi tekrarlamaz; Redis bildirimi olmadan inbox replay çalışır;
+  sahte rol/verdict ve prompt injection fail-closed olur.
+- Zaman testi: görev, atama sonrasında değişen plan/prompt/kuralı görmez; bilinçli
+  rebase yeni `TaskBriefV1` sürümü üretir; retry kendi nedensel ret/gate/cevap
+  kayıtlarını görür; her invocation kendi input causal high-water'ını mühürler;
+  attempt-bazlı ordinal restart'ta monoton sürer ve stale/paralel writer reddedilir;
+  reassignment yeni attempt + ancestor-bounded handoff üretir.
 
 ## Faz 2 — Hafıza ve Dayanıklılık {#faz-2}
 
@@ -91,7 +109,8 @@
 - Kurtarma testi: mock senaryo ortasında server süreci öldürülür → yeniden başlar →
   proje kaldığı yerden biter; working tree temiz; çift commit yok.
 - Hafıza testi: 2. görev, 1. görevin kararını Context Builder üzerinden görür
-  (mock senaryo bunu doğrular); `memory_query` doğru kaydı döndürür.
+  (mock senaryo bunu doğrular); `memory_query` doğru kaydı döndürür. Eski görevin
+  as-of replay'i cutoff sonrası bilgiyi dışarıda bırakır.
 - Fren testleri: token tavanı ve kaçak döngü tırmandırması.
 
 ## Faz 3 — Panel Temeli {#faz-3}
@@ -99,6 +118,8 @@
 **Kapsam:**
 
 - WebSocket gateway + olay zarfı + REST tamamlama ucu.
+- REST ve WebSocket için ortak doğrulanmış olay sözlüğü, proje-scoped cursor,
+  snapshot high-water mark, dedupe ve sıralı replay.
 - Panel sayfaları: Projeler (liste/detay/sihirbaz kabuğu), Sohbet (PM + soru
   kutusu), API yönetimi (sağlayıcılar, anahtar girişi, sağlık, fallback sırası,
   rol→model eşleme), Kontör panosu, basit görev listesi.
@@ -123,6 +144,8 @@
 - Delegasyon (`create_subtask` herkese) + derinlik/bütçe sınırları.
 - Klonlama + boşta kapatma.
 - Standart denetçileri (mvvm/ui/db-yazım) + denetim ekranı + düzeltme görevi akışı.
+- `standards_auditor` için `communication_audit` profili: route, receipt,
+  brief/rule sürümü, provenance ve zamansal sızıntı denetimi.
 - Yeniden planlama (kullanıcı müdahalesi → konsey revizyonu).
 - Flutter ve API starter template'leri + kapıları.
 

@@ -2,7 +2,8 @@
 
 > "Asla unutmama" garantisinin gerçek mimarisi: üç katmanlı hafıza piramidi,
 > özetleyici işleyişi, embedding boru hattı, Context Builder ve "nasıl yaptın?" akışı.
-> İlgili: [Şema](02-clickhouse-semasi.md) · [Agent Sistemi](03-agent-sistemi.md)
+> İlgili: [Şema](02-clickhouse-semasi.md) · [Agent Sistemi](03-agent-sistemi.md) ·
+> [İletişim Sözleşmesi](13-agent-iletisim-sozlesmesi.md)
 
 ## İçindekiler
 
@@ -72,13 +73,17 @@ prompta bütçeyle koy (disiplinli)**. ClickHouse üç işte de doğal güçlüd
 ## Context Builder
 
 Her LLM çağrısından önce promptun `{{context_pack}}` bölümünü kurar.
-Girdi: agent rolü, görev, token bütçesi (rol başına ayar; worker varsayılanı 24k token).
+Girdi: agent rolü, immutable `TaskBriefV1`, token bütçesi (rol başına ayar; worker
+varsayılanı 24k token). Global kaynak seçimleri `baseContextCutoffAt` anına göre
+yapılır. Retry/replay daha sonra oluşmuş proje bilgisini göremez; yalnız aynı
+task brief'in verifier reddi, gate çıktısı, soru cevabı ve escalation kayıtları
+`taskCausalCursor` üzerinden eklenir.
 
 Katmanlı doldurma (öncelik sırasıyla, bütçe dolunca kesilir):
 
-1. **Sabit çekirdek** (her zaman): proje adı/türü, aktif plan özeti,
-   gereksinim özeti (`knowledge kind='requirement'` aktifleri),
-   ilgili kod standartları (`kind='standard'`).
+1. **Sabit çekirdek** (her zaman): proje adı/türü, brief'e sabitlenmiş plan özeti,
+   cutoff anında geçerli gereksinimler (`knowledge kind='requirement'`),
+   brief'te sürüm/hash ile sabitlenmiş kod standartları (`kind='standard'`).
 2. **Görev bağlamı**: görev tanımı + kabul kriterleri; `target_files`'ın
    fihrist kayıtları; bağımlı görevlerin (`depends_on`) özetleri;
    üst görev zinciri özeti (delegasyonda).
@@ -93,6 +98,8 @@ Kurallar:
 - Kırpma bütünsel yapılır: parça ya tam girer ya hiç girmez (yarım metin yok).
 - Kurulan paketin özeti `events`'e yazılır (`decision` olayı: hangi kaynaklar
   girdi/elendi) — bağlam kararları da izlenebilirdir.
+- Plan/kural/context değişikliği eski brief'i değiştirmez; yeni brief sürümü ve
+  açık bir `rebase` olayı gerektirir.
 
 ## memory_query Aracı
 

@@ -45,6 +45,7 @@ Tüm mimari ve tasarım dokümanları `docs/` altındadır:
 | [10 — Test Ortamları](docs/10-test-ortamlari.md) | Web önizleme, Android emülatör, API konsolu |
 | [11 — Yol Haritası](docs/11-yol-haritasi.md) | Fazlar, "bitti" tanımları, doğrulama senaryoları |
 | [12 — Agent Devir ve Hafıza](docs/12-agent-devir-ve-hafiza.md) | Claude/Codex oturum devri, yerel hafıza ve Git protokolü |
+| [13 — Agent İletişim Sözleşmesi](docs/13-agent-iletisim-sozlesmesi.md) | Mesaj zarfı, görev brifi, teslimat, kural yaptırımı ve denetim |
 
 ## Hızlı Özet
 

@@ -140,14 +140,33 @@ Durum geçiş *tarihçesi* ayrıca `events`'e `status_change` olayı olarak yaz�
 Engine: `MergeTree ORDER BY (project_id, session_id, created_at)`
 Partition: `toYYYYMM(created_at)`
 
+Faz 1 iletişim migration'ı latest task state'i current `task_brief_id` ve
+`assignment_attempt_id` ile; bu çekirdek tabloyu protokol ve payload sürümü,
+canonical `payload_json`,
+`reply_to_message_id`, correlation/causation, idempotency, `task_brief_id`,
+`assignment_attempt_id`, `invocation_id`, deadline, priority ve provenance ile
+genişletir; ayrıca immutable `task_briefs`/`assignment_attempts`/
+`prompt_input_snapshots`, typed handoff ve append-only `task_causal_entries`,
+alıcı bazlı append-only `message_receipts`, effect ledger ve sürümlü
+`audit_findings` ekler. `content` yalnız okunabilir insan projeksiyonu/legacy
+alandır. Normatif davranış:
+[13 — Agent İletişim Sözleşmesi](13-agent-iletisim-sozlesmesi.md).
+
+`task_causal_entries`; task/brief/attempt/handoff kimlikleri, attempt-bazlı
+`ordinal`, deterministik `entry_id`, `source_type`, `source_id`, `causation_id` ve
+`created_at` taşır; `MergeTree ORDER BY (task_id, assignment_attempt_id, ordinal,
+entry_id)` kullanır. Scheduler-owned repository current attempt'i latest task
+fold'undan doğrular, retry'da existing `entry_id` ordinal'ini döndürür, restart'ta
+folded `max(ordinal)+1` ile sürer. Aynı ordinal'de farklı entry fail-closed'dur.
+
 ### `events` — ham olay akışı (append-only)
 
 | Kolon | Tip | Açıklama |
 |---|---|---|
 | `event_id` | UUID | |
-| `seq` | UInt64 | Global monoton sıra (panel senkronu için) |
+| `seq` | UInt64 | Faz 0 ham sırası; proje bazlı replay cursor'u Faz 3 gateway tasarımında kesinleştirilir |
 | `project_id`, `task_id`, `agent_id` | UUID | |
-| `event_type` | LowCardinality(String) | `tool_call` \| `tool_result` \| `api_call` \| `decision` \| `status_change` \| `error` \| `commit` \| `lock_acquired` \| `lock_released` \| `escalation` \| `clone_spawned` \| `test_run` |
+| `event_type` | LowCardinality(String) | `tool_call` \| `tool_result` \| `api_call` \| `decision` \| `status_change` \| `error` \| `commit` \| `lock_acquired` \| `lock_released` \| `escalation` \| `clone_spawned` \| `test_run` \| `process_started` \| `process_stopped` \| `recovery_completed`; Faz 1 iletişim timeline türlerini ekler |
 | `tool_name` | LowCardinality(String) | `read_file`, `write_file`, `run_command`, `git`, `web_search`, `memory_query` … |
 | `payload` | String (JSON) | Olaya özgü ayrıntı (argümanlar, sonuç özeti, exit code…) |
 | `duration_ms` | UInt32 | |
@@ -298,6 +317,11 @@ Engine: `ReplacingMergeTree(version) ORDER BY role`
 | `created_at` | DateTime64(3) | |
 
 Engine: `MergeTree ORDER BY (project_id, created_at)` · Partition: `toYYYYMM(created_at)`
+
+Faz 1 migration'ı ve provider `CompletionMeta`; `invocation_id`, `task_brief_id`,
+`assignment_attempt_id`, `prompt_input_snapshot_id` ve `fallback_attempt` alanlarını
+ekler. Böylece source mesaj, kullanılan prompt high-water'ı, gerçek fallback modeli,
+kullanım satırı ve sonuç mesajı aynı invocation üzerinden izlenir.
 
 ## Materialized View'lar
 

@@ -72,7 +72,7 @@ Rate limit aşımında router bekletir (kuyruklu token-bucket); 429 dönerse
 
 | Fren | Tetik | Davranış |
 |---|---|---|
-| **Ping-pong freni** | worker↔verifier ret döngüsü `attempt ≥ max_attempts` (3) | Görev `escalated`; zincir: group_lead → professor → PM → kullanıcı ([03](03-agent-sistemi.md#tırmandırma-zinciri)) |
+| **Ping-pong freni** | worker↔verifier ret döngüsü `attempt ≥ max_attempts` (3) | Görev `escalated`; Faz 1: PM → kullanıcı, Faz 4: group_lead → professor → PM → kullanıcı ([03](03-agent-sistemi.md#tırmandırma-zinciri)) |
 | **Görev token tavanı** | `tokens_spent ≥ token_budget` | Görev duraklar → tırmandırma; PM bütçe artırabilir veya görevi böler |
 | **Proje kontör tavanı** | `mv_usage_daily` toplamı ≥ `budget_usd_limit` | Proje `paused`; panel bildirimi; kullanıcı kararı beklenir |
 | **Kaçak döngü** | Son 3 denemenin hata çıktıları ≥ %90 benzer (normalize edilmiş metin benzerliği) | Deneme hakkı bitmemişse bile erken tırmandırma — aynı duvara tekrar koşturmayı keser |

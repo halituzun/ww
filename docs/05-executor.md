@@ -46,7 +46,7 @@ sağlayıcı biçimine çevirir. Roller yalnızca kendine tanınan araçları g�
 | `record_knowledge` | kind, title, content, tags | pm, group_lead, researcher | `knowledge` kaydı açar |
 | `record_artifact` | type, name, path, summary | worker | `artifacts` kaydı |
 | `create_subtask` | title, description, group, files[], criteria | pm, group_lead, worker | Delegasyon ([03](03-agent-sistemi.md#delegasyon)) |
-| `ask_question` | to ('group_lead'\|'pm'), content | herkes | Soru akışı |
+| `ask_question` | to (`pm`; Faz 4: `group_lead`), content | herkes | Faz 1 doğrudan PM; Faz 4 tam soru akışı |
 | `report_result` | summary | worker | Görevi `verifying`'e taşır |
 | `run_gate` | — | sistem/worker | Derleme+lint+test kapısını koşar |
 

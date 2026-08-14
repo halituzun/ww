@@ -2,7 +2,8 @@
 
 > Roller, gruplar, konsey protokolü, worker+verifier yaşam döngüsü, delegasyon,
 > klonlama, iletişim protokolü ve tırmandırma zinciri.
-> İlgili: [Şema](02-clickhouse-semasi.md) · [Zamanlayıcı](07-zamanlayici.md) · [Hafıza](06-hafiza-ve-baglam.md)
+> İlgili: [Şema](02-clickhouse-semasi.md) · [Zamanlayıcı](07-zamanlayici.md) ·
+> [Hafıza](06-hafiza-ve-baglam.md) · [İletişim Sözleşmesi](13-agent-iletisim-sozlesmesi.md)
 
 ## İçindekiler
 
@@ -147,21 +148,30 @@ Amaç: planın tek modelin önyargısıyla değil, çok modelin çatışmasıyla
 
 ## İletişim Protokolü
 
+Bu bölüm davranış akışını özetler. Mesaj zarfı, korelasyon, idempotency, receipt,
+zamansal görev brifi, yetkilendirme ve denetim için normatif kaynak
+[13 — Agent İletişim Sözleşmesi](13-agent-iletisim-sozlesmesi.md)'dir.
+
 - **Taşıyıcı**: Agent'lar birbirine doğrudan bağlanmaz. Mesaj = `messages` satırı
   (kalıcı) + Redis pub/sub bildirimi (tetik). Alıcı agent'ın döngüsü mesajı DB'den okur.
 - **Mesaj türleri** (`messages.kind`): `question`, `answer`, `order`, `proposal`,
   `objection`, `synthesis`, `report`, `escalation`, `user_command`, `verdict`.
-- **Soru akışı**: Worker soru sorarsa → önce kendi `group_lead`'ine; lider bilmiyorsa
-  → PM; PM politika gereği (gereksinim değişikliği, bütçe, dış hesap bilgisi gibi
-  konular) veya bilemediği için → kullanıcıya (`waiting_user`, panelde soru kutusu).
+- **Soru akışı**: Faz 1'de worker doğrudan PM'e sorar. Faz 4'te group lead
+  etkinleşince worker → kendi `group_lead`'i → PM zinciri açılır. PM politika gereği
+  (gereksinim değişikliği, bütçe, dış hesap bilgisi gibi konular) veya bilemediği
+  için → kullanıcıya (`waiting_user`, panelde soru kutusu).
   Kullanıcı **istediği an** bekleyen tüm soruları görüp PM'i beklemeden kendisi
-  cevaplayabilir (cevap `answer` olarak aynı `session_id`'ye düşer).
+  cevaplayabilir. Cevap `answer` olarak aynı `session_id`'ye düşer ve zorunlu
+  `replyToMessageId` ile tam olarak bir pending soruya bağlanır.
 - **Kullanıcı emirleri**: Panel → `user_command` mesajı → PM yorumlar:
   küçük emir → ilgili göreve `order`; büyük değişiklik → yeniden planlama turu.
 - **Dil**: Agent↔agent İngilizce; kullanıcıya dokunan her mesaj Türkçe
   (PM iki yönde çeviri yapar).
 
 ## Tırmandırma Zinciri
+
+Aşağıdaki tam zincir Faz 4 hedefidir. Faz 1'de group lead/professor basamakları yoktur;
+deneme sınırına ulaşan iş PM'e, gerekirse kullanıcıya tırmandırılır.
 
 ```
 worker ↔ verifier (3 deneme)
@@ -190,7 +200,7 @@ frenlerinin tetiklediği tırmandırmalar da aynı zincire girer
 Builder doldurur. Çekirdek şablonların özü (tam metinler implementasyonda
 `prompts` seed migration'ına girer):
 
-**`role.worker.coding` (özet):**
+**`role.worker.coding` v1 (Faz 0 seed özeti):**
 
 ```text
 You are a coding worker agent in the "{{project_name}}" project.
@@ -236,5 +246,7 @@ Communicate with the user in Turkish; with agents in English.
 ```
 
 Prompt düzenleme akışı: panel → `prompts` yeni sürüm → `is_active` işareti →
-sonraki atamalar yeni sürümle çalışır; eski görev kayıtları hangi sürümle
-çalıştığını `agents.prompt_version` üzerinden korur.
+sonraki atamalar yeni sürümle çalışır. Eski görev, prompt ve kural sürümünü mutable
+agent kaydından değil, atama anında mühürlenen `TaskBriefV1` üzerinden korur. Faz 1
+ileri migration'ı worker ve PM için doğrudan PM soru rotasını öğreten v2'leri aktif
+eder; v1 migration değiştirilmez. Faz 4 group lead rotası yine yeni sürümle açılır.

@@ -3,6 +3,8 @@
 Read `AGENTS.md` first, then `docs/00-genel-bakis.md`, `docs/01-mimari.md`, and
 `docs/11-yol-haritasi.md`. The detailed cross-session protocol is in
 `docs/12-agent-devir-ve-hafiza.md`.
+Product-agent work must also read the normative communication contract in
+`docs/13-agent-iletisim-sozlesmesi.md`.
 
 ## Current State
 
@@ -10,7 +12,8 @@ Read `AGENTS.md` first, then `docs/00-genel-bakis.md`, `docs/01-mimari.md`, and
 - The public upstream is `https://github.com/halituzun/ww`; `main` must remain
   buildable and reviewable.
 - The next product milestone is Phase 1, “Çekirdek Orkestrasyon,” exactly as
-  scoped in `docs/11-yol-haritasi.md`. Do not silently pull work from later phases.
+  scoped in `docs/11-yol-haritasi.md`. Its first vertical slice is the versioned
+  communication contract and immutable task brief. Do not silently pull work from later phases.
 - Local services use ClickHouse `8124`, Redis `6380`, API `4000`, and panel `5173`.
 
 ## Start Every Session
