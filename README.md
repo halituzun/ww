@@ -44,6 +44,7 @@ Tüm mimari ve tasarım dokümanları `docs/` altındadır:
 | [09 — Kod Standartları](docs/09-kod-standartlari.md) | MVVM şablonları, starter template'ler, denetçi listeleri |
 | [10 — Test Ortamları](docs/10-test-ortamlari.md) | Web önizleme, Android emülatör, API konsolu |
 | [11 — Yol Haritası](docs/11-yol-haritasi.md) | Fazlar, "bitti" tanımları, doğrulama senaryoları |
+| [12 — Agent Devir ve Hafıza](docs/12-agent-devir-ve-hafiza.md) | Claude/Codex oturum devri, yerel hafıza ve Git protokolü |
 
 ## Hızlı Özet
 
