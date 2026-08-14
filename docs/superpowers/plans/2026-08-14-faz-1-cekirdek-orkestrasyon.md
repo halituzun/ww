@@ -248,23 +248,25 @@ made string-aware with regression tests.
 
 ### Implement
 
-- [ ] Add `reclaimQueue(...)` over node-redis `xAutoClaim`, returning next cursor,
+- [x] Add `reclaimQueue(...)` over node-redis `xAutoClaim`, returning next cursor,
   claimed task IDs, delivery count inputs, and deleted IDs; never use `JUSTID` when
   retry count/evidence is required.
-- [ ] Add fenced lease helpers with atomic Lua acquire/renew/release. Owner + fence
+- [x] Add fenced lease helpers with atomic Lua acquire/renew/release. Owner + fence
   must match; stale owners cannot renew or release.
-- [ ] Add heartbeat set/check helpers and task/message/receipt lock-key builders.
-- [ ] Add `CommunicationWakeupPublisher` that publishes only message ID, recipient,
+- [x] Add heartbeat set/check helpers and task/message/receipt lock-key builders.
+- [x] Add `CommunicationWakeupPublisher` that publishes only message ID, recipient,
   and project after repository success. Consumers always reload canonical DB data.
-- [ ] Preserve unconditional `destroy()` cleanup for ephemeral/pub-sub clients.
+- [x] Preserve unconditional `destroy()` cleanup for ephemeral/pub-sub clients.
 
 ### Verification
 
-- [ ] Live Redis tests cover new delivery, pending reclaim after idle threshold,
+- [x] Live Redis tests cover new delivery, pending reclaim after idle threshold,
   cursor continuation, deleted stream IDs, bounded retries, lease fencing/renewal,
   stale release, heartbeat expiry, and wakeup loss.
-- [ ] Test crash point: durable row exists, publish is skipped, poll still finds it.
-- [ ] `WW_REQUIRE_INTEGRATION=1 pnpm --filter @ww/db test`.
+- [x] Test crash point: durable row exists, publish is skipped, poll still finds it.
+- [x] `WW_REQUIRE_INTEGRATION=1 pnpm --filter @ww/db test`.
+
+Evidence: focused Redis 62 tests; DB 22 files/160 tests/0 skip; root build/lint 9/9, required 46 files/377 tests/0 skip; verifier/anti/quality clean.
 
 ### Anti-patterns
 
