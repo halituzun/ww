@@ -188,44 +188,46 @@ payload text, or add generic registries/policy DSLs.
 
 ### Persistence contract
 
-- [ ] Extend `tasks` with current `task_brief_id` and `assignment_attempt_id`.
-- [ ] Extend `messages` with protocol/payload versions, canonical payload/hash,
+- [x] Extend `tasks` with current `task_brief_id` and `assignment_attempt_id`.
+- [x] Extend `messages` with protocol/payload versions, canonical payload/hash,
   reply/correlation/causation/idempotency, brief/attempt/invocation/snapshot,
   deadline/priority, authenticated principal snapshot, provenance, and actual model.
-- [ ] Create immutable `task_briefs`, `assignment_attempts`,
+- [x] Create immutable `task_briefs`, `assignment_attempts`,
   `prompt_input_snapshots` (including exact `prompt_messages_json`), and
   `task_handoffs`.
-- [ ] Create `task_causal_entries` ordered by task/attempt/ordinal/entry ID with
+- [x] Create `task_causal_entries` ordered by task/attempt/ordinal/entry ID with
   source type/ID, handoff, causation, and lease fence.
-- [ ] Create append-only `message_receipts` with recipient, monotonic receipt
+- [x] Create append-only `message_receipts` with recipient, monotonic receipt
   version, state, claim owner/fence/expiry, retry count, next attempt and error.
-- [ ] Create append-only `effect_ledger` keyed by causation + stable effect ID with
+- [x] Create append-only `effect_ledger` keyed by causation + stable effect ID with
   request hash, replay safety, state, result/error and version.
-- [ ] Create versioned `audit_findings`; extend `api_usage` provenance fields.
-- [ ] Seed PM-direct `role.pm` v2 and `role.worker.coding` v2. Insert replacement
+- [x] Create versioned `audit_findings`; extend `api_usage` provenance fields.
+- [x] Seed PM-direct `role.pm` v2 and `role.worker.coding` v2. Insert replacement
   rows that deactivate v1, then select active prompt only after folding versions.
-- [ ] Add explicit repositories. Every read parses persisted JSON with shared Zod
+- [x] Add explicit repositories. Every read parses persisted JSON with shared Zod
   schemas; an invalid stored record creates an error/finding rather than leaking.
-- [ ] Give project/plan/agent/task latest-state repositories explicit
+- [x] Give project/plan/agent/task latest-state repositories explicit
   `create/getLatest/appendVersion` operations; artifacts/events are append-only and
   knowledge/prompt reads expose versioned as-of source manifests for brief sealing.
-- [ ] Message idempotency collisions compare the canonical envelope hash. Same key
+- [x] Message idempotency collisions compare the canonical envelope hash. Same key
   plus same hash returns the stored row; same key plus different hash fails closed.
-- [ ] Implement fold-then-filter inbox/receipt/finding queries. Do not pass external
+- [x] Implement fold-then-filter inbox/receipt/finding queries. Do not pass external
   table/column names into generic `latest()`.
-- [ ] Make DB-package integration-required behavior fail when
+- [x] Make DB-package integration-required behavior fail when
   `WW_REQUIRE_INTEGRATION=1` and ClickHouse/Redis is unavailable.
 
 ### Verification
 
-- [ ] Empty DB migration, second-run no-op, checksum mismatch, and partially applied
+- [x] Empty DB migration, second-run no-op, checksum mismatch, and partially applied
   DDL retry pass.
-- [ ] Existing populated Phase 0 rows remain readable with legacy defaults.
-- [ ] All new tables/columns exist; prompt v1 folds inactive and exactly one v2 is
+- [x] Existing populated Phase 0 rows remain readable with legacy defaults.
+- [x] All new tables/columns exist; prompt v1 folds inactive and exactly one v2 is
   active for PM/worker; marker text enforces direct PM routing.
-- [ ] Duplicate/collision, fold-then-filter, invalid stored payload, and exact prompt
+- [x] Duplicate/collision, fold-then-filter, invalid stored payload, and exact prompt
   snapshot tests pass against ClickHouse.
-- [ ] `WW_REQUIRE_INTEGRATION=1 pnpm --filter @ww/db test` has zero skips.
+- [x] `WW_REQUIRE_INTEGRATION=1 pnpm --filter @ww/db test` has zero skips.
+
+Evidence: DB 20 files/108 tests/0 skip, root 325/0 skip, build/lint/diff clean, final verifier/anti/quality clean.
 
 ### Anti-patterns
 
