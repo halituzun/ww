@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from 'react';
 
 type Task = { task_id: string; title: string; status: string; priority: number; updated_at: string };
 type EventItem = { event: string; seq: number; ts: string; data: unknown };
+type Project = { project_id: string; name: string; status: string; type: string };
 
 const apiBase = import.meta.env.VITE_API_URL ?? 'http://localhost:4000';
 
@@ -10,10 +11,16 @@ export default function App() {
   const { health, state, status } = useHealth();
   const [projectId, setProjectId] = useState(() => new URLSearchParams(window.location.search).get('project') ?? '');
   const [tasks, setTasks] = useState<Task[]>([]);
+  const [projects, setProjects] = useState<Project[]>([]);
   const [events, setEvents] = useState<EventItem[]>([]);
   const [message, setMessage] = useState('');
   const [messageStatus, setMessageStatus] = useState('');
   const [tab, setTab] = useState<'tasks' | 'timeline'>('tasks');
+
+  useEffect(() => {
+    if (projectId) return;
+    void fetch(`${apiBase}/projects`).then((response) => response.ok ? response.json() as Promise<Project[]> : []).then(setProjects).catch(() => setProjects([]));
+  }, [projectId]);
 
   useEffect(() => {
     if (!projectId) return;
@@ -78,7 +85,7 @@ export default function App() {
       {projectId ? <section className="workspace-card">
         <nav className="tabs"><button className={tab === 'tasks' ? 'active' : ''} onClick={() => setTab('tasks')}>Görevler <span>{tasks.length}</span></button><button className={tab === 'timeline' ? 'active' : ''} onClick={() => setTab('timeline')}>Canlı zaman çizelgesi <span>{events.length}</span></button></nav>
         {tab === 'tasks' ? <><div className="metrics">{Object.entries(statusCounts).map(([key, count]) => <div key={key}><strong>{count}</strong><span>{key}</span></div>)}</div><ul className="task-list">{tasks.map((task) => <li key={task.task_id}><div><strong>{task.title}</strong><small>{task.task_id}</small></div><span className={`pill pill--${task.status}`}>{task.status}</span></li>)}</ul></> : <ol className="timeline">{events.slice().reverse().map((item) => <li key={`${item.seq}-${item.event}`}><time>{new Date(item.ts).toLocaleTimeString()}</time><strong>{item.event}</strong><code>#{item.seq}</code></li>)}</ol>}
-      </section> : <p className="hint">Görevleri ve canlı olayları görmek için bir proje UUID girin.</p>}
+      </section> : <section className="workspace-card project-picker"><h2>Projeler</h2><p className="hint">Bir proje seçin veya UUID ile doğrudan açın.</p><ul className="task-list">{projects.map((project) => <li key={project.project_id} onClick={() => setProjectId(project.project_id)}><div><strong>{project.name}</strong><small>{project.type} · {project.project_id}</small></div><span className={`pill pill--${project.status}`}>{project.status}</span></li>)}</ul></section>}
     </main>
   );
 }

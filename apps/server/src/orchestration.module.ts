@@ -15,6 +15,7 @@ import {
   createTask,
   enqueueTask,
   getLatestProject,
+  listLatestProjects,
   getLatestTask,
   listLatestTasksByStatus,
   listLatestAgents,
@@ -72,7 +73,7 @@ export class MessageInputError extends Error {
 }
 
 export interface ServerDatabase { readonly ch: ClickHouseClient; readonly redis?: WwRedis; }
-export interface ProjectApplication { create(input: ReturnType<typeof parseProjectInput>): Promise<ProjectRow>; get(projectId: string): Promise<ProjectRow | null>; }
+export interface ProjectApplication { create(input: ReturnType<typeof parseProjectInput>): Promise<ProjectRow>; get(projectId: string): Promise<ProjectRow | null>; list(): Promise<ProjectRow[]>; }
 export interface TaskApplication { create(projectId: string, input: ReturnType<typeof parseTaskInput>): Promise<TaskRow>; get(projectId: string, taskId: string): Promise<TaskRow | null>; list(projectId: string): Promise<TaskRow[]>; }
 export interface MessageApplication { send(input: MessageApplicationInput): Promise<unknown>; get(projectId: string, messageId: string): Promise<unknown>; }
 
@@ -85,6 +86,7 @@ export class ProjectApplicationService implements ProjectApplication {
     return createProject(this.database.ch, { project_id: projectId, name: input.name, slug: input.slug ?? input.name.toLowerCase().replace(/[^a-z0-9]+/g, '-'), type: input.type ?? 'web', status: 'draft', description: input.description, workspace_path: `workspace/${projectId}`, budget_usd_limit: input.budgetUsdLimit, settings: {}, active_plan_id: NIL_UUID, created_at: now, updated_at: now });
   }
   get(projectId: string): Promise<ProjectRow | null> { return getLatestProject(this.database.ch, projectId); }
+  list(): Promise<ProjectRow[]> { return listLatestProjects(this.database.ch); }
 }
 
 @Injectable()

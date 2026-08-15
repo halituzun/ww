@@ -10,6 +10,8 @@ export class ProjectsController {
     parseLocalSession(request);
     return this.projects.create(parseProjectInput(body));
   }
+  @Get()
+  list() { return this.projects.list(); }
   @Get(':projectId')
   get(@Param('projectId') projectId: string) { return this.projects.get(projectId); }
 }
