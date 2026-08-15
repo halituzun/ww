@@ -141,6 +141,26 @@ describe('prompt seed migration', () => {
     expect(sql).toContain('INSERT INTO task_effect_ledger');
     expect(sql).toContain('INSERT INTO task_lease_fence_observations');
   });
+
+  it('Faz 5 receipt migrationı quarantine ve restart-safe exact scan indexleri taşır', async () => {
+    const sql = await readFile(migrationUrl('0005_receipt_quarantine.sql'), 'utf8');
+    expect(sql).toContain('CREATE TABLE IF NOT EXISTS message_receipt_quarantine');
+    expect(sql).toContain('CREATE TABLE IF NOT EXISTS recipient_message_receipts');
+    expect(sql).toContain('CREATE TABLE IF NOT EXISTS receipt_message_receipts');
+    expect(sql.match(/CREATE MATERIALIZED VIEW IF NOT EXISTS/g)).toHaveLength(6);
+    expect(sql).toContain('TO recipient_message_receipts');
+    expect(sql).toContain('TO receipt_message_receipts');
+    expect(sql).toContain('INSERT INTO recipient_message_receipts');
+    expect(sql).toContain('INSERT INTO receipt_message_receipts');
+    expect(sql).toContain('CREATE TABLE IF NOT EXISTS message_receipt_scan_cursors');
+    expect(sql).toContain('CREATE TABLE IF NOT EXISTS terminal_receipt_event_scan_cursors');
+    expect(sql).toContain('CREATE TABLE IF NOT EXISTS invocation_api_usage');
+    expect(sql).toContain('CREATE TABLE IF NOT EXISTS idempotency_messages');
+    expect(sql).toContain('CREATE TABLE IF NOT EXISTS identity_messages');
+    expect(sql.match(/source_hash FixedString\(64\)/g)?.length).toBeGreaterThanOrEqual(5);
+    expect(sql.match(/WHERE source_hash NOT IN/g)).toHaveLength(6);
+    expect(sql).not.toContain(' FINAL');
+  });
 });
 
 describe.skipIf(!up)('runMigrations', () => {
@@ -166,6 +186,7 @@ describe.skipIf(!up)('runMigrations', () => {
       '0002_prompt_seed.sql',
       '0003_agent_communication.sql',
       '0004_scheduler_fences.sql',
+      '0005_receipt_quarantine.sql',
     ]);
     expect(secondApplied).toHaveLength(0);
   });
@@ -314,6 +335,62 @@ describe.skipIf(!up)('runMigrations', () => {
         task_lease_fence_observations: [
           'task_id', 'source', 'source_identity', 'lease_fence',
         ],
+        message_receipt_quarantine: [
+          'quarantine_id', 'project_id', 'receipt_id', 'message_id',
+          'receipt_version', 'claim_fence', 'candidate_id', 'reason_code',
+          'summary', 'quarantined_at',
+        ],
+        recipient_message_receipts: [
+          'receipt_id', 'message_id', 'project_id', 'recipient_id',
+          'recipient_snapshot_json', 'receipt_version', 'state', 'claim_owner',
+          'claim_fence', 'claim_expires_at', 'retry_count', 'next_attempt_at',
+          'error', 'created_at', 'scan_bucket', 'source_hash',
+        ],
+        receipt_message_receipts: [
+          'receipt_id', 'message_id', 'project_id', 'recipient_id',
+          'recipient_snapshot_json', 'receipt_version', 'state', 'claim_owner',
+          'claim_fence', 'claim_expires_at', 'retry_count', 'next_attempt_at',
+          'error', 'created_at', 'source_hash',
+        ],
+        global_message_receipts: [
+          'receipt_id', 'message_id', 'project_id', 'recipient_id',
+          'recipient_snapshot_json', 'receipt_version', 'state', 'claim_owner',
+          'claim_fence', 'claim_expires_at', 'retry_count', 'next_attempt_at',
+          'error', 'created_at', 'scan_bucket', 'source_hash',
+        ],
+        message_receipt_scan_cursors: [
+          'scan_recipient_id', 'generation', 'cursor_bucket', 'cursor_created_at',
+          'cursor_project_id', 'cursor_receipt_id',
+        ],
+        terminal_receipt_event_scan_cursors: [
+          'scan_recipient_id', 'generation', 'cursor_bucket', 'cursor_created_at',
+          'cursor_project_id', 'cursor_receipt_id',
+        ],
+        invocation_api_usage: [
+          'usage_id', 'project_id', 'agent_id', 'task_id', 'provider_id', 'model',
+          'purpose', 'prompt_tokens', 'completion_tokens', 'cost_usd', 'latency_ms',
+          'status', 'error_kind', 'invocation_id', 'task_brief_id',
+          'assignment_attempt_id', 'prompt_input_snapshot_id', 'fallback_attempt',
+          'created_at', 'source_hash',
+        ],
+        idempotency_messages: [
+          'message_id', 'project_id', 'session_id', 'task_id', 'from_agent_id',
+          'to_agent_id', 'kind', 'content', 'model_ref', 'created_at',
+          'protocol_version', 'payload_version', 'payload_json', 'payload_hash',
+          'envelope_hash', 'reply_to_message_id', 'correlation_id', 'causation_id',
+          'idempotency_key', 'task_brief_id', 'assignment_attempt_id', 'invocation_id',
+          'prompt_input_snapshot_id', 'deadline_at', 'priority',
+          'authenticated_principal_json', 'provenance_json', 'source_hash',
+        ],
+        identity_messages: [
+          'message_id', 'project_id', 'session_id', 'task_id', 'from_agent_id',
+          'to_agent_id', 'kind', 'content', 'model_ref', 'created_at',
+          'protocol_version', 'payload_version', 'payload_json', 'payload_hash',
+          'envelope_hash', 'reply_to_message_id', 'correlation_id', 'causation_id',
+          'idempotency_key', 'task_brief_id', 'assignment_attempt_id', 'invocation_id',
+          'prompt_input_snapshot_id', 'deadline_at', 'priority',
+          'authenticated_principal_json', 'provenance_json', 'source_hash',
+        ],
       };
 
       const tablesResult = await ch.query({ query: 'SHOW TABLES', format: 'JSONEachRow' });
@@ -432,7 +509,31 @@ describe.skipIf(!up)('runMigrations', () => {
           name: 'audit_findings',
           sorting_key: 'project_id, finding_id, finding_version, finding_hash, updated_at, created_at',
         },
+        {
+          name: 'global_message_receipts',
+          sorting_key: 'scan_bucket, created_at, project_id, receipt_id, receipt_version, claim_fence',
+        },
+        {
+          name: 'idempotency_messages',
+          sorting_key: 'project_id, idempotency_key, message_id, envelope_hash, source_hash',
+        },
+        {
+          name: 'identity_messages',
+          sorting_key: 'project_id, message_id, idempotency_key, envelope_hash, source_hash',
+        },
+        {
+          name: 'invocation_api_usage',
+          sorting_key: 'invocation_id, project_id, agent_id, task_id, task_brief_id, assignment_attempt_id, prompt_input_snapshot_id, fallback_attempt, purpose, status, usage_id, source_hash',
+        },
         { name: 'knowledge', sorting_key: 'project_id, knowledge_id, row_hash' },
+        {
+          name: 'message_receipt_quarantine',
+          sorting_key: 'project_id, receipt_id, receipt_version, claim_fence, candidate_id, quarantine_id',
+        },
+        {
+          name: 'message_receipt_scan_cursors',
+          sorting_key: 'scan_recipient_id, generation, cursor_bucket, cursor_created_at, cursor_project_id, cursor_receipt_id',
+        },
         {
           name: 'plan_acceptance_observations',
           sorting_key: 'project_id, plan_id, version, row_hash, observed_at',
@@ -440,6 +541,14 @@ describe.skipIf(!up)('runMigrations', () => {
         { name: 'plans', sorting_key: 'project_id, plan_id, row_hash' },
         { name: 'projects', sorting_key: 'project_id, row_hash' },
         { name: 'prompts', sorting_key: 'prompt_name, prompt_version, row_hash' },
+        {
+          name: 'receipt_message_receipts',
+          sorting_key: 'project_id, receipt_id, receipt_version, claim_fence, recipient_id',
+        },
+        {
+          name: 'recipient_message_receipts',
+          sorting_key: 'recipient_id, scan_bucket, created_at, project_id, receipt_id, receipt_version, claim_fence',
+        },
         { name: 'task_causal_entries', sorting_key: 'task_id, assignment_attempt_id, ordinal, entry_id' },
         {
           name: 'task_effect_ledger',
@@ -450,6 +559,10 @@ describe.skipIf(!up)('runMigrations', () => {
           sorting_key: 'task_id, source, lease_fence, source_identity',
         },
         { name: 'tasks', sorting_key: 'project_id, task_id, row_hash' },
+        {
+          name: 'terminal_receipt_event_scan_cursors',
+          sorting_key: 'scan_recipient_id, generation, cursor_bucket, cursor_created_at, cursor_project_id, cursor_receipt_id',
+        },
       ];
       const sortingResult = await ch.query({
         query: `SELECT name, sorting_key
@@ -469,8 +582,17 @@ describe.skipIf(!up)('runMigrations', () => {
           WHERE database = {database:String}
             AND name IN (
               'audit_findings',
+              'global_message_receipts_mv',
+              'idempotency_messages_mv',
+              'identity_messages_mv',
+              'invocation_api_usage_mv',
+              'message_receipt_quarantine',
+              'message_receipt_scan_cursors',
+              'terminal_receipt_event_scan_cursors',
               'plan_acceptance_observations',
-              'plan_acceptance_observations_mv'
+              'plan_acceptance_observations_mv',
+              'receipt_message_receipts_mv',
+              'recipient_message_receipts_mv'
             )
           ORDER BY name`,
         query_params: { database: db },
@@ -478,8 +600,17 @@ describe.skipIf(!up)('runMigrations', () => {
       });
       expect(await auditEngineResult.json()).toEqual([
         { name: 'audit_findings', engine: 'MergeTree' },
+        { name: 'global_message_receipts_mv', engine: 'MaterializedView' },
+        { name: 'idempotency_messages_mv', engine: 'MaterializedView' },
+        { name: 'identity_messages_mv', engine: 'MaterializedView' },
+        { name: 'invocation_api_usage_mv', engine: 'MaterializedView' },
+        { name: 'message_receipt_quarantine', engine: 'MergeTree' },
+        { name: 'message_receipt_scan_cursors', engine: 'MergeTree' },
         { name: 'plan_acceptance_observations', engine: 'MergeTree' },
         { name: 'plan_acceptance_observations_mv', engine: 'MaterializedView' },
+        { name: 'receipt_message_receipts_mv', engine: 'MaterializedView' },
+        { name: 'recipient_message_receipts_mv', engine: 'MaterializedView' },
+        { name: 'terminal_receipt_event_scan_cursors', engine: 'MergeTree' },
       ]);
     } finally {
       await ch.close();
@@ -938,6 +1069,223 @@ describe.skipIf(!up)('runMigrations', () => {
           format: 'JSONEachRow',
         });
         expect(await backfill.json()).toEqual([{ effects: '1', has_fence: 1 }]);
+      } finally {
+        await migrated.close();
+      }
+    } finally {
+      await admin.command({ query: `DROP DATABASE IF EXISTS ${partialDb}` });
+    }
+  });
+
+  it('yarıda kalan Faz 5 migrationını dolu receipt backfilliyle tekrarlar ve OPTIMIZEda korur', async () => {
+    const partialDb = `${db}_phase5_partial`;
+    const recipientId = '51111111-1111-4111-8111-111111111111';
+    const projectId = '52222222-2222-4222-8222-222222222222';
+    const beforeReceiptId = '53333333-3333-4333-8333-333333333333';
+    const afterReceiptId = '54444444-4444-4444-8444-444444444444';
+    const beforeMessageId = '55555555-5555-4555-8555-555555555555';
+    const afterMessageId = '56666666-6666-4666-8666-666666666666';
+    const beforeInvocationId = '57777777-7777-4777-8777-777777777777';
+    const afterInvocationId = '58888888-8888-4888-8888-888888888888';
+    const timestamp = '2026-08-14T12:00:00.000Z';
+    const row = (receiptId: string) => ({
+      receipt_id: receiptId,
+      message_id: receiptId,
+      project_id: projectId,
+      recipient_id: recipientId,
+      recipient_snapshot_json: JSON.stringify({ type: 'agent', id: recipientId }),
+      receipt_version: '1',
+      state: 'enqueued',
+      claim_owner: '',
+      claim_fence: '0',
+      claim_expires_at: null,
+      retry_count: 0,
+      next_attempt_at: null,
+      error: '',
+      created_at: timestamp,
+    });
+    const messageRow = (messageId: string) => ({
+      message_id: messageId,
+      project_id: projectId,
+      session_id: recipientId,
+      from_agent_id: recipientId,
+      to_agent_id: recipientId,
+      kind: 'question',
+      content: 'migration retry',
+      created_at: timestamp,
+      protocol_version: 1,
+      idempotency_key: `migration-${messageId}`,
+    });
+    const usageRow = (invocationId: string) => ({
+      usage_id: invocationId,
+      project_id: projectId,
+      provider_id: 'mock',
+      model: 'migration-model',
+      invocation_id: invocationId,
+      created_at: timestamp,
+    });
+    await admin.command({ query: `CREATE DATABASE ${partialDb}` });
+    try {
+      await runMigrations({
+        database: partialDb,
+        files: [
+          ...(await phase0Migrations()),
+          await migrationFile('0003_agent_communication.sql'),
+          await migrationFile('0004_scheduler_fences.sql'),
+        ],
+      });
+      const populated = createCh({ database: partialDb });
+      try {
+        await populated.insert({
+          table: 'message_receipts',
+          values: [row(beforeReceiptId)],
+          format: 'JSONEachRow',
+        });
+        await populated.insert({
+          table: 'messages',
+          values: [messageRow(beforeMessageId)],
+          format: 'JSONEachRow',
+        });
+        await populated.insert({
+          table: 'api_usage',
+          values: [usageRow(beforeInvocationId)],
+          format: 'JSONEachRow',
+        });
+      } finally {
+        await populated.close();
+      }
+
+      const phase5 = await migrationFile('0005_receipt_quarantine.sql');
+      for (let retry = 0; retry < 2; retry += 1) {
+        await expect(runMigrations({
+          database: partialDb,
+          files: [{
+            name: phase5.name,
+            sql: `${phase5.sql}\nSELECT throwIf(1, 'intentional phase5 backfill failure');\n`,
+          }],
+        })).rejects.toThrow(/intentional phase5 backfill failure/);
+      }
+      const partialCursor = createCh({ database: partialDb });
+      try {
+        await partialCursor.insert({
+          table: 'terminal_receipt_event_scan_cursors',
+          values: [{
+            scan_recipient_id: '00000000-0000-0000-0000-000000000000',
+            generation: '7',
+            cursor_bucket: 31,
+            cursor_created_at: timestamp,
+            cursor_project_id: projectId,
+            cursor_receipt_id: beforeReceiptId,
+          }],
+          format: 'JSONEachRow',
+        });
+      } finally {
+        await partialCursor.close();
+      }
+      await expect(runMigrations({ database: partialDb, files: [phase5] }))
+        .resolves.toEqual({ applied: ['0005_receipt_quarantine.sql'] });
+      await expect(runMigrations({ database: partialDb, files: [phase5] }))
+        .resolves.toEqual({ applied: [] });
+
+      const migrated = createCh({ database: partialDb });
+      try {
+        await migrated.insert({
+          table: 'message_receipts',
+          values: [row(afterReceiptId)],
+          format: 'JSONEachRow',
+        });
+        await migrated.insert({
+          table: 'messages',
+          values: [messageRow(afterMessageId)],
+          format: 'JSONEachRow',
+        });
+        await migrated.insert({
+          table: 'api_usage',
+          values: [usageRow(afterInvocationId)],
+          format: 'JSONEachRow',
+        });
+        await migrated.command({ query: 'OPTIMIZE TABLE recipient_message_receipts FINAL' });
+        await migrated.command({ query: 'OPTIMIZE TABLE receipt_message_receipts FINAL' });
+        await migrated.command({ query: 'OPTIMIZE TABLE global_message_receipts FINAL' });
+        await migrated.command({ query: 'OPTIMIZE TABLE idempotency_messages FINAL' });
+        await migrated.command({ query: 'OPTIMIZE TABLE identity_messages FINAL' });
+        await migrated.command({ query: 'OPTIMIZE TABLE invocation_api_usage FINAL' });
+        await migrated.command({ query: 'OPTIMIZE TABLE message_receipt_quarantine FINAL' });
+        await migrated.command({ query: 'OPTIMIZE TABLE terminal_receipt_event_scan_cursors FINAL' });
+        const objects = await migrated.query({
+          query: `SELECT name, engine FROM system.tables
+            WHERE database = {database:String}
+              AND name IN (
+                'global_message_receipts',
+                'global_message_receipts_mv',
+                'message_receipt_quarantine',
+                'message_receipt_scan_cursors',
+                'terminal_receipt_event_scan_cursors',
+                'recipient_message_receipts',
+                'recipient_message_receipts_mv',
+                'receipt_message_receipts',
+                'receipt_message_receipts_mv'
+              )
+            ORDER BY name`,
+          query_params: { database: partialDb },
+          format: 'JSONEachRow',
+        });
+        expect(await objects.json()).toEqual([
+          { name: 'global_message_receipts', engine: 'MergeTree' },
+          { name: 'global_message_receipts_mv', engine: 'MaterializedView' },
+          { name: 'message_receipt_quarantine', engine: 'MergeTree' },
+          { name: 'message_receipt_scan_cursors', engine: 'MergeTree' },
+          { name: 'receipt_message_receipts', engine: 'MergeTree' },
+          { name: 'receipt_message_receipts_mv', engine: 'MaterializedView' },
+          { name: 'recipient_message_receipts', engine: 'MergeTree' },
+          { name: 'recipient_message_receipts_mv', engine: 'MaterializedView' },
+          { name: 'terminal_receipt_event_scan_cursors', engine: 'MergeTree' },
+        ]);
+        const preservedCursor = await migrated.query({
+          query: `SELECT count() AS physical, toString(max(generation)) AS generation
+            FROM terminal_receipt_event_scan_cursors`,
+          format: 'JSONEachRow',
+        });
+        expect(await preservedCursor.json()).toEqual([{ physical: '1', generation: '7' }]);
+        for (const table of [
+          'global_message_receipts',
+          'recipient_message_receipts',
+          'receipt_message_receipts',
+        ]) {
+          const copied = await migrated.query({
+            query: `SELECT
+                count() AS physical,
+                uniqExact(tuple(project_id, receipt_id, receipt_version, claim_fence)) AS logical,
+                uniqExact(source_hash) AS exact_sources
+              FROM ${table}
+              WHERE receipt_id IN ({receiptIds:Array(UUID)})`,
+            query_params: { receiptIds: [beforeReceiptId, afterReceiptId] },
+            format: 'JSONEachRow',
+          });
+          expect(await copied.json()).toEqual([{
+            physical: '2',
+            logical: '2',
+            exact_sources: '2',
+          }]);
+        }
+        for (const table of ['idempotency_messages', 'identity_messages']) {
+          const copied = await migrated.query({
+            query: `SELECT count() AS physical, uniqExact(source_hash) AS exact_sources
+              FROM ${table}
+              WHERE message_id IN ({messageIds:Array(UUID)})`,
+            query_params: { messageIds: [beforeMessageId, afterMessageId] },
+            format: 'JSONEachRow',
+          });
+          expect(await copied.json()).toEqual([{ physical: '2', exact_sources: '2' }]);
+        }
+        const usageCopied = await migrated.query({
+          query: `SELECT count() AS physical, uniqExact(source_hash) AS exact_sources
+            FROM invocation_api_usage
+            WHERE invocation_id IN ({invocationIds:Array(UUID)})`,
+          query_params: { invocationIds: [beforeInvocationId, afterInvocationId] },
+          format: 'JSONEachRow',
+        });
+        expect(await usageCopied.json()).toEqual([{ physical: '2', exact_sources: '2' }]);
       } finally {
         await migrated.close();
       }

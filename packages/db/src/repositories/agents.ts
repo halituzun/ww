@@ -62,10 +62,26 @@ export interface AppendAgentVersionInput {
   readonly next: Omit<AgentRow, 'version' | 'assignment_fence'>;
 }
 
+export interface ListLatestAgentsOptions {
+  readonly limit?: number;
+}
+
 const AGENT_COLUMNS = `agent_id, project_id, role, \`group\`, name, model_ref,
   parent_agent_id, clone_of, status, current_task_id, prompt_name, prompt_version,
   tasks_done, tasks_rejected, created_at, updated_at, assignment_fence, version, row_hash`;
 const ROW_HASH = /^[0-9a-f]{64}$/;
+const DEFAULT_AGENT_READ_LIMIT = 100;
+const MAX_AGENT_READ_LIMIT = 1_000;
+
+function agentReadLimit(value: number | undefined): number {
+  const limit = storedUnsignedInteger(
+    value ?? DEFAULT_AGENT_READ_LIMIT,
+    'agents.limit',
+    MAX_AGENT_READ_LIMIT,
+  );
+  if (limit === 0) throw new StoredRecordError('agents.limit', value);
+  return limit;
+}
 
 function agentRowHash(row: AgentRow): string {
   return canonicalSha256V1([
@@ -272,13 +288,10 @@ export async function getLatestAgent(
   );
 }
 
-export async function listLatestAgentsByStatus(
+async function readLatestAgents(
   ch: ClickHouseClient,
-  projectId: string,
-  status: AgentStatus,
+  projectId: EntityId,
 ): Promise<AgentRow[]> {
-  const project = concreteEntityId(projectId, 'projectId');
-  const state = storedEnum(status, AGENT_STATUSES, 'agentStatus');
   const result = await ch.query({
     query: `SELECT ${AGENT_COLUMNS} FROM agents
       WHERE project_id = {projectId:UUID}
@@ -288,7 +301,7 @@ export async function listLatestAgentsByStatus(
           GROUP BY agent_id
         )
       ORDER BY agent_id ASC, assignment_fence DESC`,
-    query_params: { projectId: project },
+    query_params: { projectId },
     format: 'JSONEachRow',
   });
   const grouped = new Map<string, AgentRow[]>();
@@ -297,15 +310,37 @@ export async function listLatestAgentsByStatus(
     rows.push(row);
     grouped.set(row.agent_id, rows);
   }
-  return [...grouped.values()]
-    .map((rows) => {
-      const maximum = rows[0]!.version;
-      return reconcileAgentVersion(
-        `agent:${rows[0]!.agent_id}`,
-        rows.filter((row) => row.version === maximum),
-      );
-    })
-    .filter((row) => row.status === state);
+  return [...grouped.values()].map((rows) => {
+    const maximum = rows[0]!.version;
+    return reconcileAgentVersion(
+      `agent:${rows[0]!.agent_id}`,
+      rows.filter((row) => row.version === maximum),
+    );
+  }).sort((left, right) => left.agent_id.localeCompare(right.agent_id));
+}
+
+export async function listLatestAgents(
+  ch: ClickHouseClient,
+  projectId: string,
+  options: ListLatestAgentsOptions = {},
+): Promise<AgentRow[]> {
+  const project = concreteEntityId(projectId, 'projectId');
+  const limit = agentReadLimit(options.limit);
+  const rows = await readLatestAgents(ch, project);
+  if (rows.length > limit) {
+    throw new RepositoryConflictError(`project:${project} agent sonucu ${limit} sinirini asti`);
+  }
+  return rows;
+}
+
+export async function listLatestAgentsByStatus(
+  ch: ClickHouseClient,
+  projectId: string,
+  status: AgentStatus,
+): Promise<AgentRow[]> {
+  const project = concreteEntityId(projectId, 'projectId');
+  const state = storedEnum(status, AGENT_STATUSES, 'agentStatus');
+  return (await readLatestAgents(ch, project)).filter((row) => row.status === state);
 }
 
 export async function createAgent(

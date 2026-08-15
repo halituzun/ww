@@ -151,6 +151,8 @@ interface MessageInvariantInput {
   taskBriefId?: string | undefined;
   assignmentAttemptId?: string | undefined;
   replyToMessageId?: string | undefined;
+  invocationId?: string | undefined;
+  promptInputSnapshotId?: string | undefined;
   createdAt: string;
   deadlineAt?: string | undefined;
 }
@@ -173,6 +175,13 @@ function addMessageInvariantIssues(
       message: 'answer tam olarak bir question mesajına bağlanmalıdır',
     });
   }
+  if (value.kind !== 'answer' && value.replyToMessageId !== undefined) {
+    ctx.addIssue({
+      code: 'custom',
+      path: ['replyToMessageId'],
+      message: 'replyToMessageId yalnız answer mesajlarında kullanılabilir',
+    });
+  }
   if (
     (value.kind === 'report' || value.kind === 'verdict') &&
     (value.taskId === undefined ||
@@ -183,6 +192,16 @@ function addMessageInvariantIssues(
       code: 'custom',
       path: ['taskId'],
       message: 'report ve verdict task, brief ve assignment attempt kimliklerini taşımalıdır',
+    });
+  }
+  if (
+    (value.kind === 'report' || value.kind === 'verdict') &&
+    (value.invocationId === undefined || value.promptInputSnapshotId === undefined)
+  ) {
+    ctx.addIssue({
+      code: 'custom',
+      path: ['invocationId'],
+      message: 'report ve verdict gerçek model provenance kimliklerini taşımalıdır',
     });
   }
   if (

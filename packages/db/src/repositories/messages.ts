@@ -39,7 +39,13 @@ import {
   storedUnsignedInteger,
   uncertainWriteError,
 } from './types.js';
-import { listLatestReceiptsByState } from './receipts.js';
+import {
+  listDueMessageReceipts,
+  listLatestReceiptsByState,
+  type ListDueMessageReceiptsOptions,
+  type MessageReceiptRow,
+} from './receipts.js';
+import { getLatestEffect } from './effects.js';
 
 export interface AppendMessageInput {
   readonly envelope: AgentMessageEnvelopeV1;
@@ -73,6 +79,13 @@ export interface LegacyMessageProjection {
 }
 
 export type MessageRecord = ProtocolV1MessageRecord | LegacyMessageProjection;
+
+export interface DueInboxItemRecord {
+  readonly message: ProtocolV1MessageRecord;
+  readonly receipt: MessageReceiptRow;
+}
+
+export type ListDueInboxItemsOptions = ListDueMessageReceiptsOptions;
 
 interface StoredMessageRow {
   readonly message_id: string;
@@ -122,6 +135,7 @@ const ALIASED_MESSAGE_COLUMNS = `m.message_id, m.project_id, m.session_id, m.tas
   m.idempotency_key, m.task_brief_id, m.assignment_attempt_id, m.invocation_id,
   m.prompt_input_snapshot_id, m.deadline_at, m.priority,
   m.authenticated_principal_json, m.provenance_json`;
+const MAX_MESSAGE_NAMESPACE_CANDIDATES = 100;
 
 function optionalId(value: unknown, context: string): StoredOptionalEntityId {
   return optionalEntityId(storedUuid(value, context), context);
@@ -363,12 +377,21 @@ async function rowsByMessageId(
   messageId: EntityId,
 ): Promise<MessageRecord[]> {
   const result = await ch.query({
-    query: `SELECT ${MESSAGE_COLUMNS} FROM messages
-      WHERE project_id = {projectId:UUID} AND message_id = {messageId:UUID}`,
-    query_params: { projectId, messageId },
+    query: `SELECT ${MESSAGE_COLUMNS} FROM identity_messages
+      PREWHERE project_id = {projectId:UUID} AND message_id = {messageId:UUID}
+      LIMIT {candidateLimit:UInt32}`,
+    query_params: {
+      projectId,
+      messageId,
+      candidateLimit: MAX_MESSAGE_NAMESPACE_CANDIDATES + 1,
+    },
     format: 'JSONEachRow',
   });
-  return (await result.json<unknown>()).map(parseMessageRow);
+  const records = (await result.json<unknown>()).map(parseMessageRow);
+  if (records.length > MAX_MESSAGE_NAMESPACE_CANDIDATES) {
+    throw new RepositoryConflictError(`message:${messageId} aday sinirini asti`);
+  }
+  return records;
 }
 
 function reconcileMessage(
@@ -421,8 +444,12 @@ export async function findMessageByIdempotencyKey(
   if (key.length === 0) throw new StoredRecordError('idempotencyKey', idempotencyKey);
   const record = reconcileIdempotencyRows(await rowsByIdempotencyKey(ch, project, key), key);
   if (record === null) return null;
-  await assertMessageOwnership(ch, project, [record]);
-  return record;
+  return reconcileMessageNamespaces(record, await rowsByMessageNamespaces(
+    ch,
+    project,
+    record.envelope.messageId,
+    key,
+  ));
 }
 
 async function rowsByIdempotencyKey(
@@ -431,12 +458,22 @@ async function rowsByIdempotencyKey(
   key: string,
 ): Promise<MessageRecord[]> {
   const result = await ch.query({
-    query: `SELECT ${MESSAGE_COLUMNS} FROM messages
-      WHERE project_id = {projectId:UUID} AND idempotency_key = {idempotencyKey:String}`,
-    query_params: { projectId, idempotencyKey: key },
+    query: `SELECT ${MESSAGE_COLUMNS} FROM idempotency_messages
+      PREWHERE project_id = {projectId:UUID}
+        AND idempotency_key = {idempotencyKey:String}
+      LIMIT {candidateLimit:UInt32}`,
+    query_params: {
+      projectId,
+      idempotencyKey: key,
+      candidateLimit: MAX_MESSAGE_NAMESPACE_CANDIDATES + 1,
+    },
     format: 'JSONEachRow',
   });
-  return (await result.json<unknown>()).map(parseMessageRow);
+  const records = (await result.json<unknown>()).map(parseMessageRow);
+  if (records.length > MAX_MESSAGE_NAMESPACE_CANDIDATES) {
+    throw new RepositoryConflictError(`message idempotency:${key} aday sinirini asti`);
+  }
+  return records;
 }
 
 async function rowsByMessageNamespaces(
@@ -446,23 +483,51 @@ async function rowsByMessageNamespaces(
   idempotencyKey: string,
 ): Promise<MessageNamespaceRows> {
   const result = await ch.query({
-    query: `SELECT ${MESSAGE_COLUMNS} FROM messages
-      WHERE project_id = {projectId:UUID}
-        AND (message_id = {messageId:UUID} OR idempotency_key = {idempotencyKey:String})`,
-    query_params: { projectId, messageId, idempotencyKey },
+    query: `SELECT 'message_id' AS namespace, ${MESSAGE_COLUMNS} FROM
+      (
+        SELECT ${MESSAGE_COLUMNS} FROM identity_messages
+        PREWHERE project_id = {projectId:UUID} AND message_id = {messageId:UUID}
+        LIMIT {candidateLimit:UInt32}
+      )
+      UNION ALL
+      SELECT 'idempotency_key' AS namespace, ${MESSAGE_COLUMNS} FROM
+      (
+        SELECT ${MESSAGE_COLUMNS} FROM idempotency_messages
+        PREWHERE project_id = {projectId:UUID}
+          AND idempotency_key = {idempotencyKey:String}
+        LIMIT {candidateLimit:UInt32}
+      )`,
+    query_params: {
+      projectId,
+      messageId,
+      idempotencyKey,
+      candidateLimit: MAX_MESSAGE_NAMESPACE_CANDIDATES + 1,
+    },
     format: 'JSONEachRow',
   });
-  const records = (await result.json<unknown>()).map(parseMessageRow);
-  return Object.freeze({
-    byMessageId: records.filter((record) => (
+  const storedRows = await result.json<unknown>();
+  const messageRows = storedRows.filter((row) => (
+    storedRecord(row, 'message namespace row')['namespace'] === 'message_id'
+  ));
+  const idempotencyRows = storedRows.filter((row) => (
+    storedRecord(row, 'message namespace row')['namespace'] === 'idempotency_key'
+  ));
+  if (messageRows.length > MAX_MESSAGE_NAMESPACE_CANDIDATES) {
+    throw new RepositoryConflictError(`message:${messageId} aday sinirini asti`);
+  }
+  if (idempotencyRows.length > MAX_MESSAGE_NAMESPACE_CANDIDATES) {
+    throw new RepositoryConflictError(`message idempotency:${idempotencyKey} aday sinirini asti`);
+  }
+  const records = storedRows.map(parseMessageRow);
+  const byMessageId = records.filter((record) => (
       record.protocolVersion === 1
         ? record.envelope.messageId === messageId
         : record.messageId === messageId
-    )),
-    byIdempotencyKey: records.filter((record) => (
+    ));
+  const byIdempotencyKey = records.filter((record) => (
       record.protocolVersion === 1 && record.envelope.idempotencyKey === idempotencyKey
-    )),
-  });
+    ));
+  return Object.freeze({ byMessageId, byIdempotencyKey });
 }
 
 function reconcileMessageNamespaces(
@@ -592,7 +657,14 @@ export async function getMessage(
   const records = await rowsByMessageId(ch, project, message);
   if (records.length === 0) return null;
   const record = reconcileStoredMessages(records, `message:${message}`);
-  await assertMessageOwnership(ch, project, [record]);
+  if (record.protocolVersion === 1) {
+    return reconcileMessageNamespaces(record, await rowsByMessageNamespaces(
+      ch,
+      project,
+      message,
+      record.envelope.idempotencyKey,
+    ));
+  }
   return record;
 }
 
@@ -624,6 +696,121 @@ export async function listMessagesBySession(
   ));
   await assertMessageOwnership(ch, project, logical);
   return logical;
+}
+
+export async function listProtocolV1RepliesToMessage(
+  ch: ClickHouseClient,
+  projectId: string,
+  replyToMessageId: string,
+): Promise<ProtocolV1MessageRecord[]> {
+  const project = concreteEntityId(projectId, 'projectId');
+  const replyTo = concreteEntityId(replyToMessageId, 'replyToMessageId');
+  const result = await ch.query({
+    query: `SELECT ${MESSAGE_COLUMNS} FROM messages
+      WHERE project_id = {projectId:UUID}
+        AND reply_to_message_id = {replyToMessageId:UUID}
+      ORDER BY created_at, message_id`,
+    query_params: { projectId: project, replyToMessageId: replyTo },
+    format: 'JSONEachRow',
+  });
+  const grouped = new Map<string, MessageRecord[]>();
+  for (const record of (await result.json<unknown>()).map(parseMessageRow)) {
+    const messageId = messageRecordId(record);
+    const rows = grouped.get(messageId) ?? [];
+    rows.push(record);
+    grouped.set(messageId, rows);
+  }
+  const replies = [...grouped.entries()].map(([messageId, rows]) => {
+    const record = reconcileStoredMessages(rows, `message:${messageId}`);
+    if (record.protocolVersion !== 1) {
+      throw new StoredRecordError('reply message protocol', record);
+    }
+    return record;
+  });
+  await assertMessageOwnership(ch, project, replies);
+  replies.sort((left, right) => (
+    left.envelope.createdAt.localeCompare(right.envelope.createdAt) ||
+    left.envelope.messageId.localeCompare(right.envelope.messageId)
+  ));
+  return replies;
+}
+
+export async function listProtocolV1AnswerRepliesToMessage(
+  ch: ClickHouseClient,
+  projectId: string,
+  replyToMessageId: string,
+): Promise<ProtocolV1MessageRecord[]> {
+  return (await listProtocolV1RepliesToMessage(ch, projectId, replyToMessageId))
+    .filter((record) => (
+      record.envelope.kind === 'answer' && record.envelope.payload.type === 'answer'
+    ));
+}
+
+/**
+ * Resolves the only answer selected by the durable question-answer winner
+ * effect. Arbitrary replies never count as answers, and a malformed winner is
+ * rejected instead of being guessed from message order.
+ */
+export async function findAuthoritativeAnswerWinner(
+  ch: ClickHouseClient,
+  projectId: string,
+  questionMessageId: string,
+): Promise<ProtocolV1MessageRecord | null> {
+  const project = concreteEntityId(projectId, 'projectId');
+  const questionId = concreteEntityId(questionMessageId, 'questionMessageId');
+  const question = await getMessage(ch, project, questionId);
+  if (
+    question === null ||
+    question.protocolVersion !== 1 ||
+    question.envelope.kind !== 'question' ||
+    question.envelope.payload.type !== 'question'
+  ) {
+    throw new StoredRecordError('authoritative answer question', {
+      projectId: project,
+      questionMessageId: questionId,
+    });
+  }
+  const winner = await getLatestEffect(ch, questionId, 'question-answer-winner');
+  if (winner === null || winner.state === 'pending') return null;
+  if (winner.project_id !== project || winner.state !== 'succeeded') {
+    throw new RepositoryConflictError(
+      `question:${questionId} authoritative answer winner terminal veya scope catismasi`,
+    );
+  }
+  const winnerResult = winner.result as { readonly [key: string]: unknown };
+  if (
+    winner.result === null ||
+    typeof winner.result !== 'object' ||
+    Array.isArray(winner.result) ||
+    Object.keys(winner.result).length !== 1 ||
+    typeof winnerResult['answerMessageId'] !== 'string'
+  ) {
+    throw new StoredRecordError('authoritative answer winner result', winner.result);
+  }
+  const answerId = concreteEntityId(
+    winnerResult['answerMessageId'] as string,
+    'authoritative answer winner answerMessageId',
+  );
+  const answer = await getMessage(ch, project, answerId);
+  if (
+    answer === null ||
+    answer.protocolVersion !== 1 ||
+    answer.envelope.kind !== 'answer' ||
+    answer.envelope.payload.type !== 'answer' ||
+    answer.envelope.replyToMessageId !== questionId ||
+    answer.envelope.projectId !== question.envelope.projectId ||
+    answer.envelope.sessionId !== question.envelope.sessionId ||
+    answer.envelope.taskId !== question.envelope.taskId ||
+    answer.envelope.taskBriefId !== question.envelope.taskBriefId ||
+    answer.envelope.assignmentAttemptId !== question.envelope.assignmentAttemptId
+  ) {
+    throw new StoredRecordError('authoritative answer winner message', {
+      projectId: project,
+      questionMessageId: questionId,
+      answerMessageId: answerId,
+    });
+  }
+  return answer;
 }
 
 export async function listPendingInboxMessages(
@@ -668,6 +855,51 @@ export async function listPendingInboxMessages(
   ));
   await assertMessageOwnership(ch, project, logical);
   return logical;
+}
+
+function assertInboxReceiptMatchesMessage(
+  receipt: MessageReceiptRow,
+  message: ProtocolV1MessageRecord,
+): void {
+  const envelope = message.envelope;
+  if (
+    envelope.messageId !== receipt.message_id ||
+    envelope.projectId !== receipt.project_id ||
+    receipt.recipient_snapshot.id !== receipt.recipient_id ||
+    receipt.recipient_snapshot.type === 'broadcast' ||
+    (
+      envelope.recipient.type !== 'broadcast' &&
+      (
+        envelope.recipient.type !== receipt.recipient_snapshot.type ||
+        envelope.recipient.id !== receipt.recipient_snapshot.id
+      )
+    )
+  ) {
+    throw new StoredRecordError('due inbox message receipt projection', {
+      receipt,
+      envelope,
+    });
+  }
+}
+
+export async function listDueInboxItems(
+  ch: ClickHouseClient,
+  options: ListDueInboxItemsOptions,
+): Promise<DueInboxItemRecord[]> {
+  const receipts = await listDueMessageReceipts(ch, options);
+  const items: DueInboxItemRecord[] = [];
+  for (const receipt of receipts) {
+    const record = await getMessage(ch, receipt.project_id, receipt.message_id);
+    if (record === null) {
+      throw new StoredRecordError('due inbox receipt message reference', receipt);
+    }
+    if (record.protocolVersion !== 1) {
+      throw new StoredRecordError('due inbox message protocol', record);
+    }
+    assertInboxReceiptMatchesMessage(receipt, record);
+    items.push(Object.freeze({ message: record, receipt }));
+  }
+  return items;
 }
 
 export async function appendMessage(

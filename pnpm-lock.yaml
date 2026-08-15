@@ -69,6 +69,9 @@ importers:
       '@nestjs/platform-express':
         specifier: ^11.1.29
         version: 11.1.29(@nestjs/common@11.1.29(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/core@11.1.29)
+      '@ww/agents':
+        specifier: workspace:*
+        version: link:../../packages/agents
       '@ww/db':
         specifier: workspace:*
         version: link:../../packages/db
@@ -102,6 +105,13 @@ importers:
         version: 2.1.9(@types/node@22.20.1)
 
   packages/agents:
+    dependencies:
+      '@ww/db':
+        specifier: workspace:*
+        version: link:../db
+      '@ww/shared':
+        specifier: workspace:*
+        version: link:../shared
     devDependencies:
       typescript:
         specifier: ^5.7.0

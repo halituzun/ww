@@ -25,6 +25,8 @@ const ID = {
   attempt: '88888888-8888-4888-8888-888888888888',
   correlation: '99999999-9999-4999-8999-999999999999',
   reply: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+  invocation: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+  promptSnapshot: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
 } as const;
 
 const VERDICT = {
@@ -73,6 +75,10 @@ function validEnvelope(payload: Record<string, unknown>): Record<string, unknown
     kind,
     payload,
     ...(kind === 'answer' ? { replyToMessageId: ID.reply } : {}),
+    ...((kind === 'report' || kind === 'verdict') ? {
+      invocationId: ID.invocation,
+      promptInputSnapshotId: ID.promptSnapshot,
+    } : {}),
     correlationId: ID.correlation,
     idempotencyKey: `send:${String(kind)}`,
     provenance: { class: 'agent_message', sourceId: ID.agent },
@@ -80,6 +86,22 @@ function validEnvelope(payload: Record<string, unknown>): Record<string, unknown
     createdAt: '2026-08-14T08:00:00.000Z',
     deadlineAt: '2026-08-14T09:00:00.000Z',
   };
+}
+
+function validSendInput(payload: Record<string, unknown>): Record<string, unknown> {
+  const envelope = validEnvelope(payload);
+  const {
+    protocolVersion: _protocolVersion,
+    messageId: _messageId,
+    senderPrincipalId: _senderPrincipalId,
+    authenticatedPrincipal: _authenticatedPrincipal,
+    ...input
+  } = envelope;
+  void _protocolVersion;
+  void _messageId;
+  void _senderPrincipalId;
+  void _authenticatedPrincipal;
+  return input;
 }
 
 describe('AgentMessageEnvelopeV1', () => {
@@ -172,7 +194,7 @@ describe('AgentMessageEnvelopeV1', () => {
     expect(AgentMessageEnvelopeV1Schema.safeParse(unknownRole).success).toBe(false);
   });
 
-  it('kind/payload uyuşmazlığı ve repliesiz answer mesajını reddeder', () => {
+  it('kind/payload uyuşmazlığı, repliesiz answer ve answer dışı reply alanını reddeder', () => {
     expect(AgentMessageEnvelopeV1Schema.safeParse({
       ...validEnvelope(PAYLOADS[0]!),
       kind: 'order',
@@ -180,12 +202,25 @@ describe('AgentMessageEnvelopeV1', () => {
     const answer = validEnvelope(PAYLOADS[1]!);
     delete answer['replyToMessageId'];
     expect(AgentMessageEnvelopeV1Schema.safeParse(answer).success).toBe(false);
+    expect(AgentMessageEnvelopeV1Schema.safeParse({
+      ...validEnvelope(PAYLOADS[2]!),
+      replyToMessageId: ID.reply,
+    }).success).toBe(false);
+    for (const nonAnswer of [PAYLOADS[2]!, PAYLOADS[8]!]) {
+      expect(SendMessageInputV1Schema.safeParse({
+        ...validSendInput(nonAnswer),
+        replyToMessageId: ID.reply,
+      }).success).toBe(false);
+    }
   });
 
   it('report/verdict task referansları ve yapılandırılmış verdict gerektirir', () => {
     const report = validEnvelope(PAYLOADS[6]!);
     delete report['taskBriefId'];
     expect(AgentMessageEnvelopeV1Schema.safeParse(report).success).toBe(false);
+    const missingInvocation = validEnvelope(PAYLOADS[6]!);
+    delete missingInvocation['invocationId'];
+    expect(AgentMessageEnvelopeV1Schema.safeParse(missingInvocation).success).toBe(false);
     expect(AgentMessageEnvelopeV1Schema.safeParse(validEnvelope({
       type: 'verdict',
       verdict: { decision: 'reject', reasons: 'serbest metin' },

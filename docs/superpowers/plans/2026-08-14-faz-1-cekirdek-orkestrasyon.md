@@ -380,39 +380,45 @@ EffectRunner.run<T>(input: DurableEffectInput<T>): Promise<T>
 
 ### Implement
 
-- [ ] Resolve user from local authenticated session, agent from opaque capability +
+- [x] Resolve user from local authenticated session, agent from opaque capability +
   latest agent record, and allowlisted internal service from code-owned token.
   `BROADCAST_SENTINEL` is recipient-only.
-- [ ] Implement the exact Phase 1 route matrix from `docs/13:133-149`; group-lead
+- [x] Implement the exact Phase 1 route matrix from `docs/13:133-149`; group-lead
   and council routes fail closed until Phase 4.
-- [ ] `send`: validate input, derive principal snapshot, authorize route/deadline/
+- [x] `send`: validate input, derive principal snapshot, authorize route/deadline/
   current brief and task state, assign deterministic IDs, insert canonical message
   and recipient-snapshot receipts, then attempt Redis wakeup. Persist rejection
   policy/event without storing an authorized message.
-- [ ] `pollInbox` folds receipts before filtering; `claim` writes lease/fence;
+- [x] `pollInbox` folds receipts before filtering; `claim` writes lease/fence;
   temporary failure appends retry/backoff; expired claims reclaim; max retries append
   failed + typed escalation.
-- [ ] Processed is appended only after all transition/effect records are durable.
-- [ ] Match answers by `replyToMessageId` to exactly one pending question with the
+- [x] Processed is appended only after all transition/effect records are durable.
+- [x] Match answers by `replyToMessageId` to exactly one pending question with the
   same session/task/brief; session ID alone never resumes work.
-- [ ] `EffectRunner` folds by causation + stable effect ID. Completed returns stored
+- [x] `EffectRunner` folds by causation + stable effect ID. Completed returns stored
   result; replay-safe uncertain work retries with the same external idempotency key;
   non-replay-safe uncertain work escalates.
-- [ ] Handlers parse stored envelopes again and map report/verdict/answer to the
+- [x] Handlers parse stored envelopes again and map report/verdict/answer to the
   injected `TaskTransitionPort`; they never import scheduler implementation.
-- [ ] `drainOnce` scans durable due receipts even without a Redis wakeup. The server
+- [x] `drainOnce` scans durable due receipts even without a Redis wakeup. The server
   owns a bounded poll loop with abort-aware start/stop; wakeups only accelerate it.
 
 ### Verification
 
-- [ ] Matrix tests cover every sender/recipient/kind row plus forged principals,
+- [x] Matrix tests cover every sender/recipient/kind row plus forged principals,
   stale brief, deadline, broadcast snapshot, user-answer mismatch, worker verdict,
   and Phase 4 routes.
-- [ ] Integration tests cover duplicate send, idempotency hash collision, lost
+- [x] Integration tests cover duplicate send, idempotency hash collision, lost
   wakeup, concurrent claim, claim expiry, backoff, terminal escalation, crash
   between effect and receipt, and non-idempotent escalation.
-- [ ] Prompt injection strings in every provenance class remain data and gain no
+- [x] Prompt injection strings in every provenance class remain data and gain no
   route, transition, or tool authority.
+
+Evidence: DB 25 files/235 tests/0 skipped; agents 3 files/33 tests/0 skipped,
+including 27 live integration tests; shared 8 files/139 tests/0 skipped; server
+7 files/64 tests/0 skipped; uncached root build 9/9 tasks, required test 13/13
+tasks with 562 tests/0 skipped, and lint 9/9 tasks; independent verifier/anti/
+quality reviews clean.
 
 ### Anti-patterns
 

@@ -7,11 +7,16 @@ import { runMigrations } from '../migrate.js';
 import { clickhouseUp } from '../testutil.js';
 import {
   appendMessage,
+  findAuthoritativeAnswerWinner,
   findMessageByIdempotencyKey,
   getMessage,
+  listDueInboxItems,
   listMessagesBySession,
   listPendingInboxMessages,
+  listProtocolV1AnswerRepliesToMessage,
+  listProtocolV1RepliesToMessage,
 } from './messages.js';
+import { appendEffectVersion, reserveEffect } from './effects.js';
 import { appendReceiptVersion, createReceipt } from './receipts.js';
 import {
   RepositoryConflictError,
@@ -376,6 +381,228 @@ describe.skipIf(!up)('messages repository', () => {
       .rejects.toBeInstanceOf(RepositoryConflictError);
     await expect(listPendingInboxMessages(ch, original.projectId, original.recipient.id))
       .rejects.toBeInstanceOf(RepositoryConflictError);
+    await expect(listDueInboxItems(ch, {
+      now: '2026-08-14T12:00:00.000Z',
+      recipientId: original.recipient.id,
+      limit: 10,
+    })).rejects.toBeInstanceOf(RepositoryConflictError);
+  });
+
+  it('idempotency namespace cevabini bounded tutar ve asiri collisioni fail-closed reddeder', async () => {
+    const projectId = randomUUID();
+    const idempotencyKey = `bounded-${randomUUID()}`;
+    await ch.insert({
+      table: 'messages',
+      values: Array.from({ length: 101 }, () => protocolV1Row(envelope({
+        projectId,
+        idempotencyKey,
+        createdAt: '2026-08-14T12:00:00.000Z',
+        deadlineAt: '2026-08-14T13:00:00.000Z',
+      }))),
+      format: 'JSONEachRow',
+    });
+    await expect(findMessageByIdempotencyKey(ch, projectId, idempotencyKey))
+      .rejects.toBeInstanceOf(RepositoryConflictError);
+  });
+
+  it('idempotency indexi 50k multi-granule projectte exact primary-key pruning yapar', async () => {
+    const projectId = randomUUID();
+    const targetKey = 'message-key-025000';
+    const rows = Array.from({ length: 50_001 }, (_, index) => protocolV1Row(envelope({
+      projectId,
+      idempotencyKey: `message-key-${String(index).padStart(6, '0')}`,
+      createdAt: '2026-08-14T12:00:00.000Z',
+      deadlineAt: '2026-08-14T13:00:00.000Z',
+    })));
+    await ch.insert({ table: 'messages', values: rows, format: 'JSONEachRow' });
+    expect(await findMessageByIdempotencyKey(ch, projectId, targetKey))
+      .toMatchObject({ protocolVersion: 1, envelope: { idempotencyKey: targetKey } });
+
+    const explanation = await ch.query({
+      query: `EXPLAIN indexes = 1
+        SELECT message_id FROM idempotency_messages
+        PREWHERE project_id = {projectId:UUID}
+          AND idempotency_key = {idempotencyKey:String}
+        LIMIT 101`,
+      query_params: { projectId, idempotencyKey: targetKey },
+      format: 'JSONEachRow',
+    });
+    const explainText = (await explanation.json<{ explain: string }>())
+      .map((row) => row.explain)
+      .join('\n');
+    const granules = [...explainText.matchAll(/Granules: (\d+)\/(\d+)/g)]
+      .map((match) => ({ selected: Number(match[1]), total: Number(match[2]) }));
+    expect(granules.some(({ selected, total }) => total >= 6 && selected < total)).toBe(true);
+  }, 30_000);
+
+  it('replyTo sorgusu project scope icinde exact protocol-v1 cevaplarini dondurur', async () => {
+    const projectId = randomUUID();
+    const sessionId = randomUUID();
+    const question = envelope({ projectId, sessionId });
+    await appendMessage(ch, { envelope: question });
+    const earlier = envelope({
+      projectId,
+      sessionId,
+      kind: 'answer',
+      payload: { type: 'answer', text: 'Earlier answer' },
+      replyToMessageId: question.messageId,
+      correlationId: question.correlationId,
+      createdAt: '2026-08-14T12:01:00.000Z',
+      deadlineAt: '2026-08-14T13:01:00.000Z',
+    });
+    const later = envelope({
+      projectId,
+      sessionId,
+      kind: 'answer',
+      payload: { type: 'answer', text: 'Later answer' },
+      replyToMessageId: question.messageId,
+      correlationId: question.correlationId,
+      createdAt: '2026-08-14T12:02:00.000Z',
+      deadlineAt: '2026-08-14T13:02:00.000Z',
+    });
+    const unrelated = envelope({
+      projectId,
+      sessionId,
+      kind: 'answer',
+      payload: { type: 'answer', text: 'Unrelated answer' },
+      replyToMessageId: randomUUID(),
+      createdAt: '2026-08-14T12:00:30.000Z',
+      deadlineAt: '2026-08-14T13:00:30.000Z',
+    });
+    const otherProject = envelope({
+      sessionId,
+      kind: 'answer',
+      payload: { type: 'answer', text: 'Other project answer' },
+      replyToMessageId: question.messageId,
+      createdAt: '2026-08-14T12:00:00.000Z',
+      deadlineAt: '2026-08-14T13:00:00.000Z',
+    });
+    const earlierRecord = await appendMessage(ch, { envelope: earlier });
+    const laterRecord = await appendMessage(ch, { envelope: later });
+    await appendMessage(ch, { envelope: unrelated });
+    await appendMessage(ch, { envelope: otherProject });
+
+    expect(await listProtocolV1RepliesToMessage(ch, projectId, question.messageId))
+      .toEqual([earlierRecord, laterRecord]);
+  });
+
+  it('authoritative answer yalniz durable winner effectinin exact answer mesajini sayar', async () => {
+    const projectId = randomUUID();
+    const sessionId = randomUUID();
+    const question = envelope({ projectId, sessionId });
+    await appendMessage(ch, { envelope: question });
+    const unselectedAnswer = envelope({
+      projectId,
+      sessionId,
+      kind: 'answer',
+      payload: { type: 'answer', text: 'Stored but not selected' },
+      replyToMessageId: question.messageId,
+      correlationId: question.correlationId,
+      createdAt: '2026-08-14T12:01:00.000Z',
+      deadlineAt: '2026-08-14T13:01:00.000Z',
+    });
+    const unselectedRecord = await appendMessage(ch, { envelope: unselectedAnswer });
+    expect(await listProtocolV1AnswerRepliesToMessage(ch, projectId, question.messageId))
+      .toEqual([unselectedRecord]);
+    expect(await findAuthoritativeAnswerWinner(ch, projectId, question.messageId)).toBeNull();
+
+    const answer = envelope({
+      projectId,
+      sessionId,
+      kind: 'answer',
+      payload: { type: 'answer', text: 'Authoritative answer' },
+      replyToMessageId: question.messageId,
+      correlationId: question.correlationId,
+      createdAt: '2026-08-14T12:02:00.000Z',
+      deadlineAt: '2026-08-14T13:02:00.000Z',
+    });
+    const answerRecord = await appendMessage(ch, { envelope: answer });
+    const pendingWinner = await reserveEffect(ch, {
+      causation_id: question.messageId,
+      stable_effect_id: 'question-answer-winner',
+      project_id: projectId,
+      effect_type: 'question_answer_selection_v1',
+      request: { answerMessageId: answer.messageId },
+      replay_safety: 'replay_safe',
+      lease_fence: '1',
+      created_at: answer.createdAt,
+    });
+    expect(await findAuthoritativeAnswerWinner(ch, projectId, question.messageId)).toBeNull();
+    await appendEffectVersion(ch, {
+      causation_id: question.messageId,
+      stable_effect_id: 'question-answer-winner',
+      expectedVersion: pendingWinner.effect_version,
+      state: 'succeeded',
+      result: { answerMessageId: answer.messageId },
+      error: '',
+      lease_fence: '1',
+      created_at: answer.createdAt,
+    });
+
+    expect(await listProtocolV1AnswerRepliesToMessage(ch, projectId, question.messageId))
+      .toEqual([unselectedRecord, answerRecord]);
+    expect(await findAuthoritativeAnswerWinner(ch, projectId, question.messageId))
+      .toEqual(answerRecord);
+  });
+
+  it('winner effect non-answer mesaji veya yanlis answer baglamini authoritative yapamaz', async () => {
+    const projectId = randomUUID();
+    const sessionId = randomUUID();
+    const question = envelope({ projectId, sessionId });
+    await appendMessage(ch, { envelope: question });
+    const nonAnswer = envelope({
+      projectId,
+      sessionId,
+      kind: 'question',
+      payload: { type: 'question', text: 'Not an answer' },
+    });
+    await appendMessage(ch, { envelope: nonAnswer });
+    const winner = await reserveEffect(ch, {
+      causation_id: question.messageId,
+      stable_effect_id: 'question-answer-winner',
+      project_id: projectId,
+      effect_type: 'question_answer_selection_v1',
+      request: { answerMessageId: nonAnswer.messageId },
+      replay_safety: 'replay_safe',
+      lease_fence: '1',
+      created_at: nonAnswer.createdAt,
+    });
+    await appendEffectVersion(ch, {
+      causation_id: question.messageId,
+      stable_effect_id: 'question-answer-winner',
+      expectedVersion: winner.effect_version,
+      state: 'succeeded',
+      result: { answerMessageId: nonAnswer.messageId },
+      error: '',
+      lease_fence: '1',
+      created_at: nonAnswer.createdAt,
+    });
+    await expect(findAuthoritativeAnswerWinner(ch, projectId, question.messageId))
+      .rejects.toBeInstanceOf(StoredRecordError);
+  });
+
+  it('due inbox protocol-v1 mesaj ile latest receipt kaydini birlikte dondurur', async () => {
+    const input = envelope();
+    const message = await appendMessage(ch, { envelope: input });
+    const receipt = await createReceipt(ch, {
+      receipt_id: randomUUID(),
+      message_id: input.messageId,
+      project_id: input.projectId,
+      recipient_id: input.recipient.id,
+      recipient_snapshot: input.recipient,
+      state: 'enqueued',
+      claim_owner: '',
+      claim_fence: '0',
+      retry_count: 0,
+      error: '',
+      created_at: input.createdAt,
+    });
+
+    expect(await listDueInboxItems(ch, {
+      now: input.createdAt,
+      recipientId: input.recipient.id,
+      limit: 10,
+    })).toEqual([{ message, receipt }]);
   });
 
   it('receipt state fold edildikten sonra yalnız pending inbox mesajlarını döndürür', async () => {
@@ -423,6 +650,11 @@ describe.skipIf(!up)('messages repository', () => {
 
     await expect(listPendingInboxMessages(ch, input.projectId, input.recipient.id))
       .rejects.toBeInstanceOf(StoredRecordError);
+    await expect(listDueInboxItems(ch, {
+      now: input.createdAt,
+      recipientId: input.recipient.id,
+      limit: 10,
+    })).rejects.toBeInstanceOf(StoredRecordError);
   });
 
   it('protocol 0 satırını yalnız açık legacy projection olarak döndürür', async () => {
@@ -448,6 +680,25 @@ describe.skipIf(!up)('messages repository', () => {
     const record = await getMessage(ch, projectId, messageId);
     expect(record).toMatchObject({ protocolVersion: 0, content: 'legacy', taskId: NIL_UUID });
     expect(record).not.toHaveProperty('envelope');
+
+    await createReceipt(ch, {
+      receipt_id: randomUUID(),
+      message_id: messageId,
+      project_id: projectId,
+      recipient_id: agentId,
+      recipient_snapshot: { type: 'agent', id: agentId },
+      state: 'enqueued',
+      claim_owner: '',
+      claim_fence: '0',
+      retry_count: 0,
+      error: '',
+      created_at: '2026-08-14T12:00:00.000Z',
+    });
+    await expect(listDueInboxItems(ch, {
+      now: '2026-08-14T12:00:00.000Z',
+      recipientId: agentId,
+      limit: 10,
+    })).rejects.toBeInstanceOf(StoredRecordError);
   });
 
   it('legacy retry kopyalarını uzlaştırır, divergent ve mixed protocol kimliklerini sıra bağımsız reddeder', async () => {

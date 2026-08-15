@@ -4,6 +4,7 @@ import { createRedis, type WwRedis } from './redis.js';
 import {
   acquireFencedLease,
   agentLockKey,
+  effectLockKey,
   getFencedLease,
   leaseFenceKey,
   messageLockKey,
@@ -19,7 +20,7 @@ import { redisUp } from './testutil.js';
 const up = await redisUp();
 
 describe('fenced lease sinir dogrulamasi', () => {
-  it('task, agent, message ve receipt anahtarlarini strict UUID ile kurar', () => {
+  it('task, agent, message, receipt ve effect anahtarlarini canonical kurar', () => {
     const taskId = randomUUID();
     const agentId = randomUUID();
     const messageId = randomUUID();
@@ -29,6 +30,12 @@ describe('fenced lease sinir dogrulamasi', () => {
     expect(agentLockKey(agentId)).toBe(`ww:agent:${agentId}:claim`);
     expect(messageLockKey(messageId)).toBe(`ww:message:${messageId}:claim`);
     expect(receiptLockKey(receiptId)).toBe(`ww:receipt:${receiptId}:claim`);
+    expect(effectLockKey(messageId, 'message-dispatch:receipt-1'))
+      .toMatch(new RegExp(`^ww:effect:${messageId}:[a-f0-9]{64}:claim$`));
+    expect(effectLockKey(messageId, 'message-dispatch:receipt-1'))
+      .toBe(effectLockKey(messageId, 'message-dispatch:receipt-1'));
+    expect(effectLockKey(messageId, 'message-dispatch:receipt-2'))
+      .not.toBe(effectLockKey(messageId, 'message-dispatch:receipt-1'));
     expect(leaseFenceKey(taskLockKey(taskId))).toBe(`ww:task:${taskId}:claim:fence`);
   });
 
@@ -37,6 +44,7 @@ describe('fenced lease sinir dogrulamasi', () => {
     expect(() => agentLockKey('agent-1')).toThrow();
     expect(() => messageLockKey('')).toThrow();
     expect(() => receiptLockKey('00000000-0000-0000-0000-000000000000')).toThrow();
+    expect(() => effectLockKey(randomUUID(), '')).toThrow();
 
     const redis = { eval: vi.fn() } as unknown as WwRedis;
     await expect(acquireFencedLease(

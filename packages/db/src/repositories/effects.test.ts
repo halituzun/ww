@@ -7,10 +7,12 @@ import { runMigrations } from '../migrate.js';
 import { clickhouseUp } from '../testutil.js';
 import {
   appendEffectVersion,
+  getEffectDurableMaxLeaseFence,
   getLatestEffect,
   listLatestEffectsByState,
   listLatestTaskEffectsByStates,
   reserveEffect,
+  reserveEffectWithEvidence,
   type ReserveEffectInput,
 } from './effects.js';
 import { RepositoryConflictError, StoredRecordError } from './types.js';
@@ -141,8 +143,108 @@ describe.skipIf(!up)('effects repository', () => {
     expect(await listLatestEffectsByState(ch, pending.project_id, 'uncertain')).toEqual([]);
   });
 
+  it('fresh fence v1 pending geciken stale fence v2 failed kaydina otorite vermez', async () => {
+    const reservation = effect({ task_id: randomUUID(), lease_fence: '1' });
+    const staleBase = await reserveEffect(ch, reservation);
+    let stalePrepared: (() => void) | undefined;
+    let releaseStale: (() => void) | undefined;
+    const prepared = new Promise<void>((resolve) => { stalePrepared = resolve; });
+    const release = new Promise<void>((resolve) => { releaseStale = resolve; });
+    const delayed = new Proxy(ch, {
+      get(target, property) {
+        if (property === 'insert') return async (options: Parameters<ClickHouseClient['insert']>[0]) => {
+          if (options.table === 'effect_ledger') {
+            stalePrepared?.();
+            await release;
+          }
+          return target.insert(options);
+        };
+        const member: unknown = Reflect.get(target, property, target);
+        return typeof member === 'function' ? member.bind(target) : member;
+      },
+    });
+    const delayedStale = appendEffectVersion(delayed, {
+      causation_id: staleBase.causation_id,
+      stable_effect_id: staleBase.stable_effect_id,
+      expectedVersion: staleBase.effect_version,
+      state: 'failed',
+      result: {},
+      error: 'late stale failure',
+      lease_fence: '1',
+      created_at: '2026-08-14T12:01:00.000Z',
+    });
+    await prepared;
+    const fresh = await reserveEffectWithEvidence(ch, { ...reservation, lease_fence: '2' });
+    expect(fresh).toMatchObject({
+      hadPriorReservation: true,
+      priorMaxLeaseFence: '1',
+      row: { effect_version: '1', lease_fence: '2', state: 'pending' },
+    });
+    releaseStale?.();
+
+    await expect(delayedStale).resolves.toEqual(fresh.row);
+    expect(await getLatestEffect(ch, staleBase.causation_id, staleBase.stable_effect_id))
+      .toEqual(fresh.row);
+    expect(await listLatestEffectsByState(ch, staleBase.project_id, 'failed')).not
+      .toContainEqual(expect.objectContaining({ causation_id: staleBase.causation_id }));
+    expect(await listLatestTaskEffectsByStates(ch, reservation.task_id!, ['pending']))
+      .toContainEqual(fresh.row);
+    await ch.command({ query: 'OPTIMIZE TABLE effect_ledger FINAL' });
+    await ch.command({ query: 'OPTIMIZE TABLE task_effect_ledger FINAL' });
+    expect(await getLatestEffect(ch, staleBase.causation_id, staleBase.stable_effect_id))
+      .toEqual(fresh.row);
+    expect(await listLatestTaskEffectsByStates(ch, reservation.task_id!, ['failed'])).toEqual([]);
+  });
+
+  it('fence-first fold fiziksel ekleme sirasindan bagimsizdir', async () => {
+    for (const staleLast of [false, true]) {
+      const input = effect({ task_id: randomUUID() });
+      const requestHash = canonicalSha256V1(input.request);
+      const common = {
+        causation_id: input.causation_id,
+        stable_effect_id: input.stable_effect_id,
+        project_id: input.project_id,
+        task_id: input.task_id,
+        assignment_attempt_id: NIL_UUID,
+        effect_type: input.effect_type,
+        request_hash: requestHash,
+        replay_safety: input.replay_safety,
+        result_json: '{}',
+        created_at: input.created_at,
+      };
+      const fresh = {
+        ...common,
+        state: 'pending',
+        error: '',
+        effect_version: '1',
+        lease_fence: '2',
+      };
+      const stale = {
+        ...common,
+        state: 'failed',
+        error: 'stale higher version',
+        effect_version: '2',
+        lease_fence: '1',
+      };
+      await ch.insert({
+        table: 'effect_ledger',
+        values: staleLast ? [fresh, stale] : [stale, fresh],
+        format: 'JSONEachRow',
+      });
+      expect(await getLatestEffect(ch, input.causation_id, input.stable_effect_id))
+        .toMatchObject({ state: 'pending', effect_version: '1', lease_fence: '2' });
+      expect(await listLatestTaskEffectsByStates(ch, input.task_id!, ['pending']))
+        .toMatchObject([{ state: 'pending', effect_version: '1', lease_fence: '2' }]);
+    }
+  });
+
   it('stale effect once inerse fresh exact retry ayni versioni yuksek fence ile duzeltir', async () => {
     const pending = await reserveEffect(ch, effect());
+    expect(await getEffectDurableMaxLeaseFence(
+      ch,
+      pending.causation_id,
+      pending.stable_effect_id,
+    )).toBe(pending.lease_fence);
     const common = {
       causation_id: pending.causation_id,
       stable_effect_id: pending.stable_effect_id,
@@ -171,6 +273,65 @@ describe.skipIf(!up)('effects repository', () => {
     });
     await expect(getLatestEffect(ch, pending.causation_id, pending.stable_effect_id))
       .resolves.toEqual(fresh);
+  });
+
+  it('effect durable fence floor bulunmayan kayitta sifir, fresh sahiplikte max fence verir', async () => {
+    const input = effect();
+    expect(await getEffectDurableMaxLeaseFence(
+      ch,
+      input.causation_id,
+      input.stable_effect_id,
+    )).toBe('0');
+    await reserveEffect(ch, input);
+    await reserveEffect(ch, { ...input, lease_fence: '9' });
+    expect(await getEffectDurableMaxLeaseFence(
+      ch,
+      input.causation_id,
+      input.stable_effect_id,
+    )).toBe('9');
+  });
+
+  it('fresh effect lease altinda prior reservation kanitini stale ilk okumadan sonra bulur', async () => {
+    const freshInput = effect({ lease_fence: '1' });
+    const fresh = await reserveEffectWithEvidence(ch, freshInput);
+    expect(fresh).toMatchObject({
+      hadPriorReservation: false,
+      priorMaxLeaseFence: '0',
+      row: { lease_fence: '1', state: 'pending' },
+    });
+
+    const priorInput = effect({ lease_fence: '1' });
+    await reserveEffect(ch, priorInput);
+    let hidInitialRead = false;
+    const staleRead = new Proxy(ch, {
+      get(target, property) {
+        if (property === 'query') return async (options: Parameters<ClickHouseClient['query']>[0]) => {
+          const query = String(options.query);
+          if (
+            !hidInitialRead &&
+            query.includes('FROM effect_ledger') &&
+            query.includes('stable_effect_id = {stableEffectId:String}') &&
+            !query.includes('lease_fence <')
+          ) {
+            hidInitialRead = true;
+            return { json: async () => [] } as Awaited<ReturnType<ClickHouseClient['query']>>;
+          }
+          return target.query(options);
+        };
+        const member: unknown = Reflect.get(target, property, target);
+        return typeof member === 'function' ? member.bind(target) : member;
+      },
+    });
+    const recovered = await reserveEffectWithEvidence(staleRead, {
+      ...priorInput,
+      lease_fence: '2',
+    });
+    expect(hidInitialRead).toBe(true);
+    expect(recovered).toMatchObject({
+      hadPriorReservation: true,
+      priorMaxLeaseFence: '1',
+      row: { lease_fence: '2', state: 'pending' },
+    });
   });
 
   it('latest aynı-version divergent effect satırını reddeder', async () => {
@@ -389,18 +550,18 @@ describe.skipIf(!up)('effects repository', () => {
       query: `EXPLAIN indexes = 1
         SELECT causation_id FROM
         (
-          SELECT *, max(lease_fence) OVER
-            (PARTITION BY causation_id, stable_effect_id) AS maximum_lease_fence
+          SELECT *, max(effect_version) OVER
+            (PARTITION BY causation_id, stable_effect_id) AS maximum_effect_version
           FROM
           (
-            SELECT *, max(effect_version) OVER
-              (PARTITION BY causation_id, stable_effect_id) AS maximum_effect_version
+            SELECT *, max(lease_fence) OVER
+              (PARTITION BY causation_id, stable_effect_id) AS maximum_lease_fence
             FROM task_effect_ledger
             PREWHERE task_id = {taskId:UUID}
           )
-          WHERE effect_version = maximum_effect_version
+          WHERE lease_fence = maximum_lease_fence
         )
-        WHERE lease_fence = maximum_lease_fence`,
+        WHERE effect_version = maximum_effect_version`,
       query_params: { taskId },
       format: 'JSONEachRow',
     });

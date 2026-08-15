@@ -8,11 +8,12 @@ import {
   appendAgentVersion,
   createAgent,
   getLatestAgent,
+  listLatestAgents,
   listLatestAgentsByStatus,
   type AgentRow,
   type CreateAgentInput,
 } from './agents.js';
-import { RepositoryConflictError } from './types.js';
+import { RepositoryConflictError, StoredRecordError } from './types.js';
 
 const up = await clickhouseUp();
 
@@ -28,6 +29,7 @@ describe('agents repository query shape', () => {
     const projectId = randomUUID();
 
     await getLatestAgent(fakeCh, projectId, randomUUID());
+    await listLatestAgents(fakeCh, projectId);
     await listLatestAgentsByStatus(fakeCh, projectId, 'idle');
 
     expect(queries[0]).toMatch(/version = \(\s*SELECT max\(version\) FROM agents/);
@@ -35,6 +37,10 @@ describe('agents repository query shape', () => {
       /\(agent_id, version\) IN \(\s*SELECT agent_id, max\(version\) FROM agents/,
     );
     expect(queries[1]).toMatch(/GROUP BY agent_id/);
+    expect(queries[2]).toMatch(
+      /\(agent_id, version\) IN \(\s*SELECT agent_id, max\(version\) FROM agents/,
+    );
+    expect(queries[2]).toMatch(/GROUP BY agent_id/);
   });
 });
 
@@ -67,7 +73,7 @@ describe.skipIf(!up)('agents repository', () => {
     await ch.close();
   });
 
-  function agent(): CreateAgentInput {
+  function agent(overrides: Partial<CreateAgentInput> = {}): CreateAgentInput {
     const now = new Date().toISOString();
     return {
       agent_id: randomUUID(),
@@ -86,8 +92,36 @@ describe.skipIf(!up)('agents repository', () => {
       tasks_rejected: 0,
       created_at: now,
       updated_at: now,
+      ...overrides,
     };
   }
+
+  it('project agent snapshotini latest surumde deterministik ve bounded dondurur', async () => {
+    const projectId = randomUUID();
+    const first = await createAgent(ch, agent({ project_id: projectId, name: 'Worker-A' }));
+    const secondInitial = await createAgent(ch, agent({
+      project_id: projectId,
+      name: 'Worker-B',
+    }));
+    const third = await createAgent(ch, agent({ project_id: projectId, name: 'Worker-C' }));
+    const second = await appendAgentVersion(ch, {
+      expectedVersion: secondInitial.version,
+      assignmentFence: '1',
+      next: { ...secondInitial, status: 'busy', current_task_id: randomUUID() },
+    });
+    await createAgent(ch, agent({ name: 'Other-Project' }));
+
+    const expected = [first, second, third].sort((left, right) => (
+      left.agent_id.localeCompare(right.agent_id)
+    ));
+    expect(await listLatestAgents(ch, projectId)).toEqual(expected);
+    await expect(listLatestAgents(ch, projectId, { limit: 2 }))
+      .rejects.toBeInstanceOf(RepositoryConflictError);
+    await expect(listLatestAgents(ch, projectId, { limit: 0 }))
+      .rejects.toBeInstanceOf(StoredRecordError);
+    await expect(listLatestAgents(ch, projectId, { limit: 1_001 }))
+      .rejects.toBeInstanceOf(StoredRecordError);
+  });
 
   it('legacy nil alanlarini korur, append eder ve latest statusu filtreler', async () => {
     const initial = await createAgent(ch, agent());
@@ -175,6 +209,8 @@ describe.skipIf(!up)('agents repository', () => {
     await expect(getLatestAgent(ch, initial.project_id, initial.agent_id))
       .rejects.toBeInstanceOf(RepositoryConflictError);
     await expect(listLatestAgentsByStatus(ch, initial.project_id, 'busy'))
+      .rejects.toBeInstanceOf(RepositoryConflictError);
+    await expect(listLatestAgents(ch, initial.project_id))
       .rejects.toBeInstanceOf(RepositoryConflictError);
   });
 

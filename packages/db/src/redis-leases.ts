@@ -1,11 +1,22 @@
-import { EntityIdSchema, type EntityId } from '@ww/shared';
+import {
+  EntityIdSchema,
+  OpaqueIdentifierSchema,
+  canonicalSha256V1,
+  type EntityId,
+} from '@ww/shared';
 import { decodeRedisBoolean, type WwRedis } from './redis.js';
 
 export type TaskLockKey = `ww:task:${EntityId}:claim`;
 export type AgentLockKey = `ww:agent:${EntityId}:claim`;
 export type MessageLockKey = `ww:message:${EntityId}:claim`;
 export type ReceiptLockKey = `ww:receipt:${EntityId}:claim`;
-export type RedisLockKey = TaskLockKey | AgentLockKey | MessageLockKey | ReceiptLockKey;
+export type EffectLockKey = `ww:effect:${EntityId}:${string}:claim`;
+export type RedisLockKey =
+  | TaskLockKey
+  | AgentLockKey
+  | MessageLockKey
+  | ReceiptLockKey
+  | EffectLockKey;
 export type LeaseFenceKey = `${RedisLockKey}:fence`;
 
 export interface FencedLease {
@@ -33,20 +44,35 @@ export const messageLockKey = (messageId: string): MessageLockKey => (
 export const receiptLockKey = (receiptId: string): ReceiptLockKey => (
   `ww:receipt:${entityId(receiptId)}:claim`
 );
+export const effectLockKey = (
+  causationId: string,
+  stableEffectId: string,
+): EffectLockKey => {
+  const effect = OpaqueIdentifierSchema.parse(stableEffectId);
+  return `ww:effect:${entityId(causationId)}:${canonicalSha256V1(effect)}:claim`;
+};
 export const leaseFenceKey = (key: RedisLockKey): LeaseFenceKey => {
   assertLockKey(key);
   return `${key}:fence`;
 };
 
-const LOCK_KEY_PATTERN = /^ww:(task|agent|message|receipt):([^:]+):claim$/;
+const ENTITY_LOCK_KEY_PATTERN = /^ww:(task|agent|message|receipt):([^:]+):claim$/;
+const EFFECT_LOCK_KEY_PATTERN = /^ww:effect:([^:]+):([a-f0-9]{64}):claim$/;
 
 function assertLockKey(key: RedisLockKey): void {
-  const match = LOCK_KEY_PATTERN.exec(key);
-  if (match === null || match[2] === undefined) {
+  const entityMatch = ENTITY_LOCK_KEY_PATTERN.exec(key);
+  if (entityMatch !== null && entityMatch[2] !== undefined) {
+    const id = entityId(entityMatch[2]);
+    const canonical = `ww:${entityMatch[1]}:${id}:claim`;
+    if (key !== canonical) throw new Error('Redis lease lock key canonical degil');
+    return;
+  }
+  const effectMatch = EFFECT_LOCK_KEY_PATTERN.exec(key);
+  if (effectMatch === null || effectMatch[1] === undefined || effectMatch[2] === undefined) {
     throw new Error('gecersiz Redis lease lock key');
   }
-  const id = entityId(match[2]);
-  const canonical = `ww:${match[1]}:${id}:claim`;
+  const id = entityId(effectMatch[1]);
+  const canonical = `ww:effect:${id}:${effectMatch[2]}:claim`;
   if (key !== canonical) throw new Error('Redis lease lock key canonical degil');
 }
 
