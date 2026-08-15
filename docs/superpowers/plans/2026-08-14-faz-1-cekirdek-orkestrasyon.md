@@ -613,14 +613,14 @@ free-form verdict parser, Phase 4 hierarchy, or direct repository/task writes.
   recovered from the bounded DB poll loop. This is service
   re-instantiation recovery only; the Phase 2 process sweeper/working-tree recovery
   remains out of scope.
-- [ ] Separate always-reject scenario escalates on attempt 3.
+- [x] Separate always-reject scenario escalates on attempt 3.
 
 ### Final verification
 
 - [ ] `docker compose up -d` and both services healthy.
-- [ ] `pnpm build` — every workspace passes.
-- [ ] `WW_REQUIRE_INTEGRATION=1 pnpm test` — zero skips.
-- [ ] `pnpm lint` — every workspace passes.
+- [x] `pnpm build` — every workspace passes.
+- [x] `WW_REQUIRE_INTEGRATION=1 pnpm test` — zero skips.
+- [x] `pnpm lint` — every workspace passes.
 - [ ] `git diff --check`; secret scan; no forbidden deep imports/boundary casts/
   direct publish/provider/status writes.
 - [ ] From a non-destructive temporary `git worktree`, run `pnpm install
