@@ -3,6 +3,7 @@ import { z } from 'zod';
 import {
   EntityIdSchema,
   PROJECT_TYPES,
+  PROJECT_STATUSES,
   NIL_UUID,
   type AgentGroup,
   type EntityId,
@@ -10,6 +11,7 @@ import {
 } from '@ww/shared';
 import { randomUUID } from 'node:crypto';
 import {
+  appendProjectVersion,
   createCh,
   createProject,
   createTask,
@@ -59,8 +61,10 @@ export const MESSAGE_APPLICATION = Symbol('MESSAGE_APPLICATION');
 export const SERVER_DATABASE = Symbol('SERVER_DATABASE');
 
 const ProjectInput = z.strictObject({ name: z.string().trim().min(1), slug: z.string().trim().min(1).optional(), type: z.enum(PROJECT_TYPES).optional(), description: z.string().default(''), budgetUsdLimit: z.number().finite().nonnegative().default(0) });
+const ProjectStatusInput = z.strictObject({ status: z.enum(PROJECT_STATUSES) });
 const TaskInput = z.strictObject({ title: z.string().trim().min(1), description: z.string().default(''), acceptanceCriteria: z.array(z.string().trim().min(1)).default([]), dependencies: z.array(EntityIdSchema).default([]), files: z.array(z.string().trim().min(1)).default([]), budget: z.number().int().nonnegative().default(0), maxAttempts: z.number().int().min(1).max(3).default(3), planId: EntityIdSchema.optional() });
 export const parseProjectInput = (value: unknown) => ProjectInput.parse(value);
+export const parseProjectStatusInput = (value: unknown) => ProjectStatusInput.parse(value);
 export const parseTaskInput = (value: unknown) => TaskInput.parse(value);
 export type MessageApplicationInput = Readonly<{ projectId: EntityId; principal: AuthenticatedPrincipalV1; taskId?: EntityId; kind: 'user_command' | 'answer'; text: string; replyToMessageId?: EntityId }>;
 
@@ -73,7 +77,7 @@ export class MessageInputError extends Error {
 }
 
 export interface ServerDatabase { readonly ch: ClickHouseClient; readonly redis?: WwRedis; }
-export interface ProjectApplication { create(input: ReturnType<typeof parseProjectInput>): Promise<ProjectRow>; get(projectId: string): Promise<ProjectRow | null>; list(): Promise<ProjectRow[]>; }
+export interface ProjectApplication { create(input: ReturnType<typeof parseProjectInput>): Promise<ProjectRow>; get(projectId: string): Promise<ProjectRow | null>; list(): Promise<ProjectRow[]>; updateStatus(projectId: string, status: ReturnType<typeof parseProjectStatusInput>['status']): Promise<ProjectRow>; }
 export interface TaskApplication { create(projectId: string, input: ReturnType<typeof parseTaskInput>): Promise<TaskRow>; get(projectId: string, taskId: string): Promise<TaskRow | null>; list(projectId: string): Promise<TaskRow[]>; }
 export interface MessageApplication { send(input: MessageApplicationInput): Promise<unknown>; get(projectId: string, messageId: string): Promise<unknown>; }
 
@@ -87,6 +91,12 @@ export class ProjectApplicationService implements ProjectApplication {
   }
   get(projectId: string): Promise<ProjectRow | null> { return getLatestProject(this.database.ch, projectId); }
   list(): Promise<ProjectRow[]> { return listLatestProjects(this.database.ch); }
+  async updateStatus(projectId: string, status: ReturnType<typeof parseProjectStatusInput>['status']): Promise<ProjectRow> {
+    const current = await getLatestProject(this.database.ch, projectId);
+    if (current === null) throw new Error('project bulunamadi');
+    if (current.status === status) return current;
+    return appendProjectVersion(this.database.ch, { expectedVersion: current.version, next: { ...current, status, updated_at: new Date().toISOString() } });
+  }
 }
 
 @Injectable()

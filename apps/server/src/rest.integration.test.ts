@@ -54,6 +54,9 @@ describe.skipIf(probeCh === undefined || probeRedis === undefined)('REST gerçek
     await request(app.getHttpServer()).post('/projects').send({ name: 'unauthorized' }).expect(401);
     const project = await request(app.getHttpServer()).post('/projects').set('Authorization', `Bearer ${token}`).send({ name: 'REST integration' }).expect(201);
     const projectId = project.body.project_id as string;
+    await request(app.getHttpServer()).patch(`/projects/${projectId}/status`).send({ status: 'paused' }).expect(401);
+    await request(app.getHttpServer()).patch(`/projects/${projectId}/status`).set('Authorization', `Bearer ${token}`).send({ status: 'paused' }).expect(200).then((response) => expect(response.body.status).toBe('paused'));
+    await request(app.getHttpServer()).patch(`/projects/${projectId}/status`).set('Authorization', `Bearer ${token}`).send({ status: 'running' }).expect(200).then((response) => expect(response.body.status).toBe('running'));
     await request(app.getHttpServer()).get(`/projects/${projectId}`).expect(200).then((response) => {
       expect(response.body.project_id).toBe(projectId);
     });
