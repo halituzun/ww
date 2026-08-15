@@ -437,6 +437,40 @@ describe.skipIf(probe === undefined || probeRedis === undefined)('Phase 9 runtim
     const waitingTask = await getLatestTask(ch, projectId, questionTaskId);
     expect(waitingTask?.assignment_attempt_id).toBe(questionAssignment.assignmentAttemptId);
     expect(waitingTask?.status).toBe('waiting_user');
+
+    const dependentTaskId = randomUUID();
+    const dependencyNow = new Date().toISOString();
+    await createTask(ch, {
+      task_id: dependentTaskId,
+      project_id: projectId,
+      plan_id: planId,
+      parent_task_id: NIL_UUID,
+      title: 'Phase 9 dependency-gated task',
+      description: 'must wait for the user-answer task',
+      acceptance_criteria: ['dependency is complete'],
+      status: 'queued',
+      priority: 5,
+      issuer_agent_id: pmId,
+      worker_agent_id: NIL_UUID,
+      verifier_agent_id: NIL_UUID,
+      group: 'coding',
+      depends_on: [questionTaskId],
+      target_files: ['src/phase9-dependent.ts'],
+      attempt: 0,
+      max_attempts: 3,
+      delegation_depth: 0,
+      token_budget: 1000,
+      tokens_spent: '0',
+      commit_hash: '',
+      result_summary: '',
+      reject_reason: '',
+      task_brief_id: NIL_UUID,
+      assignment_attempt_id: NIL_UUID,
+      created_at: dependencyNow,
+      updated_at: dependencyNow,
+    });
+    await expect(composition.assignmentService.assign(dependentTaskId as never)).rejects.toThrow();
+
     const question = await getMessage(ch, projectId, questionMessageId!);
     expect(question).toBeDefined();
     const answer = await composition.communication.send(
@@ -480,5 +514,111 @@ describe.skipIf(probe === undefined || probeRedis === undefined)('Phase 9 runtim
     });
     expect(resumed.status).toBe('done');
     expect((await getLatestTask(ch, projectId, questionTaskId))?.attempt).toBe(1);
+
+    const dependentAssignment = await composition.assignmentService.assign(dependentTaskId as never);
+    expect(dependentAssignment.taskId).toBe(dependentTaskId);
+    const dependentTransition = {
+      protocolVersion: 1 as const,
+      projectId,
+      taskId: dependentTaskId,
+      taskBriefId: dependentAssignment.taskBriefId,
+      assignmentAttemptId: dependentAssignment.assignmentAttemptId,
+      requestedAt: new Date().toISOString(),
+    };
+    await composition.taskTransitionService.apply(systemPrincipal('phase9-dependent-cleanup', dependentTransition.requestedAt), {
+      ...dependentTransition,
+      transitionRequestId: randomUUID(), causationId: randomUUID(), action: 'start_work',
+    });
+    await composition.taskTransitionService.apply(systemPrincipal('phase9-dependent-cleanup', new Date().toISOString()), {
+      ...dependentTransition,
+      transitionRequestId: randomUUID(), causationId: randomUUID(), action: 'fail', reason: 'fixture cleanup',
+    });
+
+    const rejectTaskId = randomUUID();
+    const rejectNow = new Date().toISOString();
+    await createTask(ch, {
+      task_id: rejectTaskId,
+      project_id: projectId,
+      plan_id: planId,
+      parent_task_id: NIL_UUID,
+      title: 'Phase 9 verifier correction task',
+      description: 'reject then fresh same-owner correction',
+      acceptance_criteria: ['fresh attempt is approved'],
+      status: 'queued',
+      priority: 5,
+      issuer_agent_id: pmId,
+      worker_agent_id: NIL_UUID,
+      verifier_agent_id: NIL_UUID,
+      group: 'coding',
+      depends_on: [],
+      target_files: [],
+      attempt: 0,
+      max_attempts: 3,
+      delegation_depth: 0,
+      token_budget: 1000,
+      tokens_spent: '0',
+      commit_hash: '',
+      result_summary: '',
+      reject_reason: '',
+      task_brief_id: NIL_UUID,
+      assignment_attempt_id: NIL_UUID,
+      created_at: rejectNow,
+      updated_at: rejectNow,
+    });
+    const rejectInitial = await composition.assignmentService.assign(rejectTaskId as never);
+    const rejectBrief = await composition.taskBriefService.seal({
+      taskId: rejectTaskId as never,
+      workerPrompt: { name: `phase9.${projectId}.worker`, version: 1 },
+      verifierPrompt: { name: `phase9.${projectId}.verifier`, version: 1 },
+      allowedTools: [],
+      cutoffAt: new Date().toISOString(),
+    });
+    const transitionAt = new Date().toISOString();
+    const transitionBase = {
+      protocolVersion: 1 as const,
+      projectId,
+      taskId: rejectTaskId,
+      taskBriefId: rejectInitial.taskBriefId,
+      assignmentAttemptId: rejectInitial.assignmentAttemptId,
+      requestedAt: transitionAt,
+    };
+    await composition.taskTransitionService.apply(systemPrincipal('phase9-reject', transitionAt), {
+      ...transitionBase,
+      transitionRequestId: randomUUID(), causationId: randomUUID(), action: 'start_work',
+    });
+    await composition.taskTransitionService.apply(systemPrincipal('phase9-reject', transitionAt), {
+      ...transitionBase,
+      transitionRequestId: randomUUID(), causationId: randomUUID(), action: 'report_result',
+      resultSummary: 'needs correction', evidenceRefs: [],
+    });
+    await composition.taskTransitionService.apply(systemPrincipal('phase9-reject', transitionAt), {
+      ...transitionBase,
+      transitionRequestId: randomUUID(), causationId: randomUUID(), action: 'verifier_rejected',
+      verdictMessageId: randomUUID(), reason: 'missing requirement',
+    });
+    const corrected = await composition.assignmentService.retry(rejectTaskId as never, 'retry_after_rejection');
+    expect(corrected.previousAttemptId).toBe(rejectInitial.assignmentAttemptId);
+    expect(corrected.assignmentAttemptId).not.toBe(rejectInitial.assignmentAttemptId);
+    await composition.taskTransitionService.apply(systemPrincipal('phase9-approve', new Date().toISOString()), {
+      ...transitionBase,
+      taskBriefId: corrected.taskBriefId,
+      assignmentAttemptId: corrected.assignmentAttemptId,
+      transitionRequestId: randomUUID(), causationId: randomUUID(), action: 'start_work',
+    });
+    await composition.taskTransitionService.apply(systemPrincipal('phase9-approve', new Date().toISOString()), {
+      ...transitionBase,
+      taskBriefId: corrected.taskBriefId,
+      assignmentAttemptId: corrected.assignmentAttemptId,
+      transitionRequestId: randomUUID(), causationId: randomUUID(), action: 'report_result',
+      resultSummary: 'corrected result', evidenceRefs: [],
+    });
+    const approved = await composition.taskTransitionService.apply(systemPrincipal('phase9-approve', new Date().toISOString()), {
+      ...transitionBase,
+      taskBriefId: corrected.taskBriefId,
+      assignmentAttemptId: corrected.assignmentAttemptId,
+      transitionRequestId: randomUUID(), causationId: randomUUID(), action: 'verifier_approved',
+      verdictMessageId: randomUUID(),
+    });
+    expect(approved.status).toBe('testing');
   }, 60_000);
 });
