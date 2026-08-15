@@ -84,6 +84,11 @@ button:hover { background: #8ff2d5; }
 .canvas-node small, .file-list small { color: #91a4c2; }
 .file-list { list-style: none; margin: 0; padding: 0; }
 .file-list li { display: flex; justify-content: space-between; gap: 1rem; padding: .75rem 0; border-bottom: 1px solid #344054; }
+.api-console { display: grid; gap: .8rem; padding: 1.5rem; background: #101828; border-radius: 12px; }
+.api-console code { color: #98a2b3; }
+.preview-frame { overflow: hidden; border: 1px solid #344054; border-radius: 12px; background: #0b1220; }
+.device-bar { padding: .65rem 1rem; color: #98a2b3; border-bottom: 1px solid #344054; }
+.preview-frame iframe { display: block; width: 100%; min-height: 360px; border: 0; background: white; }
 
 .status-card {
   display: grid;
