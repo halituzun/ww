@@ -18,6 +18,7 @@ export default function App() {
   const [projectId, setProjectId] = useState(() => new URLSearchParams(window.location.search).get('project') ?? '');
   const [tasks, setTasks] = useState<Task[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
+  const [projectStatus, setProjectStatus] = useState<string>('');
   const [usage, setUsage] = useState<Usage | null>(null);
   const [files, setFiles] = useState<FileIndex[]>([]);
   const [providerHealth, setProviderHealth] = useState<ProviderHealth[]>([]);
@@ -41,6 +42,8 @@ export default function App() {
     if (!projectId) return;
     let active = true;
     const load = async () => {
+      const projectResponse = await fetch(`${apiBase}/projects/${projectId}`);
+      if (active && projectResponse.ok) setProjectStatus((await projectResponse.json() as Project).status);
       const response = await fetch(`${apiBase}/projects/${projectId}/tasks`);
       if (active && response.ok) setTasks(await response.json() as Task[]);
       const usageResponse = await fetch(`${apiBase}/projects/${projectId}/usage`);
@@ -98,6 +101,10 @@ export default function App() {
   const enableNotifications = async () => {
     if ('Notification' in window && Notification.permission === 'default') await Notification.requestPermission();
   };
+  const updateProjectStatus = async (status: 'paused' | 'running' | 'archived') => {
+    const response = await fetch(`${apiBase}/projects/${projectId}/status`, { method: 'PATCH', headers: { 'content-type': 'application/json', authorization: `Bearer ${import.meta.env.VITE_SESSION_TOKEN ?? ''}` }, body: JSON.stringify({ status }) });
+    if (response.ok) setProjectStatus(status);
+  };
 
   return (
     <main className="shell">
@@ -129,6 +136,7 @@ export default function App() {
         {messageStatus ? <small>{messageStatus}</small> : null}
       </section>
       {projectId ? <section className="workspace-card">
+        <div className="project-controls"><span className={`pill pill--${projectStatus}`}>{projectStatus || 'yükleniyor'}</span><button type="button" onClick={() => void updateProjectStatus(projectStatus === 'paused' ? 'running' : 'paused')}>{projectStatus === 'paused' ? 'Devam et' : 'Duraklat'}</button><button type="button" onClick={() => void updateProjectStatus('archived')}>Arşivle</button></div>
         {usage ? <div className="metrics usage-metrics"><div><strong>${usage.costUsd.toFixed(4)}</strong><span>Maliyet</span></div><div><strong>{usage.calls}</strong><span>Çağrı</span></div><div><strong>{usage.promptTokens + usage.completionTokens}</strong><span>Token</span></div></div> : null}
         {providerHealth.length > 0 ? <div className="provider-health" aria-label="Sağlayıcı sağlığı">{providerHealth.map((provider) => <span key={provider.provider_id} className={`provider-badge provider-badge--${provider.health_status}`}><i aria-hidden="true" />{provider.provider_id}: {provider.health_status}</span>)}</div> : null}
         <nav className="tabs"><button className={tab === 'tasks' ? 'active' : ''} onClick={() => setTab('tasks')}>Görevler <span>{tasks.length}</span></button><button className={tab === 'canvas' ? 'active' : ''} onClick={() => setTab('canvas')}>Tuval</button><button className={tab === 'files' ? 'active' : ''} onClick={() => setTab('files')}>Dosyalar</button><button className={tab === 'timeline' ? 'active' : ''} onClick={() => setTab('timeline')}>Zaman çizelgesi <span>{events.length}</span></button><button className={tab === 'api' ? 'active' : ''} onClick={() => setTab('api')}>API</button><button className={tab === 'preview' ? 'active' : ''} onClick={() => setTab('preview')}>Önizleme</button></nav>
