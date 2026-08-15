@@ -218,5 +218,5 @@ export class MessageApplicationService implements MessageApplication {
   }
 }
 
-@Module({ providers: [{ provide: SERVER_DATABASE, useFactory: (): ServerDatabase => ({ ch: createCh() }) }, ProjectApplicationService, TaskApplicationService, MessageApplicationService], exports: [ProjectApplicationService, TaskApplicationService, MessageApplicationService] })
+@Module({ providers: [{ provide: SERVER_DATABASE, useFactory: (): ServerDatabase => ({ ch: createCh() }) }, ProjectApplicationService, TaskApplicationService, MessageApplicationService], exports: [SERVER_DATABASE, ProjectApplicationService, TaskApplicationService, MessageApplicationService] })
 export class OrchestrationModule {}

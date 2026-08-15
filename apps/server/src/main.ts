@@ -3,7 +3,6 @@ import { NestFactory } from '@nestjs/core';
 import { WsAdapter } from '@nestjs/platform-ws';
 import { createCh, createRedis, runMigrations } from '@ww/db';
 import { RecoveryService } from '@ww/memory';
-import { AppModule } from './app.module.js';
 import { panelOrigins } from './cors.js';
 import { serverPort } from './port.js';
 
@@ -25,6 +24,8 @@ async function bootstrap(): Promise<void> {
     await recoveryCh.close();
   }
 
+  process.env['WW_ENABLE_WS'] ??= '1';
+  const { AppModule } = await import('./app.module.js');
   const app = await NestFactory.create(AppModule);
   app.useWebSocketAdapter(new WsAdapter(app));
   app.enableCors({ origin: panelOrigins() });
