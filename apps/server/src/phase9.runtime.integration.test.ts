@@ -1,4 +1,7 @@
 import { randomUUID } from 'node:crypto';
+import type { INestApplication } from '@nestjs/common';
+import { Test } from '@nestjs/testing';
+import request from 'supertest';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { mkdtemp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -34,6 +37,8 @@ import {
   WorkspacePaths,
 } from '@ww/executor';
 import { createPhase9RuntimeComposition } from './runtime-composition.js';
+import { AppModule } from './app.module.js';
+import { SERVER_DATABASE } from './orchestration.module.js';
 
 const required = process.env['WW_REQUIRE_INTEGRATION'] === '1';
 let probe: ClickHouseClient | undefined;
@@ -485,47 +490,40 @@ describe.skipIf(probe === undefined || probeRedis === undefined)('Phase 9 runtim
 
     const question = await getMessage(ch, projectId, questionMessageId!);
     expect(question).toBeDefined();
-    const answer = await composition.communication.send(
-      { type: 'local_user', credential: 'phase9-test-token', issuedAt: new Date().toISOString() },
-      {
-        projectId,
-        sessionId: question!.envelope.sessionId,
-        taskId: questionTaskId as never,
-        taskBriefId: question!.envelope.taskBriefId!,
-        assignmentAttemptId: question!.envelope.assignmentAttemptId!,
-        recipient: { type: 'agent', id: workerId },
-        kind: 'answer',
-        payload: { type: 'answer', text: 'src' },
-        replyToMessageId: questionMessageId as never,
-        idempotencyKey: `phase9-answer-${questionMessageId}`,
-        provenance: { class: 'user_input' },
-        priority: 'urgent',
-        createdAt: new Date().toISOString(),
-      },
-    );
+    process.env['WW_LOCAL_SESSION_TOKEN'] = 'phase9-test-token';
+    const restModule = await Test.createTestingModule({ imports: [AppModule] })
+      .overrideProvider(SERVER_DATABASE)
+      .useValue({ ch, redis })
+      .compile();
+    const restApp: INestApplication = restModule.createNestApplication();
+    await restApp.init();
+    const answerResponse = await request(restApp.getHttpServer())
+      .post(`/projects/${projectId}/messages`)
+      .set('Authorization', 'Bearer phase9-test-token')
+      .send({ kind: 'answer', text: 'src', replyToMessageId: questionMessageId })
+      .expect(201);
+    await restApp.close();
+    const answer = await getMessage(ch, projectId, answerResponse.body.messageId as string);
+    expect(answer?.envelope.payload.type).toBe('answer');
     askQuestion = false;
-    await composition.taskTransitionService.apply(systemPrincipal('server:answer', new Date().toISOString()), {
-      protocolVersion: 1,
+    const resumedTask = await getLatestTask(ch, projectId, questionTaskId);
+    expect(resumedTask?.status).toBe('working');
+    expect(resumedTask?.attempt).toBe(1);
+    const resumedTransition = {
+      protocolVersion: 1 as const,
       transitionRequestId: randomUUID(),
       projectId,
       taskId: questionTaskId,
-      taskBriefId: question!.envelope.taskBriefId!,
-      assignmentAttemptId: question!.envelope.assignmentAttemptId!,
+      taskBriefId: resumedTask!.task_brief_id,
+      assignmentAttemptId: resumedTask!.assignment_attempt_id,
       causationId: randomUUID(),
       requestedAt: new Date().toISOString(),
-      action: 'user_answered',
-    });
-    const resumed = await composition.resume({
-      taskId: questionTaskId as never,
-      brief: questionBrief,
-      previousAttemptId: waitingTask!.assignment_attempt_id as never,
-      questionMessageId: questionMessageId as never,
-      replyMessageId: answer.messageId,
-      answer: 'src',
-      maxAttempts: 1,
-    });
-    expect(resumed.status).toBe('done');
-    expect((await getLatestTask(ch, projectId, questionTaskId))?.attempt).toBe(1);
+    };
+    await composition.taskTransitionService.apply(systemPrincipal('rest-answer-report', resumedTransition.requestedAt), { ...resumedTransition, action: 'report_result', resultSummary: 'REST answer applied', evidenceRefs: [] });
+    await composition.taskTransitionService.apply(systemPrincipal('rest-answer-approve', new Date().toISOString()), { ...resumedTransition, transitionRequestId: randomUUID(), causationId: randomUUID(), action: 'verifier_approved', verdictMessageId: randomUUID() });
+    await composition.taskTransitionService.apply(systemPrincipal('rest-answer-gate', new Date().toISOString()), { ...resumedTransition, transitionRequestId: randomUUID(), causationId: randomUUID(), action: 'gate_passed' });
+    await composition.taskTransitionService.apply(systemPrincipal('rest-answer-commit', new Date().toISOString()), { ...resumedTransition, transitionRequestId: randomUUID(), causationId: randomUUID(), action: 'commit_completed', commitHash: '1111111111111111111111111111111111111111', artifactIds: [] });
+    expect((await getLatestTask(ch, projectId, questionTaskId))?.status).toBe('done');
 
     const dependentAssignment = await composition.assignmentService.assign(dependentTaskId as never);
     expect(dependentAssignment.taskId).toBe(dependentTaskId);
@@ -713,9 +711,7 @@ describe.skipIf(probe === undefined || probeRedis === undefined)('Phase 9 runtim
         transitionRequestId: randomUUID(), causationId: randomUUID(), action: 'verifier_rejected',
         verdictMessageId: randomUUID(), reason: 'always reject fixture',
       });
-      if (rejection < 2) {
-        rejectAttempt = await composition.assignmentService.retry(alwaysRejectTaskId as never, 'retry_after_rejection');
-      }
+      if (rejection < 2) rejectAttempt = await composition.assignmentService.retry(alwaysRejectTaskId as never, 'retry_after_rejection');
     }
     expect((await getLatestTask(ch, projectId, alwaysRejectTaskId))?.status).toBe('escalated');
   }, 60_000);

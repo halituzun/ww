@@ -18,6 +18,7 @@
     "@ww/agents": "workspace:*",
     "@ww/db": "workspace:*",
     "@ww/executor": "workspace:*",
+    "@ww/memory": "workspace:*",
     "@ww/providers": "workspace:*",
     "@ww/scheduler": "workspace:*",
     "@ww/shared": "workspace:*",

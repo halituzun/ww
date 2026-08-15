@@ -78,6 +78,9 @@ importers:
       '@ww/executor':
         specifier: workspace:*
         version: link:../../packages/executor
+      '@ww/memory':
+        specifier: workspace:*
+        version: link:../../packages/memory
       '@ww/providers':
         specifier: workspace:*
         version: link:../../packages/providers

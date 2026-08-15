@@ -19,16 +19,24 @@ import {
   listLatestTasksByStatus,
   listLatestAgents,
   getMessage,
+  getTaskBrief,
   type ClickHouseClient,
   type ProjectRow,
   type TaskRow,
   type WwRedis,
 } from '@ww/db';
+import { TaskContextSnapshotBuilder } from '@ww/memory';
 import {
   CommunicationService,
   PrincipalResolver,
   type PrincipalAuthentication,
 } from '@ww/agents';
+import {
+  AssignmentService,
+  TaskBriefService,
+  TaskCausalLog,
+  TaskTransitionService,
+} from '@ww/scheduler';
 import { CommunicationWakeupPublisher, createRedis } from '@ww/db';
 
 function observeWakeupPublishError(error: Error, wakeup: { readonly recipient: unknown; readonly messageId: string }): void {
@@ -107,6 +115,7 @@ export class TaskApplicationService implements TaskApplication {
 export class MessageApplicationService implements MessageApplication {
   readonly #redis: Promise<WwRedis>;
   #communication: CommunicationService | undefined;
+  readonly #assignments = new Map<string, AssignmentService>();
 
   constructor(@Inject(SERVER_DATABASE) private readonly database: ServerDatabase) {
     // Redis is connected lazily so health-only and unit-test boots do not require
@@ -130,7 +139,7 @@ export class MessageApplicationService implements MessageApplication {
     const authentication: PrincipalAuthentication = {
       type: 'local_user', credential: token, issuedAt: now,
     };
-    const sessionId = randomUUID() as EntityId;
+    let sessionId = randomUUID() as EntityId;
     let taskId = input.taskId;
     let taskBriefId: EntityId | undefined;
     let assignmentAttemptId: EntityId | undefined;
@@ -139,6 +148,7 @@ export class MessageApplicationService implements MessageApplication {
       if (input.replyToMessageId === undefined) throw new MessageInputError('answer replyToMessageId gerektirir');
       const original = await getMessage(this.database.ch, input.projectId, input.replyToMessageId);
       if (original === null || original.protocolVersion !== 1) throw new MessageInputError('cevaplanacak mesaj bulunamadi');
+      sessionId = original.envelope.sessionId;
       recipient = original.envelope.authenticatedPrincipal.principalType === 'agent'
         ? { type: 'agent', id: original.envelope.authenticatedPrincipal.principalId }
         : recipient;
@@ -152,7 +162,7 @@ export class MessageApplicationService implements MessageApplication {
     const payload = input.kind === 'answer'
       ? { type: 'answer' as const, text: input.text }
       : { type: 'user_command' as const, text: input.text };
-    return this.#communication.send(authentication, {
+    const sent = await this.#communication.send(authentication, {
       projectId: input.projectId,
       sessionId,
       ...(taskId === undefined ? {} : { taskId }),
@@ -167,6 +177,38 @@ export class MessageApplicationService implements MessageApplication {
       priority: 'normal',
       createdAt: now,
     });
+    if (input.kind === 'answer' && taskId !== undefined && taskBriefId !== undefined && assignmentAttemptId !== undefined && input.replyToMessageId !== undefined) {
+      const task = await getLatestTask(this.database.ch, input.projectId, taskId);
+      if (task !== null && (task.status === 'waiting_user' || task.status === 'escalated')) {
+        const brief = await getTaskBrief(this.database.ch, taskBriefId);
+        if (brief === null) throw new MessageInputError('cevap task brief kaydi bulunamadi');
+        let assignment = this.#assignments.get(input.projectId);
+        if (assignment === undefined) {
+          const snapshotBuilder = new TaskContextSnapshotBuilder(this.database.ch);
+          const taskBriefService = new TaskBriefService(input.projectId, this.database.ch, snapshotBuilder, { redis });
+          const transitionService = new TaskTransitionService(this.database.ch, redis);
+          assignment = new AssignmentService(
+            input.projectId,
+            `rest-answer-${input.projectId}`,
+            this.database.ch,
+            redis,
+            taskBriefService,
+            transitionService,
+            new TaskCausalLog(this.database.ch, redis),
+          );
+          this.#assignments.set(input.projectId, assignment);
+        }
+        await assignment.resumeUserAnswer({
+          taskId,
+          taskBriefId,
+          previousAttemptId: assignmentAttemptId,
+          questionMessageId: input.replyToMessageId,
+          replyMessageId: sent.messageId,
+          answer: input.text,
+        });
+      }
+    }
+    return sent;
   }
 
   get(projectId: string, messageId: string): Promise<unknown> {
