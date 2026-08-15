@@ -13,6 +13,7 @@ import {
   getFileLockOwner,
   inspectFileLock,
   getLatestEffect,
+  getMessage,
   getLatestAgent,
   getLatestTask,
   getTaskBrief,
@@ -469,6 +470,70 @@ export class AssignmentService {
 
   async reassign(input: ReassignTaskInput): Promise<AssignmentAttemptV1> {
     return this.#withRepositoryBoundary('task reassignment', () => this.#reassign(input));
+  }
+
+  /** Validates an authoritative user answer and starts a fresh same-owner attempt. */
+  async resumeUserAnswer(input: Readonly<{
+    taskId: EntityId;
+    previousAttemptId: EntityId;
+    questionMessageId: EntityId;
+    replyMessageId: EntityId;
+    answer: string;
+  }>): Promise<AssignmentAttemptV1> {
+    return this.#withRepositoryBoundary('user answer resume', () => this.#resumeUserAnswer(input));
+  }
+
+  async #resumeUserAnswer(input: Readonly<{
+    taskId: EntityId;
+    previousAttemptId: EntityId;
+    questionMessageId: EntityId;
+    replyMessageId: EntityId;
+    answer: string;
+  }>): Promise<AssignmentAttemptV1> {
+    const taskId = EntityIdSchema.parse(input.taskId);
+    const previousAttemptId = EntityIdSchema.parse(input.previousAttemptId);
+    const questionMessageId = EntityIdSchema.parse(input.questionMessageId);
+    const replyMessageId = EntityIdSchema.parse(input.replyMessageId);
+    if (input.answer.trim().length === 0) throw new TaskDeferredError('DEPENDENCY_BLOCKED', 'bos user answer resume edilemez');
+    const task = await this.#task(taskId);
+    if (task.status !== 'escalated') throw new TaskDeferredError('DEPENDENCY_BLOCKED', 'user answer resume escalated task gerektirir');
+    if (task.assignment_attempt_id === NIL_UUID) throw new SchedulerError('INTEGRITY_CONFLICT', 'escalated task current attempt tasimiyor');
+    if (task.assignment_attempt_id !== previousAttemptId) throw new SchedulerError('STALE_FENCE', 'user answer previous attempt current degil');
+    const question = await getMessage(this.#ch, task.project_id, questionMessageId);
+    const reply = await getMessage(this.#ch, task.project_id, replyMessageId);
+    if (question === null || reply === null || question.protocolVersion !== 1 || reply.protocolVersion !== 1) {
+      throw new SchedulerError('INTEGRITY_CONFLICT', 'question veya answer mesaji bulunamadi');
+    }
+    if (
+      question.envelope.kind !== 'question' ||
+      reply.envelope.kind !== 'answer' ||
+      reply.envelope.replyToMessageId !== questionMessageId ||
+      question.envelope.taskId !== taskId ||
+      reply.envelope.taskId !== taskId ||
+      reply.envelope.payload.type !== 'answer' ||
+      reply.envelope.payload.text !== input.answer
+    ) throw new SchedulerError('INTEGRITY_CONFLICT', 'question answer task baglami eslesmiyor');
+    const winner = await getLatestEffect(this.#ch, questionMessageId, 'question-answer-winner');
+    if (
+      winner === null || winner.state !== 'succeeded' ||
+      winner.result === null || typeof winner.result !== 'object' || Array.isArray(winner.result) ||
+      (winner.result as { readonly answerMessageId?: unknown })['answerMessageId'] !== replyMessageId
+    ) throw new SchedulerError('INTEGRITY_CONFLICT', 'question answer authoritative winner degil');
+    await this.#transitionService.apply(
+      systemPrincipal('scheduler:user-answer-resume', this.#clock.now()),
+      {
+        protocolVersion: 1,
+        transitionRequestId: deterministicSchedulerEntityId('user-answer-resume-transition-v1', { taskId, previousAttemptId, replyMessageId }),
+        projectId: task.project_id,
+        taskId,
+        taskBriefId: previousAttemptId === task.assignment_attempt_id ? (await this.#currentAttempt(task)).taskBriefId : NIL_UUID,
+        assignmentAttemptId: previousAttemptId,
+        causationId: deterministicSchedulerEntityId('user-answer-resume-causation-v1', { taskId, replyMessageId }),
+        requestedAt: this.#clock.now(),
+        action: 'escalation_resolved',
+      } as never,
+    );
+    return this.#sameOwnerCorrection(taskId, 'rebase', undefined);
   }
 
   async renewAttemptFileLocks(taskId: string): Promise<void> {

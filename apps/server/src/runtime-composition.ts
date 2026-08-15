@@ -273,6 +273,13 @@ export function createPhase9RuntimeComposition(
   const baseOperations: Phase1SchedulerPort = {
     ...input.schedulerOperations,
     assign: (taskId) => assignmentService.assign(taskId),
+    resumeUserAnswer: async (value) => assignmentService.resumeUserAnswer({
+      taskId: value.taskId,
+      previousAttemptId: value.previousAttemptId,
+      questionMessageId: value.questionMessageId,
+      replyMessageId: value.replyMessageId,
+      answer: value.answer,
+    }),
   };
   const serviceBacked = input.serviceBackedScheduler ?? {
     base: baseOperations,
