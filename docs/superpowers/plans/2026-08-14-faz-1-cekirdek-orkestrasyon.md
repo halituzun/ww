@@ -748,28 +748,28 @@ and shared barrel exports have a single owner to avoid merge conflicts.
 
 ## Implementation Tasks
 
-- [ ] **T1 (P1, human: ~1d / CC: ~45min)** - shared - Implement strict versioned
+- [x] **T1 (P1, human: ~1d / CC: ~45min)** - shared - Implement strict versioned
   contracts and package scaffolds.
   - Surfaced by: Architecture - runtime input currently has no trusted parser.
   - Files: `packages/shared`, new package manifests, `turbo.json`
   - Verify: shared build/test/lint and boundary-cast grep.
-- [ ] **T2 (P1, human: ~3d / CC: ~2h)** - db - Add forward migration, explicit
+- [x] **T2 (P1, human: ~3d / CC: ~2h)** - db - Add forward migration, explicit
   repositories, deterministic reconciliation, receipts/effects, and fenced leases.
   - Surfaced by: Architecture/Performance - Redis cannot be truth and ClickHouse has
     no cross-system transaction or uniqueness guarantee.
   - Files: `packages/db`
   - Verify: integration-required DB suite with zero skips.
-- [ ] **T3 (P1, human: ~2d / CC: ~90min)** - scheduler/executor - Implement the
+- [x] **T3 (P1, human: ~2d / CC: ~90min)** - scheduler/executor - Implement the
   single-writer FSM, causal ordering, guarded tools, gates, and Git.
   - Surfaced by: Code quality - status/effects need one explicit authority boundary.
   - Files: `packages/scheduler`, `packages/executor`
   - Verify: targeted unit/integration suites and temporary-repo tests.
-- [ ] **T4 (P1, human: ~2d / CC: ~90min)** - agents/memory/providers - Implement
+- [x] **T4 (P1, human: ~2d / CC: ~90min)** - agents/memory/providers - Implement
   authenticated communication, temporal snapshots, attribution, and bounded loops.
   - Surfaced by: Architecture - context ownership and provider-success reconciliation.
   - Files: `packages/agents`, `packages/memory`, `packages/providers`
   - Verify: policy matrix, prompt evals, fallback, replay, and injection tests.
-- [ ] **T5 (P1, human: ~2d / CC: ~60min)** - server/E2E - Compose REST and execute
+- [x] **T5 (P1, human: ~2d / CC: ~60min)** - server/E2E - Compose REST and execute
   the complete deterministic acceptance/restart scenarios.
   - Surfaced by: Test review - package tests alone cannot prove cross-service behavior.
   - Files: `apps/server`, `ww.gate.json`, docs
