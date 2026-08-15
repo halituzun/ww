@@ -607,7 +607,7 @@ free-form verdict parser, Phase 4 hierarchy, or direct repository/task writes.
 - [x] Worker writes a file and reports; independent verifier rejects once.
 - [x] Worker corrects; verifier approves; tsc/eslint/vitest gate passes.
 - [x] Commit is created and hash persists with artifacts/task/event records.
-- [ ] Stop after a durable completed effect but before receipt, restart services, and
+- [x] Stop after a durable completed effect but before receipt, restart services, and
   prove no duplicate effect/commit/invocation; separately stop after an uncertain
   provider call and prove typed escalation without replay. Lost Redis wakeup is
   recovered from the bounded DB poll loop. This is service
@@ -626,7 +626,7 @@ free-form verdict parser, Phase 4 hierarchy, or direct repository/task writes.
 - [x] From a non-destructive temporary `git worktree`, run `pnpm install
   --frozen-lockfile`, clear generated outputs, and repeat the full gate to prove the
   clean-checkout claim.
-- [ ] Update roadmap/docs only to reflect behavior actually delivered. Keep Faz 1
+- [x] Update roadmap/docs only to reflect behavior actually delivered. Keep Faz 1
   incomplete if any documented scenario is absent.
 - [ ] Independent review reports no P0-P2 findings.
 - [ ] Commit each green phase with scoped Conventional Commits, push the branch,

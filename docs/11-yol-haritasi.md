@@ -74,7 +74,8 @@
   Current attempt'i task fold'una bağlayan append-only `task_causal_entries`.
 - Provider meta/`api_usage`: invocation, brief, assignment, prompt-input snapshot
   ve fallback attempt provenance'ı.
-- Minimal REST: proje aç, görev ekle, durum sorgula (panel yok; curl/CLI ile).
+- Minimal REST: proje aç, görev ekle, durum sorgula ve authenticated user answer'ı
+  exact question bağlamıyla scheduler'a resume ettir (panel yok; curl/CLI ile).
 
 **Bitti tanımı / doğrulama (mock ile uçtan uca):**
 
@@ -86,6 +87,9 @@
 - İletişim testi: soru yalnız `replyToMessageId` ile doğru cevabı alır; yinelenen
   teslim yan etkiyi tekrarlamaz; Redis bildirimi olmadan inbox replay çalışır;
   sahte rol/verdict ve prompt injection fail-closed olur.
+- Restart testi: durable provider effect'i ikinci runtime composition yeniden
+  oluşturulduğunda tekrar çağrılmaz; belirsiz/kaçırılmış iletişim teslimleri
+  bounded DB poll ve typed escalation ile toparlanır.
 - Zaman testi: görev, atama sonrasında değişen plan/prompt/kuralı görmez; bilinçli
   rebase yeni `TaskBriefV1` sürümü üretir; retry kendi nedensel ret/gate/cevap
   kayıtlarını görür; her invocation kendi input causal high-water'ını mühürler;
