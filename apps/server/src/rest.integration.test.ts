@@ -89,5 +89,10 @@ describe.skipIf(probeCh === undefined || probeRedis === undefined)('REST gerçek
     await request(app.getHttpServer()).get(`/projects/${projectId}/messages/${message.body.messageId}`).expect(200).then((response) => {
       expect(response.body.envelope.messageId).toBe(message.body.messageId);
     });
+    await request(app.getHttpServer()).post(`/projects/${projectId}/narrator`).send({ question: 'Ne oldu?' }).expect(201).then((response) => {
+      expect(response.body.answer).toContain('message');
+      expect(response.body.evidenceRefs.length).toBeGreaterThan(0);
+      expect(response.body.traceHash).toMatch(/^[a-f0-9]{64}$/);
+    });
   });
 });
