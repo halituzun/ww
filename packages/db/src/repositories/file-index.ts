@@ -8,6 +8,9 @@ export type FileIndexLayer = (typeof FILE_INDEX_LAYERS)[number];
 export interface FileIndexRow { readonly project_id: EntityId; readonly file_path: string; readonly summary: string; readonly layer: FileIndexLayer; readonly exports: readonly string[]; readonly related_task_ids: readonly EntityId[]; readonly related_artifact_ids: readonly EntityId[]; readonly related_knowledge_ids: readonly EntityId[]; readonly last_commit_hash: string; readonly change_count: number; readonly updated_at: string; readonly version: UInt64String; }
 export type UpsertFileIndexInput = Omit<FileIndexRow, 'version' | 'change_count'> & { readonly change_count?: number };
 const COLUMNS = 'project_id,file_path,summary,layer,exports,related_task_ids,related_artifact_ids,related_knowledge_ids,last_commit_hash,change_count,updated_at,version';
+function contentOf(row: Pick<FileIndexRow, 'project_id' | 'file_path' | 'summary' | 'layer' | 'exports' | 'related_task_ids' | 'related_artifact_ids' | 'related_knowledge_ids' | 'last_commit_hash' | 'updated_at'>): unknown {
+  return { project_id: row.project_id, file_path: row.file_path, summary: row.summary, layer: row.layer, exports: row.exports, related_task_ids: row.related_task_ids, related_artifact_ids: row.related_artifact_ids, related_knowledge_ids: row.related_knowledge_ids, last_commit_hash: row.last_commit_hash, updated_at: row.updated_at };
+}
 
 function parse(value: unknown): FileIndexRow {
   const row = storedRecord(value, 'file_index');
@@ -43,8 +46,9 @@ export async function upsertFileIndex(ch: ClickHouseClient, input: UpsertFileInd
   const path = input.file_path.trim();
   if (path.length === 0 || path.startsWith('/') || path.split('/').includes('..')) throw new Error('file_index yolu workspace goreli olmalidir');
   const current = await getFileIndex(ch, projectId, path);
-  const row: FileIndexRow = Object.freeze({ ...input, project_id: projectId, file_path: path, change_count: input.change_count ?? (current?.change_count ?? 0) + 1, version: nextRepositoryVersion(current?.version) });
-  if (current !== null && canonicalSha256V1({ ...current, version: '0' }) === canonicalSha256V1({ ...row, version: '0' })) return current;
+  const content = { project_id: projectId, file_path: path, summary: input.summary, layer: input.layer, exports: input.exports ?? [], related_task_ids: input.related_task_ids ?? [], related_artifact_ids: input.related_artifact_ids ?? [], related_knowledge_ids: input.related_knowledge_ids ?? [], last_commit_hash: input.last_commit_hash ?? '', updated_at: input.updated_at } as const;
+  if (current !== null && canonicalSha256V1(contentOf(current)) === canonicalSha256V1(content)) return current;
+  const row: FileIndexRow = Object.freeze({ ...content, change_count: input.change_count ?? (current?.change_count ?? 0) + 1, version: nextRepositoryVersion(current?.version) });
   try { await ch.insert({ table: 'file_index', values: [row], format: 'JSONEachRow' }); } catch (error) {
     const observed = await readAfterUncertainWrite(`file-index:${projectId}:${path}`, error, () => readRows(ch, projectId, path));
     if (observed.length > 0) return observed[0]!;

@@ -18,6 +18,8 @@ describe.skipIf(!up)('file index repository', () => {
     const first = await upsertFileIndex(ch, input);
     const second = await upsertFileIndex(ch, input);
     expect(second.file_path).toBe(first.file_path);
+    expect(second.version).toBe(first.version);
+    expect(second.change_count).toBe(first.change_count);
     expect((await listFileIndex(ch, projectId))).toHaveLength(1);
     expect(await getFileIndex(ch, projectId, input.file_path)).toEqual(second);
   });
