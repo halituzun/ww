@@ -4,7 +4,7 @@ export interface CouncilMember { readonly agentId: EntityId; readonly modelRef: 
 export interface CouncilTurn { readonly memberId: EntityId; readonly kind: 'proposal' | 'objection' | 'synthesis'; readonly text: string; readonly evidenceRefs: readonly string[]; }
 export interface CouncilTransport { send(input: Readonly<{ sessionId: EntityId; recipient: EntityId; kind: 'proposal' | 'objection' | 'synthesis'; text: string; evidenceRefs: readonly string[] }>): Promise<{ messageId: EntityId }>; }
 export interface CouncilInput { readonly sessionId: EntityId; readonly members: readonly CouncilMember[]; readonly prompt: string; readonly maxCycles?: number; }
-export interface CouncilResult { readonly sessionId: EntityId; readonly proposals: readonly CouncilTurn[]; readonly objections: readonly CouncilTurn[]; readonly synthesis: CouncilTurn; readonly cycles: number; }
+export interface CouncilResult { readonly sessionId: EntityId; readonly proposals: readonly CouncilTurn[]; readonly objections: readonly CouncilTurn[]; readonly synthesis: CouncilTurn; readonly cycles: number; readonly sessionHash: string; }
 
 export class CouncilProtocolError extends Error {
   constructor(message: string) { super(message); this.name = 'CouncilProtocolError'; }
@@ -46,6 +46,6 @@ export class CouncilService {
     // Touch the stable hash in the result contract so callers can persist a
     // deterministic plan identity without trusting message arrival order.
     const sessionHash = canonicalSha256V1({ sessionId: input.sessionId, proposals, objections, synthesis });
-    return Object.freeze({ sessionId: input.sessionId, proposals: Object.freeze(proposals), objections: Object.freeze(objections), synthesis, cycles, ...({ sessionHash } as { readonly sessionHash: string }) });
+    return Object.freeze({ sessionId: input.sessionId, proposals: Object.freeze(proposals), objections: Object.freeze(objections), synthesis, cycles, sessionHash });
   }
 }
