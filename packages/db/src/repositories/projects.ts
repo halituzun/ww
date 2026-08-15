@@ -182,6 +182,29 @@ export async function listLatestProjectsByStatus(
     .filter((row) => row.status === state);
 }
 
+/** Bounded latest-project snapshot used by startup recovery and operations UIs. */
+export async function listLatestProjects(
+  ch: ClickHouseClient,
+  limitValue = 1_000,
+): Promise<ProjectRow[]> {
+  const limit = storedUInt64(limitValue, 'projects.limit');
+  const result = await ch.query({
+    query: `SELECT ${PROJECT_COLUMNS} FROM projects
+      WHERE (project_id, version) IN (
+        SELECT project_id, max(version) FROM projects GROUP BY project_id
+      ) ORDER BY project_id LIMIT {limit:UInt64}`,
+    query_params: { limit },
+    format: 'JSONEachRow',
+  });
+  const grouped = new Map<string, ProjectRow[]>();
+  for (const row of (await result.json<unknown>()).map(parseProjectRow)) {
+    const rows = grouped.get(row.project_id) ?? [];
+    rows.push(row);
+    grouped.set(row.project_id, rows);
+  }
+  return [...grouped.values()].map((rows) => reconcileVersionedWrite(`project:${rows[0]!.project_id}`, rows[0]!, rows));
+}
+
 export async function createProject(
   ch: ClickHouseClient,
   input: CreateProjectInput,

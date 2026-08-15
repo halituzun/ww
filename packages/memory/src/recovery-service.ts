@@ -4,6 +4,7 @@ import {
   appendTaskVersion,
   enqueueTask,
   getLatestTask,
+  listLatestProjects,
   listLatestAgents,
   type ClickHouseClient,
   type TaskRow,
@@ -113,5 +114,13 @@ export class RecoveryService {
       created_at: now,
     });
     return Object.freeze({ projectId, requeuedTaskIds, idledAgentIds, streamRepairedTaskIds });
+  }
+
+  async recoverAll(limit = 100): Promise<readonly RecoveryResult[]> {
+    if (!Number.isSafeInteger(limit) || limit < 1 || limit > 10_000) throw new Error('recovery project limiti gecersiz');
+    const projects = await listLatestProjects(this.#ch, limit);
+    const results: RecoveryResult[] = [];
+    for (const project of projects) results.push(await this.recoverProject(project.project_id));
+    return results;
   }
 }
