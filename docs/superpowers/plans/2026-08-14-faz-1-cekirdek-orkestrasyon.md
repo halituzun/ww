@@ -617,13 +617,13 @@ free-form verdict parser, Phase 4 hierarchy, or direct repository/task writes.
 
 ### Final verification
 
-- [ ] `docker compose up -d` and both services healthy.
+- [x] `docker compose up -d` and both services healthy.
 - [x] `pnpm build` — every workspace passes.
 - [x] `WW_REQUIRE_INTEGRATION=1 pnpm test` — zero skips.
 - [x] `pnpm lint` — every workspace passes.
-- [ ] `git diff --check`; secret scan; no forbidden deep imports/boundary casts/
+- [x] `git diff --check`; secret scan; no forbidden deep imports/boundary casts/
   direct publish/provider/status writes.
-- [ ] From a non-destructive temporary `git worktree`, run `pnpm install
+- [x] From a non-destructive temporary `git worktree`, run `pnpm install
   --frozen-lockfile`, clear generated outputs, and repeat the full gate to prove the
   clean-checkout claim.
 - [ ] Update roadmap/docs only to reflect behavior actually delivered. Keep Faz 1
