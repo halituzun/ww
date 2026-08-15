@@ -89,6 +89,8 @@ button:hover { background: #8ff2d5; }
 .preview-frame { overflow: hidden; border: 1px solid #344054; border-radius: 12px; background: #0b1220; }
 .device-bar { padding: .65rem 1rem; color: #98a2b3; border-bottom: 1px solid #344054; }
 .preview-frame iframe { display: block; width: 100%; min-height: 360px; border: 0; background: white; }
+.flow-canvas { height: 430px; border-radius: 12px; overflow: hidden; background: #0b1220; }
+.file-editor { margin-top: 1rem; border: 1px solid #344054; border-radius: 10px; overflow: hidden; }
 
 .status-card {
   display: grid;
