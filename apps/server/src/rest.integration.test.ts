@@ -4,7 +4,7 @@ import type { INestApplication } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import request from 'supertest';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { createAgent, createCh, createRedis, runMigrations, type ClickHouseClient, type WwRedis } from '@ww/db';
+import { createAgent, createCh, createRedis, runMigrations, upsertFileIndex, type ClickHouseClient, type WwRedis } from '@ww/db';
 import { AppModule } from './app.module.js';
 import { SERVER_DATABASE } from './orchestration.module.js';
 
@@ -63,6 +63,11 @@ describe.skipIf(probeCh === undefined || probeRedis === undefined)('REST gerçek
     expect(task.body.issuer_agent_id).toBe(agentId);
     expect(task.body.acceptance_criteria).toEqual(['must compile']);
     expect(task.body.target_files).toEqual(['src/a.ts']);
+    await upsertFileIndex(ch, { project_id: projectId, file_path: 'src/a.ts', summary: 'REST tarafından indekslendi', layer: 'service', exports: ['run'], related_task_ids: [task.body.task_id], related_artifact_ids: [], related_knowledge_ids: [], last_commit_hash: 'abc123', updated_at: new Date().toISOString() });
+    await request(app.getHttpServer()).get(`/projects/${projectId}/files`).expect(200).then((response) => {
+      expect(response.body).toHaveLength(1);
+      expect(response.body[0]).toMatchObject({ file_path: 'src/a.ts', summary: 'REST tarafından indekslendi', related_task_ids: [task.body.task_id] });
+    });
     expect(task.body.token_budget).toBe(10);
     expect(await request(app.getHttpServer()).get(`/projects/${projectId}/tasks/${task.body.task_id}`).expect(200).then((response) => response.body.acceptance_criteria)).toEqual(['must compile']);
     const dependent = await request(app.getHttpServer()).post(`/projects/${projectId}/tasks`).set('Authorization', `Bearer ${token}`).send({ title: 'Dependent task', acceptanceCriteria: ['must review'], dependencies: [task.body.task_id], files: ['src/b.ts'], budget: 5 }).expect(201);

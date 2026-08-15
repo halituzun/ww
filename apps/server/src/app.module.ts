@@ -5,6 +5,7 @@ import { ProjectsController } from './projects.controller.js';
 import { TasksController } from './tasks.controller.js';
 import { EventsGateway } from './events.gateway.js';
 import { OperationsController } from './operations.controller.js';
+import { FilesController } from './files.controller.js';
 
 // Vitest creates Nest application contexts without a websocket adapter; keep
 // unit/e2e HTTP boots independent while production still registers the gateway.
@@ -34,7 +35,7 @@ import {
 
 @Module({
   imports: [OrchestrationModule],
-  controllers: [HealthController, ProjectsController, TasksController, MessagesController, OperationsController],
+  controllers: [HealthController, ProjectsController, TasksController, MessagesController, OperationsController, FilesController],
   providers: [
     EVENTS_GATEWAY_PROVIDER,
     { provide: HEALTH_DEPENDENCIES, useValue: DEFAULT_HEALTH_DEPENDENCIES },
