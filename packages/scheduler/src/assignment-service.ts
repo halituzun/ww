@@ -475,6 +475,7 @@ export class AssignmentService {
   /** Validates an authoritative user answer and starts a fresh same-owner attempt. */
   async resumeUserAnswer(input: Readonly<{
     taskId: EntityId;
+    taskBriefId: EntityId;
     previousAttemptId: EntityId;
     questionMessageId: EntityId;
     replyMessageId: EntityId;
@@ -485,18 +486,22 @@ export class AssignmentService {
 
   async #resumeUserAnswer(input: Readonly<{
     taskId: EntityId;
+    taskBriefId: EntityId;
     previousAttemptId: EntityId;
     questionMessageId: EntityId;
     replyMessageId: EntityId;
     answer: string;
   }>): Promise<AssignmentAttemptV1> {
     const taskId = EntityIdSchema.parse(input.taskId);
+    const taskBriefId = EntityIdSchema.parse(input.taskBriefId);
     const previousAttemptId = EntityIdSchema.parse(input.previousAttemptId);
     const questionMessageId = EntityIdSchema.parse(input.questionMessageId);
     const replyMessageId = EntityIdSchema.parse(input.replyMessageId);
     if (input.answer.trim().length === 0) throw new TaskDeferredError('DEPENDENCY_BLOCKED', 'bos user answer resume edilemez');
-    const task = await this.#task(taskId);
-    if (task.status !== 'escalated') throw new TaskDeferredError('DEPENDENCY_BLOCKED', 'user answer resume escalated task gerektirir');
+    let task = await this.#task(taskId);
+    if (task.status !== 'waiting_user' && task.status !== 'escalated') {
+      throw new TaskDeferredError('DEPENDENCY_BLOCKED', 'user answer resume waiting_user veya escalated task gerektirir');
+    }
     if (task.assignment_attempt_id === NIL_UUID) throw new SchedulerError('INTEGRITY_CONFLICT', 'escalated task current attempt tasimiyor');
     if (task.assignment_attempt_id !== previousAttemptId) throw new SchedulerError('STALE_FENCE', 'user answer previous attempt current degil');
     const question = await getMessage(this.#ch, task.project_id, questionMessageId);
@@ -506,6 +511,7 @@ export class AssignmentService {
     }
     if (
       question.envelope.kind !== 'question' ||
+      question.envelope.taskBriefId !== taskBriefId ||
       reply.envelope.kind !== 'answer' ||
       reply.envelope.replyToMessageId !== questionMessageId ||
       question.envelope.taskId !== taskId ||
@@ -519,21 +525,24 @@ export class AssignmentService {
       winner.result === null || typeof winner.result !== 'object' || Array.isArray(winner.result) ||
       (winner.result as { readonly answerMessageId?: unknown })['answerMessageId'] !== replyMessageId
     ) throw new SchedulerError('INTEGRITY_CONFLICT', 'question answer authoritative winner degil');
-    await this.#transitionService.apply(
-      systemPrincipal('scheduler:user-answer-resume', this.#clock.now()),
-      {
-        protocolVersion: 1,
-        transitionRequestId: deterministicSchedulerEntityId('user-answer-resume-transition-v1', { taskId, previousAttemptId, replyMessageId }),
-        projectId: task.project_id,
-        taskId,
-        taskBriefId: previousAttemptId === task.assignment_attempt_id ? (await this.#currentAttempt(task)).taskBriefId : NIL_UUID,
-        assignmentAttemptId: previousAttemptId,
-        causationId: deterministicSchedulerEntityId('user-answer-resume-causation-v1', { taskId, replyMessageId }),
-        requestedAt: this.#clock.now(),
-        action: 'escalation_resolved',
-      } as never,
-    );
-    return this.#sameOwnerCorrection(taskId, 'rebase', undefined);
+    if (task.status === 'waiting_user') {
+      await this.#transitionService.apply(
+        systemPrincipal('scheduler:user-answer-received', this.#clock.now()),
+        {
+          protocolVersion: 1,
+          transitionRequestId: deterministicSchedulerEntityId('user-answer-received-transition-v1', { taskId, previousAttemptId, replyMessageId }),
+          projectId: task.project_id,
+          taskId,
+          taskBriefId: (await this.#currentAttempt(task)).taskBriefId,
+          assignmentAttemptId: previousAttemptId,
+          causationId: deterministicSchedulerEntityId('user-answer-received-causation-v1', { taskId, replyMessageId }),
+          requestedAt: this.#clock.now(),
+          action: 'user_answered',
+        } as never,
+      );
+      task = await this.#task(taskId);
+    }
+    return this.#sameOwnerCorrection(taskId, 'retry_after_rejection', undefined);
   }
 
   async renewAttemptFileLocks(taskId: string): Promise<void> {
@@ -1109,7 +1118,7 @@ export class AssignmentService {
           agentGuards,
         ));
       }
-      await this.#transitionService.activateAttemptWithGuard(
+      const activated = await this.#transitionService.activateAttemptWithGuard(
         systemPrincipal('scheduler', activationAt),
         {
           projectId: task.project_id,
@@ -1125,12 +1134,14 @@ export class AssignmentService {
         taskGuard,
       );
       taskActivated = true;
-      await this.#resumeEscalatedAttempt(
-        task.task_id,
-        attempt,
-        causationId,
-        taskGuard,
-      );
+      if (activated.status === 'escalated') {
+        await this.#resumeEscalatedAttempt(
+          task.task_id,
+          attempt,
+          causationId,
+          taskGuard,
+        );
+      }
       const refreshedTaskGuard = await this.#refreshTaskGuardAfterTransition(
         taskGuard,
         task.task_id,
@@ -1138,6 +1149,7 @@ export class AssignmentService {
       );
       if (refreshedTaskGuard !== taskGuard) taskGuards.push(refreshedTaskGuard);
       taskGuard = refreshedTaskGuard;
+      await this.#ensureLocks(task, attempt.assignmentAttemptId, taskGuard);
       if (task.status !== 'escalated') {
         await appendTaskFileLockEvents(
           this.#ch,
@@ -1835,13 +1847,16 @@ export class AssignmentService {
     causationId: EntityId,
     guard: FencedLeaseGuard,
   ): Promise<void> {
-    const current = await guard.after(this.#task(taskId));
+    let current = await guard.after(this.#task(taskId));
     if (current.status !== 'escalated') return;
     if (current.assignment_attempt_id !== attempt.assignmentAttemptId) {
-      throw new SchedulerError(
-        'STALE_FENCE',
-        `escalation resolution current attempt degisti: ${taskId}`,
-      );
+      current = await guard.after(this.#task(taskId));
+      if (current.assignment_attempt_id !== attempt.assignmentAttemptId) {
+        throw new SchedulerError(
+          'STALE_FENCE',
+          `escalation resolution current attempt degisti: ${taskId}`,
+        );
+      }
     }
     const transitionRequestId = deterministicSchedulerEntityId(
       'escalation-resolved-transition-v1',

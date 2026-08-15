@@ -1,4 +1,5 @@
 import { CommunicationWakeupPublisher, getFencedLease, taskLockKey } from '@ww/db';
+import { randomUUID } from 'node:crypto';
 import type { ClickHouseClient, WwRedis } from '@ww/db';
 import type { LlmProvider, ModelRouter, RouterOptions } from '@ww/providers';
 import {
@@ -26,6 +27,7 @@ import {
   createRedisTaskLeaseScope,
   ClickHouseSchedulerArtifactPersistence,
   createServiceBackedSchedulerPort,
+  systemPrincipal,
   type ServiceBackedSchedulerInput,
   type Phase1RuntimePort,
   type Phase1SchedulerPort,
@@ -273,8 +275,27 @@ export function createPhase9RuntimeComposition(
   const baseOperations: Phase1SchedulerPort = {
     ...input.schedulerOperations,
     assign: (taskId) => assignmentService.assign(taskId),
+    awaitUserAnswer: async (value) => {
+      if (value.questionMessageId === undefined) {
+        throw new Error('user answer bekleme akisi questionMessageId gerektirir');
+      }
+      const requestedAt = new Date().toISOString();
+      await taskTransitionService.apply(systemPrincipal('server:question', requestedAt), {
+        protocolVersion: 1,
+        transitionRequestId: randomUUID(),
+        projectId: input.projectId,
+        taskId: value.taskId,
+        taskBriefId: value.attempt.taskBriefId,
+        assignmentAttemptId: value.attempt.assignmentAttemptId,
+        causationId: randomUUID(),
+        requestedAt,
+        action: 'request_user_input',
+        questionMessageId: value.questionMessageId,
+      });
+    },
     resumeUserAnswer: async (value) => assignmentService.resumeUserAnswer({
       taskId: value.taskId,
+      taskBriefId: value.taskBriefId,
       previousAttemptId: value.previousAttemptId,
       questionMessageId: value.questionMessageId,
       replyMessageId: value.replyMessageId,

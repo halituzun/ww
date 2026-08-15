@@ -55,6 +55,14 @@ export const parseProjectInput = (value: unknown) => ProjectInput.parse(value);
 export const parseTaskInput = (value: unknown) => TaskInput.parse(value);
 export type MessageApplicationInput = Readonly<{ projectId: EntityId; principal: AuthenticatedPrincipalV1; taskId?: EntityId; kind: 'user_command' | 'answer'; text: string; replyToMessageId?: EntityId }>;
 
+/** User-supplied message references are invalid input, not server failures. */
+export class MessageInputError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'MessageInputError';
+  }
+}
+
 export interface ServerDatabase { readonly ch: ClickHouseClient; readonly redis?: WwRedis; }
 export interface ProjectApplication { create(input: ReturnType<typeof parseProjectInput>): Promise<ProjectRow>; get(projectId: string): Promise<ProjectRow | null>; }
 export interface TaskApplication { create(projectId: string, input: ReturnType<typeof parseTaskInput>): Promise<TaskRow>; get(projectId: string, taskId: string): Promise<TaskRow | null>; list(projectId: string): Promise<TaskRow[]>; }
@@ -117,7 +125,7 @@ export class MessageApplicationService implements MessageApplication {
     }
     const agents = await listLatestAgents(this.database.ch, input.projectId);
     const pm = agents.find((agent) => agent.role === 'pm' && agent.status !== 'stopped');
-    if (pm === undefined) throw new Error('proje icin aktif PM agent bulunamadi');
+    if (pm === undefined) throw new MessageInputError('proje icin aktif PM agent bulunamadi');
     const now = input.principal.authenticatedAt;
     const authentication: PrincipalAuthentication = {
       type: 'local_user', credential: token, issuedAt: now,
@@ -128,9 +136,9 @@ export class MessageApplicationService implements MessageApplication {
     let assignmentAttemptId: EntityId | undefined;
     let recipient: { type: 'agent'; id: EntityId } = { type: 'agent', id: pm.agent_id };
     if (input.kind === 'answer') {
-      if (input.replyToMessageId === undefined) throw new Error('answer replyToMessageId gerektirir');
+      if (input.replyToMessageId === undefined) throw new MessageInputError('answer replyToMessageId gerektirir');
       const original = await getMessage(this.database.ch, input.projectId, input.replyToMessageId);
-      if (original === null || original.protocolVersion !== 1) throw new Error('cevaplanacak mesaj bulunamadi');
+      if (original === null || original.protocolVersion !== 1) throw new MessageInputError('cevaplanacak mesaj bulunamadi');
       recipient = original.envelope.authenticatedPrincipal.principalType === 'agent'
         ? { type: 'agent', id: original.envelope.authenticatedPrincipal.principalId }
         : recipient;
@@ -138,7 +146,7 @@ export class MessageApplicationService implements MessageApplication {
       taskBriefId = original.envelope.taskBriefId;
       assignmentAttemptId = original.envelope.assignmentAttemptId;
       if (taskId === undefined || taskBriefId === undefined || assignmentAttemptId === undefined) {
-        throw new Error('cevaplanacak mesaj task baglamini tasimiyor');
+        throw new MessageInputError('cevaplanacak mesaj task baglamini tasimiyor');
       }
     }
     const payload = input.kind === 'answer'

@@ -14,6 +14,7 @@ import {
   createRedis,
   enqueueTask,
   getLatestTask,
+  getMessage,
   runMigrations,
   type ClickHouseClient,
   type WwRedis,
@@ -217,6 +218,9 @@ describe.skipIf(probe === undefined || probeRedis === undefined)('Phase 9 runtim
         try { return await rawStore.append(event); } catch (error) { console.error('phase9-audit-store-error', error); throw error; }
       },
     };
+    const questionTaskId = randomUUID();
+    let askQuestion = false;
+    let questionMessageId: string | undefined;
     const composition = createPhase9RuntimeComposition({
       projectId: projectId as never,
       consumerId: 'phase9-runtime-test',
@@ -306,10 +310,37 @@ describe.skipIf(probe === undefined || probeRedis === undefined)('Phase 9 runtim
         },
       },
       orchestrationRuntime: {
-        work: async () => ({ kind: 'report' as const, summary: 'Phase 9 worker report' }),
+        work: async ({ brief: currentBrief, attempt: currentAttempt }) => {
+          if (askQuestion) {
+            const question = await composition.communication.send(
+              { type: 'agent_capability', credential: `worker-capability-${projectId}`, issuedAt: now },
+              {
+                projectId,
+                sessionId: randomUUID() as never,
+                taskId: currentBrief.taskId,
+                taskBriefId: currentAttempt.taskBriefId,
+                assignmentAttemptId: currentAttempt.assignmentAttemptId,
+                recipient: { type: 'agent', id: pmId },
+                kind: 'question',
+                payload: { type: 'question', text: 'Which source directory should I use?' },
+                idempotencyKey: `phase9-question-${currentAttempt.assignmentAttemptId}`,
+                provenance: { class: 'agent_message' },
+                priority: 'normal',
+                createdAt: new Date().toISOString(),
+              },
+            );
+            questionMessageId = question.messageId;
+            return { kind: 'question' as const, question: question.payload.type === 'question' ? question.payload.text : 'Which source directory should I use?', questionMessageId: question.messageId };
+          }
+          if (currentBrief.taskId === questionTaskId) {
+            await writeFile(path.join(workspaceRoot, 'src/phase9.ts'), 'export const phase9 = true;\n// answered by user\n');
+          }
+          return { kind: 'report' as const, summary: 'Phase 9 worker report' };
+        },
         verify: async () => ({ verdict: { decision: 'approve' as const, evidenceRefs: ['phase9-verifier'] }, diff: 'diff --git a/src/phase9.ts b/src/phase9.ts' }),
       },
       localSessionToken: 'phase9-test-token',
+      agentCapabilities: new Map([[`worker-capability-${projectId}`, { projectId, agentId: workerId }]]),
       executor: {
         sandbox: new DockerSandboxAdapter({ image: process.env['WW_EXECUTOR_IMAGE'] ?? 'ww-executor-runtime:local' }),
         gateAudit: new DurableGateCommitAudit(store),
@@ -359,5 +390,95 @@ describe.skipIf(probe === undefined || probeRedis === undefined)('Phase 9 runtim
     expect(result.result.content).toBe('runtime-ok');
     expect(provider.calls).toHaveLength(1);
     expect(composition.inboxPollingModule).toBeDefined();
-  });
+
+    // The same production composition must also carry a real worker question
+    // through durable communication and resume with a fresh attempt.
+    await createTask(ch, {
+      task_id: questionTaskId,
+      project_id: projectId,
+      plan_id: planId,
+      parent_task_id: NIL_UUID,
+      title: 'Phase 9 question task',
+      description: 'question/resume composition fixture',
+      acceptance_criteria: ['answer is applied to a fresh attempt'],
+      status: 'queued',
+      priority: 5,
+      issuer_agent_id: pmId,
+      worker_agent_id: NIL_UUID,
+      verifier_agent_id: NIL_UUID,
+      group: 'coding',
+      depends_on: [],
+      target_files: ['src/phase9.ts'],
+      attempt: 0,
+      max_attempts: 3,
+      delegation_depth: 0,
+      token_budget: 1000,
+      tokens_spent: '0',
+      commit_hash: '',
+      result_summary: '',
+      reject_reason: '',
+      task_brief_id: NIL_UUID,
+      assignment_attempt_id: NIL_UUID,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    });
+    const questionAssignment = await composition.assignmentService.assign(questionTaskId as never);
+    const questionBrief = await composition.taskBriefService.seal({
+      taskId: questionTaskId as never,
+      workerPrompt: { name: `phase9.${projectId}.worker`, version: 1 },
+      verifierPrompt: { name: `phase9.${projectId}.verifier`, version: 1 },
+      allowedTools: [],
+      cutoffAt: new Date().toISOString(),
+    });
+    askQuestion = true;
+    const waiting = await composition.orchestrate({ taskId: questionTaskId as never, brief: questionBrief, maxAttempts: 1 });
+    expect(waiting.status).toBe('waiting_user');
+    expect(questionMessageId).toBeDefined();
+    const waitingTask = await getLatestTask(ch, projectId, questionTaskId);
+    expect(waitingTask?.assignment_attempt_id).toBe(questionAssignment.assignmentAttemptId);
+    expect(waitingTask?.status).toBe('waiting_user');
+    const question = await getMessage(ch, projectId, questionMessageId!);
+    expect(question).toBeDefined();
+    const answer = await composition.communication.send(
+      { type: 'local_user', credential: 'phase9-test-token', issuedAt: new Date().toISOString() },
+      {
+        projectId,
+        sessionId: question!.envelope.sessionId,
+        taskId: questionTaskId as never,
+        taskBriefId: question!.envelope.taskBriefId!,
+        assignmentAttemptId: question!.envelope.assignmentAttemptId!,
+        recipient: { type: 'agent', id: workerId },
+        kind: 'answer',
+        payload: { type: 'answer', text: 'src' },
+        replyToMessageId: questionMessageId as never,
+        idempotencyKey: `phase9-answer-${questionMessageId}`,
+        provenance: { class: 'user_input' },
+        priority: 'urgent',
+        createdAt: new Date().toISOString(),
+      },
+    );
+    askQuestion = false;
+    await composition.taskTransitionService.apply(systemPrincipal('server:answer', new Date().toISOString()), {
+      protocolVersion: 1,
+      transitionRequestId: randomUUID(),
+      projectId,
+      taskId: questionTaskId,
+      taskBriefId: question!.envelope.taskBriefId!,
+      assignmentAttemptId: question!.envelope.assignmentAttemptId!,
+      causationId: randomUUID(),
+      requestedAt: new Date().toISOString(),
+      action: 'user_answered',
+    });
+    const resumed = await composition.resume({
+      taskId: questionTaskId as never,
+      brief: questionBrief,
+      previousAttemptId: waitingTask!.assignment_attempt_id as never,
+      questionMessageId: questionMessageId as never,
+      replyMessageId: answer.messageId,
+      answer: 'src',
+      maxAttempts: 1,
+    });
+    expect(resumed.status).toBe('done');
+    expect((await getLatestTask(ch, projectId, questionTaskId))?.attempt).toBe(1);
+  }, 60_000);
 });

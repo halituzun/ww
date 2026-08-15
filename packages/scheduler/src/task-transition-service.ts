@@ -69,8 +69,15 @@ Record<TaskTransitionActionV1, TaskStatus>>>>>> = Object.freeze({
   queued: Object.freeze({ assign: 'assigned', cancel: 'cancelled' }),
   assigned: Object.freeze({ start_work: 'working' }),
   working: Object.freeze({
+    // Rebase/resume activation may already have moved the fresh attempt to
+    // working before the orchestrator re-enters its lifecycle.
+    start_work: 'working',
     report_result: 'verifying',
     fail: 'failed',
+    // A worker may pause an active attempt while waiting for an explicit
+    // user decision. The question itself is durable evidence; the answer
+    // later moves waiting_user back to escalated before a fresh assignment.
+    request_user_input: 'waiting_user',
   }),
   verifying: Object.freeze({ verifier_approved: 'testing' }),
   testing: Object.freeze({ gate_passed: 'approved' }),
@@ -364,6 +371,10 @@ function mutateTask(
       attempt: current.attempt + 1,
       reject_reason: request.reason,
     };
+  } else if (request.action === 'user_answered') {
+    // A user answer closes the paused attempt; the subsequent correction
+    // assignment is attempt N+1 and must be reflected in the task cursor.
+    next = { ...next, attempt: current.attempt + 1 };
   } else if (request.action === 'commit_completed') {
     next = { ...next, commit_hash: request.commitHash };
   }

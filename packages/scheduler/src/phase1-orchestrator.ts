@@ -29,10 +29,12 @@ function boundedAttempts(value: number | undefined): number {
   return attempts;
 }
 
-async function runAssignedLifecycle(input: Phase1OrchestratorInput, initialAttempt: AssignmentAttemptV1, maxAttempts: number, initialCount: number): Promise<Phase1OrchestratorResult> {
+async function runAssignedLifecycle(input: Phase1OrchestratorInput, initialAttempt: AssignmentAttemptV1, maxAttempts: number, initialCount: number, alreadyWorking = false): Promise<Phase1OrchestratorResult> {
   let attempt = initialAttempt;
   for (let attempts = initialCount; attempts <= maxAttempts; attempts += 1) {
-    await input.scheduler.transition({ taskId: input.taskId, attempt, action: 'start_work' });
+    if (!(alreadyWorking && attempts === initialCount)) {
+      await input.scheduler.transition({ taskId: input.taskId, attempt, action: 'start_work' });
+    }
     const work = await input.runtime.work({ brief: input.brief, attempt });
     if (work.kind === 'question') {
       if (work.question === undefined || work.question.trim() === '') throw new Phase1OrchestratorError('worker sorusu boş olamaz');
@@ -95,7 +97,7 @@ export async function resumePhase1Orchestrator(input: Phase1ResumeInput): Promis
   if (replyMessageId === questionMessageId) throw new Phase1OrchestratorError('cevap mesajı soru mesajıyla aynı olamaz');
   const attempt = await input.scheduler.resumeUserAnswer({ projectId: input.brief.projectId, taskId: input.taskId, taskBriefId: input.brief.taskBriefId, previousAttemptId, questionMessageId, replyMessageId, answer: input.answer });
   try {
-    return await runAssignedLifecycle(input, attempt, maxAttempts, 1);
+    return await runAssignedLifecycle(input, attempt, maxAttempts, 1, true);
   } catch (error) {
     const status = await input.scheduler.handleExecutionError({ taskId: input.taskId, attempt, phase: 'working', error });
     return { status, attempts: 1 };

@@ -2,7 +2,7 @@ import { BadRequestException, Body, Controller, Get, Inject, Param, Post, Req } 
 import { z } from 'zod';
 import { EntityIdSchema } from '@ww/shared';
 import { parseLocalSession, type LocalSessionRequest } from './auth/local-session.js';
-import { MESSAGE_APPLICATION, type MessageApplication } from './orchestration.module.js';
+import { MESSAGE_APPLICATION, MessageInputError, type MessageApplication } from './orchestration.module.js';
 
 const MessageInput = z.strictObject({ kind: z.enum(['user_command', 'answer']), text: z.string().trim().min(1), taskId: EntityIdSchema.optional(), replyToMessageId: EntityIdSchema.optional() }).superRefine((value, context) => {
   if (value.kind === 'answer' && value.replyToMessageId === undefined) {
@@ -24,6 +24,9 @@ export class MessagesController {
       throw new BadRequestException(parsed.error.flatten());
     }
     const input = parsed.data;
-    return this.messages.send({ projectId, principal, kind: input.kind, text: input.text, ...(input.taskId === undefined ? {} : { taskId: input.taskId }), ...(input.replyToMessageId === undefined ? {} : { replyToMessageId: input.replyToMessageId }) });
+    return this.messages.send({ projectId, principal, kind: input.kind, text: input.text, ...(input.taskId === undefined ? {} : { taskId: input.taskId }), ...(input.replyToMessageId === undefined ? {} : { replyToMessageId: input.replyToMessageId }) }).catch((error: unknown) => {
+      if (error instanceof MessageInputError) throw new BadRequestException(error.message);
+      throw error;
+    });
   }
 }
