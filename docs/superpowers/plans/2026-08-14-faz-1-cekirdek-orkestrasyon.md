@@ -628,8 +628,10 @@ free-form verdict parser, Phase 4 hierarchy, or direct repository/task writes.
   clean-checkout claim.
 - [x] Update roadmap/docs only to reflect behavior actually delivered. Keep Faz 1
   incomplete if any documented scenario is absent.
-- [ ] Independent review reports no P0-P2 findings.
-- [ ] Commit each green phase with scoped Conventional Commits, push the branch,
+- [x] Independent review reports no P0-P2 findings. Post-fix adversarial review
+  rechecked cursor isolation, durable effect fencing, executor sandbox boundaries,
+  REST answer session binding, and exact replay; no P0-P2 remained.
+- [x] Commit each green phase with scoped Conventional Commits, push the branch,
   update PR #3 and issues #1/#2 with exact test evidence, then save `/context-save`.
 
 ### Anti-patterns
