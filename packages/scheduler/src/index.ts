@@ -8,3 +8,6 @@ export * from './scheduler-worker.js';
 export * from './phase1-orchestrator.js';
 export * from './orchestration-port.js';
 export * from './service-backed-orchestration.js';
+export * from './delegation-service.js';
+export * from './agent-clone-service.js';
+export * from './safety-brakes.js';

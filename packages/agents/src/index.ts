@@ -6,6 +6,7 @@ export * from './provider-effect-adapter.js';
 export * from './model-router-composition.js';
 export * from './communication-policy.js';
 export * from './communication-service.js';
+export * from './council-service.js';
 export * from './effect-runner.js';
 export * from './inbox-worker.js';
 export * from './escalation-delivery.js';

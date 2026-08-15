@@ -153,7 +153,10 @@ function expectedAgentRoute(role: AgentRole, kind: MessageKind, recipient: strin
   return (role === 'worker' && kind === 'question' && recipient === 'pm') ||
     (role === 'worker' && kind === 'report' && ['verifier', 'system'].includes(recipient)) ||
     (role === 'verifier' && kind === 'verdict' && ['worker', 'system'].includes(recipient)) ||
-    (role === 'pm' && kind === 'order' && ['worker', 'broadcast'].includes(recipient));
+    (role === 'pm' && kind === 'order' && ['worker', 'broadcast'].includes(recipient)) ||
+    (role === 'group_lead' && kind === 'escalation' && recipient === 'pm') ||
+    (role === 'professor' && ['synthesis', 'objection'].includes(kind) && recipient === 'pm') ||
+    (role === 'interviewer' && kind === 'question' && recipient === 'pm');
 }
 
 describe('Faz 1 communication route matrix', () => {

@@ -65,6 +65,10 @@ function pmOwnsWorker(pmId: string, worker: AgentRow, task: TaskRow | undefined)
     );
 }
 
+function sameGroup(sender: AgentRow | undefined, recipient: AgentRow | undefined): boolean {
+  return sender !== undefined && recipient !== undefined && sender.group === recipient.group;
+}
+
 /** Exact Faz 1 route matrix. Unlisted roles, kinds, and Phase 4 routes fail closed. */
 export function evaluateCommunicationPolicy(
   context: CommunicationPolicyContext,
@@ -159,6 +163,50 @@ export function evaluateCommunicationPolicy(
       ]);
     }
     return denied('verifier verdict yalniz atanmis worker veya scheduler alicisina gidebilir', context);
+  }
+
+  if (principal.role === 'council_member' && (input.kind === 'proposal' || input.kind === 'objection')) {
+    if (recipientIsAgentRole(input.recipient, recipientAgent, 'council_member') && recipientAgent?.agent_id !== principal.principalId) {
+      return result('COMM-002', true, 'konsey uyesi proposal/objection oturumdaki diger uyelere izinli', [
+        `recipient:${recipientAgent!.agent_id}`,
+      ]);
+    }
+    return denied('konsey mesaji yalniz baska konsey uyesine gidebilir', context);
+  }
+
+  if (principal.role === 'pm' && input.kind === 'synthesis') {
+    if (recipientIsAgentRole(input.recipient, recipientAgent, 'council_member')) {
+      return result('COMM-002', true, 'PM sentezi konsey uyesine izinli', [`recipient:${recipientAgent!.agent_id}`]);
+    }
+    return denied('PM synthesis yalniz konsey oturumuna gidebilir', context);
+  }
+
+  if (principal.role === 'group_lead' && input.kind === 'order') {
+    if (recipientIsAgentRole(input.recipient, recipientAgent, 'worker') && sameGroup(senderAgent, recipientAgent) && (task === undefined || task.worker_agent_id === recipientAgent!.agent_id)) {
+      return result('COMM-002', true, 'group lead kendi grubundaki worker a order gonderebilir', [`recipient:${recipientAgent!.agent_id}`]);
+    }
+    return denied('group lead order yalniz kendi grubundaki worker a gidebilir', context);
+  }
+
+  if (principal.role === 'group_lead' && input.kind === 'escalation') {
+    if (recipientIsAgentRole(input.recipient, recipientAgent, 'professor') || recipientIsAgentRole(input.recipient, recipientAgent, 'pm')) {
+      return result('COMM-006', true, 'group lead unresolved escalation zincirine izinli', [`recipient:${input.recipient.id}`]);
+    }
+    return denied('group lead escalation professor veya PM alicisina gidebilir', context);
+  }
+
+  if (principal.role === 'professor' && (input.kind === 'synthesis' || input.kind === 'objection')) {
+    if (recipientIsAgentRole(input.recipient, recipientAgent, 'pm')) {
+      return result('COMM-006', true, 'professor analizi PM alicisina izinli', [`recipient:${recipientAgent!.agent_id}`]);
+    }
+    return denied('professor mesaji yalniz PM alicisina gidebilir', context);
+  }
+
+  if (principal.role === 'interviewer' && input.kind === 'question') {
+    if (recipientIsAgentRole(input.recipient, recipientAgent, 'pm')) {
+      return result('COMM-002', true, 'interviewer gereksinim sorusu PM alicisina izinli', [`recipient:${recipientAgent!.agent_id}`]);
+    }
+    return denied('interviewer sorusu PM alicisina gidebilir', context);
   }
 
   if (principal.role === 'pm' && input.kind === 'order') {
