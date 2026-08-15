@@ -16,6 +16,7 @@ import {
   type Phase1RuntimeContextPort,
   type Phase1ToolPortFactory,
   type Phase1RuntimeCommunicationPort,
+  type AgentCapabilityBinding,
 } from '@ww/agents';
 import {
   AssignmentService,
@@ -185,6 +186,8 @@ export interface Phase9RuntimeCompositionInput extends Omit<Phase8RuntimeComposi
   readonly toolFactory?: Phase1ToolPortFactory;
   readonly runtimeCommunication?: Phase1RuntimeCommunicationPort;
   readonly localSessionToken: string;
+  /** Explicit agent credentials for server-owned worker/verifier communication. */
+  readonly agentCapabilities?: ReadonlyMap<string, AgentCapabilityBinding>;
   readonly executor: Phase9ExecutorCompositionInput;
 }
 
@@ -218,6 +221,7 @@ export function createPhase9RuntimeComposition(
 
   const principalResolver = new PrincipalResolver(input.ch, {
     localSessionToken: input.localSessionToken,
+    ...(input.agentCapabilities === undefined ? {} : { agentCapabilities: input.agentCapabilities }),
   });
   const wakeups = new CommunicationWakeupPublisher(input.redis, {
     onPublishError: observeWakeupPublishError,
