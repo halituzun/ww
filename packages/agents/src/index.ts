@@ -8,6 +8,7 @@ export * from './communication-policy.js';
 export * from './communication-service.js';
 export * from './council-service.js';
 export * from './standards-auditor.js';
+export * from './interview-service.js';
 export * from './effect-runner.js';
 export * from './inbox-worker.js';
 export * from './escalation-delivery.js';
