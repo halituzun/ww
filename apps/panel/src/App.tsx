@@ -19,6 +19,8 @@ export default function App() {
   const [events, setEvents] = useState<EventItem[]>([]);
   const [message, setMessage] = useState('');
   const [messageStatus, setMessageStatus] = useState('');
+  const [apiPath, setApiPath] = useState('/health');
+  const [apiResponse, setApiResponse] = useState('');
   const [tab, setTab] = useState<'tasks' | 'timeline' | 'canvas' | 'files' | 'api' | 'preview'>('tasks');
 
   useEffect(() => {
@@ -58,6 +60,11 @@ export default function App() {
     setMessageStatus(response.ok ? 'Mesaj gönderildi' : 'Mesaj gönderilemedi');
     if (response.ok) setMessage('');
   };
+  const runApiRequest = async () => {
+    setApiResponse('Çalışıyor…');
+    try { const response = await fetch(`${apiBase}${apiPath}`); setApiResponse(`${response.status} ${await response.text()}`); }
+    catch { setApiResponse('İstek başarısız'); }
+  };
 
   return (
     <main className="shell">
@@ -91,7 +98,7 @@ export default function App() {
       {projectId ? <section className="workspace-card">
         {usage ? <div className="metrics usage-metrics"><div><strong>${usage.costUsd.toFixed(4)}</strong><span>Maliyet</span></div><div><strong>{usage.calls}</strong><span>Çağrı</span></div><div><strong>{usage.promptTokens + usage.completionTokens}</strong><span>Token</span></div></div> : null}
         <nav className="tabs"><button className={tab === 'tasks' ? 'active' : ''} onClick={() => setTab('tasks')}>Görevler <span>{tasks.length}</span></button><button className={tab === 'canvas' ? 'active' : ''} onClick={() => setTab('canvas')}>Tuval</button><button className={tab === 'files' ? 'active' : ''} onClick={() => setTab('files')}>Dosyalar</button><button className={tab === 'timeline' ? 'active' : ''} onClick={() => setTab('timeline')}>Zaman çizelgesi <span>{events.length}</span></button><button className={tab === 'api' ? 'active' : ''} onClick={() => setTab('api')}>API</button><button className={tab === 'preview' ? 'active' : ''} onClick={() => setTab('preview')}>Önizleme</button></nav>
-        {tab === 'tasks' ? <><div className="metrics">{Object.entries(statusCounts).map(([key, count]) => <div key={key}><strong>{count}</strong><span>{key}</span></div>)}</div><ul className="task-list">{tasks.map((task) => <li key={task.task_id}><div><strong>{task.title}</strong><small>{task.task_id}</small></div><span className={`pill pill--${task.status}`}>{task.status}</span></li>)}</ul></> : tab === 'timeline' ? <ol className="timeline">{events.slice().reverse().map((item) => <li key={`${item.seq}-${item.event}`}><time>{new Date(item.ts).toLocaleTimeString()}</time><strong>{item.event}</strong><code>#{item.seq}</code></li>)}</ol> : tab === 'canvas' ? <TaskCanvas tasks={tasks} /> : tab === 'files' ? <div><ul className="file-list">{[...new Set(tasks.flatMap((task) => task.target_files ?? []))].sort().map((file) => <li key={file}><code>{file}</code><small>fihrist / salt-okunur</small></li>)}</ul><FileEditor filePath={[...new Set(tasks.flatMap((task) => task.target_files ?? []))].sort()[0]} summary="Hedef dosya özeti; içerik değişikliği sohbet/executor üzerinden yapılır." /></div> : tab === 'api' ? <div className="api-console"><h3>API test konsolu</h3><p>Çağrı, token ve maliyet özeti.</p><code>GET /projects/{projectId}/usage</code></div> : <div className="preview-frame"><div className="device-bar">Web önizleme · sandbox çıktısı</div><iframe title="Proje önizleme" src={import.meta.env.VITE_PREVIEW_URL ?? 'about:blank'} sandbox="allow-scripts" /></div>}
+        {tab === 'tasks' ? <><div className="metrics">{Object.entries(statusCounts).map(([key, count]) => <div key={key}><strong>{count}</strong><span>{key}</span></div>)}</div><ul className="task-list">{tasks.map((task) => <li key={task.task_id}><div><strong>{task.title}</strong><small>{task.task_id}</small></div><span className={`pill pill--${task.status}`}>{task.status}</span></li>)}</ul></> : tab === 'timeline' ? <ol className="timeline">{events.slice().reverse().map((item) => <li key={`${item.seq}-${item.event}`}><time>{new Date(item.ts).toLocaleTimeString()}</time><strong>{item.event}</strong><code>#{item.seq}</code></li>)}</ol> : tab === 'canvas' ? <TaskCanvas tasks={tasks} /> : tab === 'files' ? <div><ul className="file-list">{[...new Set(tasks.flatMap((task) => task.target_files ?? []))].sort().map((file) => <li key={file}><code>{file}</code><small>fihrist / salt-okunur</small></li>)}</ul><FileEditor filePath={[...new Set(tasks.flatMap((task) => task.target_files ?? []))].sort()[0]} summary="Hedef dosya özeti; içerik değişikliği sohbet/executor üzerinden yapılır." /></div> : tab === 'api' ? <div className="api-console"><h3>API test konsolu</h3><div className="command-row"><input aria-label="API yolu" value={apiPath} onChange={(event) => setApiPath(event.target.value)} /><button type="button" onClick={() => void runApiRequest()}>Çalıştır</button></div><code>GET {apiPath}</code><pre>{apiResponse}</pre></div> : <div className="preview-frame"><div className="device-bar">Web önizleme · sandbox çıktısı</div><iframe title="Proje önizleme" src={import.meta.env.VITE_PREVIEW_URL ?? 'about:blank'} sandbox="allow-scripts" /></div>}
       </section> : <section className="workspace-card project-picker"><h2>Projeler</h2><p className="hint">Bir proje seçin veya UUID ile doğrudan açın.</p><ul className="task-list">{projects.map((project) => <li key={project.project_id} onClick={() => setProjectId(project.project_id)}><div><strong>{project.name}</strong><small>{project.type} · {project.project_id}</small></div><span className={`pill pill--${project.status}`}>{project.status}</span></li>)}</ul></section>}
     </main>
   );
