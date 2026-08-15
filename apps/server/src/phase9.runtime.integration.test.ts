@@ -568,7 +568,7 @@ describe.skipIf(probe === undefined || probeRedis === undefined)('Phase 9 runtim
       updated_at: rejectNow,
     });
     const rejectInitial = await composition.assignmentService.assign(rejectTaskId as never);
-    const rejectBrief = await composition.taskBriefService.seal({
+    await composition.taskBriefService.seal({
       taskId: rejectTaskId as never,
       workerPrompt: { name: `phase9.${projectId}.worker`, version: 1 },
       verifierPrompt: { name: `phase9.${projectId}.verifier`, version: 1 },
