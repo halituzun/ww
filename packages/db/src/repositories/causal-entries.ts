@@ -122,16 +122,59 @@ export function causalEntryHash(entry: TaskCausalEntryRow): string {
   return canonicalSha256V1(entry);
 }
 
-async function reconcileEntry(
+function causalEntryContentHash(entry: TaskCausalEntryRow): string {
+  return canonicalSha256V1({
+    task_id: entry.task_id,
+    task_brief_id: entry.task_brief_id,
+    assignment_attempt_id: entry.assignment_attempt_id,
+    handoff_id: entry.handoff_id,
+    ordinal: entry.ordinal,
+    entry_id: entry.entry_id,
+    source_type: entry.source_type,
+    source_id: entry.source_id,
+    causation_id: entry.causation_id,
+    created_at: entry.created_at,
+  });
+}
+
+function highestFenceRows(
+  rows: readonly TaskCausalEntryRow[],
+): readonly TaskCausalEntryRow[] {
+  const maximum = rows.reduce(
+    (current, row) => BigInt(row.lease_fence) > current
+      ? BigInt(row.lease_fence)
+      : current,
+    0n,
+  );
+  return rows.filter((row) => BigInt(row.lease_fence) === maximum);
+}
+
+function reconcileEntry(
   expected: TaskCausalEntryRow,
   observed: readonly TaskCausalEntryRow[],
-): Promise<TaskCausalEntryRow> {
+): TaskCausalEntryRow {
   if (observed.length === 0) throw new RepositoryWriteError(`causalEntry:${expected.entry_id} yazimi yeniden okunamadi`);
   const expectedHash = causalEntryHash(expected);
   if (observed.some((row) => causalEntryHash(row) !== expectedHash)) {
     throw new RepositoryConflictError(`causalEntry:${expected.entry_id} deterministic kimlik/hash catismasi`);
   }
   return observed[0]!;
+}
+
+function foldEntryRows(
+  entryId: EntityId,
+  rows: readonly TaskCausalEntryRow[],
+): TaskCausalEntryRow {
+  const logicalHash = causalEntryContentHash(rows[0]!);
+  if (rows.some((row) => (
+    row.entry_id !== entryId || causalEntryContentHash(row) !== logicalHash
+  ))) {
+    throw new RepositoryConflictError(
+      `causalEntry:${entryId} deterministic kimlik/hash catismasi`,
+    );
+  }
+  const candidates = highestFenceRows(rows);
+  return reconcileEntry(candidates[0]!, candidates);
 }
 
 async function readAttemptRows(
@@ -190,21 +233,27 @@ async function foldAttemptRows(
     byEntryId.set(row.entry_id, duplicates);
   }
   const logical: TaskCausalEntryRow[] = [];
-  for (const duplicates of byEntryId.values()) {
-    logical.push(await reconcileEntry(duplicates[0]!, duplicates));
+  for (const [entryId, duplicates] of byEntryId) {
+    logical.push(foldEntryRows(concreteEntityId(entryId, 'entryId'), duplicates));
   }
-  logical.sort((left, right) => left.ordinal - right.ordinal || left.entry_id.localeCompare(right.entry_id));
-  const ordinals = new Map<number, string>();
+  const byOrdinal = new Map<number, TaskCausalEntryRow[]>();
   for (const row of logical) {
-    const entryAtOrdinal = ordinals.get(row.ordinal);
-    if (entryAtOrdinal !== undefined && entryAtOrdinal !== row.entry_id) {
+    const entries = byOrdinal.get(row.ordinal) ?? [];
+    entries.push(row);
+    byOrdinal.set(row.ordinal, entries);
+  }
+  const folded: TaskCausalEntryRow[] = [];
+  for (const [ordinal, rows] of byOrdinal) {
+    const entryIds = new Set(rows.map((row) => row.entry_id));
+    if (entryIds.size !== 1) {
       throw new RepositoryConflictError(
-        `causal ordinal catismasi: attempt=${row.assignment_attempt_id}, ordinal=${row.ordinal}`,
+        `causal ordinal catismasi: attempt=${assignmentAttemptId}, ordinal=${ordinal}`,
       );
     }
-    ordinals.set(row.ordinal, row.entry_id);
+    folded.push(rows[0]!);
   }
-  return logical;
+  folded.sort((left, right) => left.ordinal - right.ordinal || left.entry_id.localeCompare(right.entry_id));
+  return folded;
 }
 
 export async function getTaskCausalEntry(
@@ -242,31 +291,59 @@ function nextOrdinal(stream: readonly TaskCausalEntryRow[]): number {
 function assertOrdinalUniqueRows(
   expected: TaskCausalEntryRow,
   rows: readonly TaskCausalEntryRow[],
-): void {
+): TaskCausalEntryRow {
   if (rows.length === 0) {
     throw new RepositoryWriteError(
       `causal ordinal yeniden okunamadi: attempt=${expected.assignment_attempt_id}, ordinal=${expected.ordinal}`,
     );
   }
-  if (rows.some((row) => row.entry_id !== expected.entry_id)) {
+  const entryIds = new Set(rows.map((row) => row.entry_id));
+  if (entryIds.size !== 1) {
     throw new RepositoryConflictError(
       `causal ordinal catismasi: attempt=${expected.assignment_attempt_id}, ordinal=${expected.ordinal}`,
     );
   }
-  const expectedHash = causalEntryHash(expected);
-  if (rows.some((row) => causalEntryHash(row) !== expectedHash)) {
+  const winner = foldEntryRows(rows[0]!.entry_id, rows);
+  if (
+    winner.entry_id === expected.entry_id &&
+    BigInt(winner.lease_fence) <= BigInt(expected.lease_fence) &&
+    causalEntryHash(winner) !== causalEntryHash(expected)
+  ) {
     throw new RepositoryConflictError(
       `causalEntry:${expected.entry_id} ordinal projection catismasi`,
     );
   }
+  return winner;
 }
 
 async function validatePresentEntryNamespaces(
   expected: TaskCausalEntryRow,
   rows: CausalEntryNamespaceRows,
-): Promise<void> {
-  if (rows.byEntryId.length > 0) await reconcileEntry(expected, rows.byEntryId);
-  if (rows.byOrdinal.length > 0) assertOrdinalUniqueRows(expected, rows.byOrdinal);
+): Promise<TaskCausalEntryRow | null> {
+  let entryWinner: TaskCausalEntryRow | undefined;
+  if (rows.byEntryId.length > 0) {
+    entryWinner = foldEntryRows(expected.entry_id, rows.byEntryId);
+    if (
+      causalEntryContentHash(entryWinner) !== causalEntryContentHash(expected)
+    ) {
+      throw new RepositoryConflictError(
+        `causalEntry:${expected.entry_id} deterministic kimlik/hash catismasi`,
+      );
+    }
+  }
+  let ordinalWinner: TaskCausalEntryRow | undefined;
+  if (rows.byOrdinal.length > 0) {
+    ordinalWinner = assertOrdinalUniqueRows(expected, rows.byOrdinal);
+  }
+  if (
+    entryWinner !== undefined && ordinalWinner !== undefined &&
+    entryWinner.entry_id !== ordinalWinner.entry_id
+  ) {
+    throw new RepositoryConflictError(
+      `causal ordinal catismasi: attempt=${expected.assignment_attempt_id}, ordinal=${expected.ordinal}`,
+    );
+  }
+  return entryWinner ?? ordinalWinner ?? null;
 }
 
 export async function appendTaskCausalEntry(
@@ -275,15 +352,40 @@ export async function appendTaskCausalEntry(
 ): Promise<TaskCausalEntryRow> {
   const normalized = normalizeInput(input);
   const entryId = deterministicCausalEntryId(normalized);
+  const physical = await readAttemptRows(
+    ch,
+    normalized.task_id,
+    normalized.assignment_attempt_id,
+  );
   const stream = await foldAttemptRows(
     normalized.task_id,
     normalized.assignment_attempt_id,
-    await readAttemptRows(ch, normalized.task_id, normalized.assignment_attempt_id),
+    physical,
   );
-  const priorEntry = stream.find((row) => row.entry_id === entryId);
+  const priorRows = physical.filter((row) => row.entry_id === entryId);
+  const priorEntry = priorRows.length === 0
+    ? undefined
+    : foldEntryRows(entryId, priorRows);
   if (priorEntry !== undefined) {
     const expected = { ...normalized, ordinal: priorEntry.ordinal, entry_id: entryId };
-    return reconcileEntry(expected, [priorEntry]);
+    if (causalEntryContentHash(expected) !== causalEntryContentHash(priorEntry)) {
+      throw new RepositoryConflictError(
+        `causalEntry:${entryId} deterministic kimlik/hash catismasi`,
+      );
+    }
+    const ordinalWinner = stream.find((row) => row.ordinal === priorEntry.ordinal);
+    if (
+      ordinalWinner !== undefined && ordinalWinner.entry_id !== entryId
+    ) {
+      throw new RepositoryConflictError(
+        `causal ordinal daha yeni fence tarafindan sahiplenildi: attempt=${normalized.assignment_attempt_id}, ordinal=${priorEntry.ordinal}`,
+      );
+    }
+    if (
+      ordinalWinner?.entry_id === entryId &&
+      BigInt(normalized.lease_fence) <= BigInt(priorEntry.lease_fence)
+    ) return priorEntry;
+    return insertCausalEntry(ch, Object.freeze(expected));
   }
 
   const expected = Object.freeze({
@@ -291,36 +393,53 @@ export async function appendTaskCausalEntry(
     ordinal: nextOrdinal(stream),
     entry_id: entryId,
   });
+  return insertCausalEntry(ch, expected);
+}
+
+async function insertCausalEntry(
+  ch: ClickHouseClient,
+  expected: TaskCausalEntryRow,
+): Promise<TaskCausalEntryRow> {
   try {
     await ch.insert({ table: 'task_causal_entries', values: [expected], format: 'JSONEachRow' });
   } catch (error) {
-    const entity = `causalEntry:${entryId}`;
+    const entity = `causalEntry:${expected.entry_id}`;
     const observed = await readAfterUncertainWrite(
       entity,
       error,
       () => readEntryNamespaces(ch, expected),
     );
-    await validatePresentEntryNamespaces(expected, observed);
+    const winner = await validatePresentEntryNamespaces(expected, observed);
     if (observed.byEntryId.length === 0 || observed.byOrdinal.length === 0) {
       throw uncertainWriteError(entity, error);
     }
-    return expected;
+    if (winner !== null && winner.entry_id !== expected.entry_id) {
+      throw new RepositoryConflictError(
+        `causal ordinal daha yeni fence tarafindan sahiplenildi: attempt=${expected.assignment_attempt_id}, ordinal=${expected.ordinal}`,
+      );
+    }
+    return winner ?? expected;
   }
   const observed = await readAfterAcknowledgedWrite(
-    `causalEntry:${entryId}`,
+    `causalEntry:${expected.entry_id}`,
     expected,
     () => readEntryNamespaces(ch, expected),
   );
-  await validatePresentEntryNamespaces(expected, observed);
+  const winner = await validatePresentEntryNamespaces(expected, observed);
   if (observed.byEntryId.length === 0 || observed.byOrdinal.length === 0) {
-    const entity = `causalEntry:${entryId}`;
+    const entity = `causalEntry:${expected.entry_id}`;
     throw acknowledgedWriteVerificationError(
       entity,
       expected,
       new EmptyAcknowledgedWriteVerificationError(entity),
     );
   }
-  return expected;
+  if (winner !== null && winner.entry_id !== expected.entry_id) {
+    throw new RepositoryConflictError(
+      `causal ordinal daha yeni fence tarafindan sahiplenildi: attempt=${expected.assignment_attempt_id}, ordinal=${expected.ordinal}`,
+    );
+  }
+  return winner ?? expected;
 }
 
 export async function getTaskCausalCursor(

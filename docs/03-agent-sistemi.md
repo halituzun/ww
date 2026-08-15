@@ -74,15 +74,21 @@ stateDiagram-v2
     testing --> working: test kapısı hata (attempt < max)
     testing --> escalated: test kapısı hata (attempt ≥ max)
     approved --> done: commit + artifacts + fihrist + özet yazıldı
-    escalated --> working: tırmandırma çözüm getirdi
+    escalated --> working: fresh attempt + kaynaklar + escalation_resolved
     escalated --> waiting_user: PM kullanıcıya sordu
-    waiting_user --> working: kullanıcı cevapladı
+    waiting_user --> escalated: kullanıcı cevapladı
     queued --> cancelled: plan revizyonu/kullanıcı iptali
     working --> failed: kurtarılamaz hata (PM kararı)
 ```
 
 Her geçiş: `tasks`'a yeni sürüm satırı + `events`'e `status_change` olayı +
 Redis pub/sub yayını (panel canlı görür).
+
+`escalated` durumuna girildiğinde eski attempt'in agent rezervasyonları ve dosya
+kilitleri bırakılır. `user_answered` yalnız cevabı kalıcılaştırıp görevi yeniden
+`escalated` yapar; eski attempt çalıştırılamaz. `working` durumuna dönüş için yeni
+bir immutable attempt etkinleştirilmeli, agent rezervasyonları ve dosya kilitleri
+yeniden alınmalı, ardından `escalation_resolved` uygulanmalıdır.
 
 ## Worker + Verifier Döngüsü
 

@@ -3,6 +3,8 @@ import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest
 import { createRedis, type WwRedis } from './redis.js';
 import {
   acquireFencedLease,
+  agentLockKey,
+  getFencedLease,
   leaseFenceKey,
   messageLockKey,
   receiptLockKey,
@@ -17,12 +19,14 @@ import { redisUp } from './testutil.js';
 const up = await redisUp();
 
 describe('fenced lease sinir dogrulamasi', () => {
-  it('task, message ve receipt anahtarlarini strict UUID ile kurar', () => {
+  it('task, agent, message ve receipt anahtarlarini strict UUID ile kurar', () => {
     const taskId = randomUUID();
+    const agentId = randomUUID();
     const messageId = randomUUID();
     const receiptId = randomUUID();
 
     expect(taskLockKey(taskId)).toBe(`ww:task:${taskId}:claim`);
+    expect(agentLockKey(agentId)).toBe(`ww:agent:${agentId}:claim`);
     expect(messageLockKey(messageId)).toBe(`ww:message:${messageId}:claim`);
     expect(receiptLockKey(receiptId)).toBe(`ww:receipt:${receiptId}:claim`);
     expect(leaseFenceKey(taskLockKey(taskId))).toBe(`ww:task:${taskId}:claim:fence`);
@@ -30,6 +34,7 @@ describe('fenced lease sinir dogrulamasi', () => {
 
   it('gecersiz UUID ve elle uretilmis lock key degerlerini fail-closed reddeder', async () => {
     expect(() => taskLockKey('task-1')).toThrow();
+    expect(() => agentLockKey('agent-1')).toThrow();
     expect(() => messageLockKey('')).toThrow();
     expect(() => receiptLockKey('00000000-0000-0000-0000-000000000000')).toThrow();
 
@@ -148,8 +153,10 @@ describe.skipIf(!up)('fenced lease canli Redis davranisi', () => {
     expect(await releaseFencedLease(redis, wrongOwner)).toBe(false);
     expect(await releaseFencedLease(redis, wrongFence)).toBe(false);
     expect(await renewFencedLease(redis, current, 500)).toBe(true);
+    expect(await getFencedLease(redis, key)).toEqual(current);
     expect(await redis.pTTL(key)).toBeGreaterThan(100);
     expect(await releaseFencedLease(redis, current)).toBe(true);
+    expect(await getFencedLease(redis, key)).toBeNull();
     expect(await releaseFencedLease(redis, current)).toBe(false);
   });
 

@@ -302,40 +302,50 @@ SchedulerWorker.runOnce(projectId: string, consumerId: string): Promise<RunOnceR
 
 ### Implement
 
-- [ ] Encode the exact FSM from `docs/03-agent-sistemi.md:62-85` as one pure
-  transition table. Stable `TASK-*` rules return `PolicyDecision` on allow/deny.
-- [ ] Transition under a fenced task lease: read latest task, validate principal,
+- [x] Encode the exact FSM from `docs/03-agent-sistemi.md:62-85` as one pure
+  transition table. `user_answered` returns `waiting_user` to non-executable
+  `escalated`; only a fresh attempt with reacquired agents/file locks may reach
+  `working` through `escalation_resolved`. Stable `TASK-*` rules return
+  `PolicyDecision` on allow/deny.
+- [x] Transition under a fenced task lease: read latest task, validate principal,
   brief, attempt and from-state, append next task version and durable outcome event,
   then release. Messages only submit requests.
-- [ ] Derive a deterministic transition ID and request hash from causation. A replay
+- [x] Derive a deterministic transition ID and request hash from causation. A replay
   with the same hash returns its stored result; an ID/hash collision fails closed.
-- [ ] Seal `TaskBriefV1` from task-bound plan/prompt/rule/standard sources and
+- [x] Seal `TaskBriefV1` from task-bound plan/prompt/rule/standard sources and
   `baseContextCutoffAt`; `@ww/memory` owns as-of source selection and returns a
   manifest through `TaskContextSnapshotPort`. Retry reuses it; explicit rebase
   creates a new version.
-- [ ] Assign one active attempt only, select an idle worker and independent verifier,
+- [x] Assign one active attempt only, select an idle worker and independent verifier,
   acquire all target-file locks in sorted order, persist attempt/current task state,
   then ACK queue. Roll back acquired locks on partial failure.
-- [ ] Implement `TaskCausalLog.append`: under current task fence, first find
+- [x] Implement `TaskCausalLog.append`: under current task fence, first find
   deterministic entry ID; otherwise reconcile uncertain prior insert, fold
   `max(ordinal)+1`, append synchronously, reread, and reject ordinal collision.
-- [ ] Handoff seals ancestor cursor, records evidence/checkpoints and released locks;
+- [x] Handoff seals ancestor cursor, records evidence/checkpoints and released locks;
   the new attempt begins ordinal zero and reacquires locks.
-- [ ] Scheduler `runOnce` consumes new entries then `XAUTOCLAIM`s expired pending
+- [x] Scheduler `runOnce` consumes new entries then `XAUTOCLAIM`s expired pending
   entries. Restart never invents another active attempt.
-- [ ] Every rejection/correction run creates a new immutable assignment attempt with
+- [x] Every rejection/correction run creates a new immutable assignment attempt with
   `previousAttemptId`; same-owner retry does not require a handoff but does seal the
   prior cursor and restart ordinal at zero.
 
 ### Verification
 
-- [ ] Pure tests cover every allowed edge and all illegal FSM edges.
-- [ ] Integration tests cover ACK timing, dependency blocking, deterministic agent
+- [x] Pure tests cover every allowed edge and all illegal FSM edges; integration
+  covers `waiting_user → user_answered → escalated → fresh attempt/resources → working`
+  with crash/replay and rejects reuse of the released old attempt.
+- [x] Integration tests cover ACK timing, dependency blocking, deterministic agent
   selection, file-lock rollback, one-active-attempt, restart/reclaim, stale fence,
   transition replay/hash collision, rebase, same-owner retry, handoff, ordinal
   restart/dedupe/collision and uncertain insert.
-- [ ] `pnpm --filter @ww/scheduler build && WW_REQUIRE_INTEGRATION=1
+- [x] `pnpm --filter @ww/scheduler build && WW_REQUIRE_INTEGRATION=1
   pnpm --filter @ww/scheduler test && pnpm --filter @ww/scheduler lint`.
+
+**Evidence:** DB 23 files / 194 tests / 0 skipped; scheduler 6 files / 55 tests /
+0 skipped (39 live); memory 2 files / 4 tests / 0 skipped; uncached root build
+9/9 tasks, required test 12/12 tasks / 468 tests / 0 skipped, lint 9/9 tasks;
+independent verifier, anti-pattern, and quality reviews: CLEAN.
 
 ### Anti-patterns
 

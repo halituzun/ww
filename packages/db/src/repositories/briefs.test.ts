@@ -139,6 +139,75 @@ describe.skipIf(!up)('immutable brief repositories', () => {
     expect(await appendTaskBrief(uncertain, brief)).toEqual(brief);
   });
 
+  it('assignment attempt stale in-flight yazisi fresh exact retrydan sonra gec inebilir', async () => {
+    const { attempt } = fixtures();
+    let releaseStale: (() => void) | undefined;
+    let stalePrepared: (() => void) | undefined;
+    const prepared = new Promise<void>((resolve) => { stalePrepared = resolve; });
+    const release = new Promise<void>((resolve) => { releaseStale = resolve; });
+    const delayed = new Proxy(ch, {
+      get(target, property) {
+        if (property === 'insert') return async (options: Parameters<ClickHouseClient['insert']>[0]) => {
+          if (options.table === 'assignment_attempts') {
+            stalePrepared?.();
+            await release;
+          }
+          return target.insert(options);
+        };
+        const value: unknown = Reflect.get(target, property, target);
+        return typeof value === 'function' ? value.bind(target) : value;
+      },
+    });
+    const staleWrite = appendAssignmentAttempt(delayed, attempt);
+    await prepared;
+    const fresh = {
+      ...attempt,
+      leaseOwner: 'scheduler-fresh',
+      leaseFence: 2,
+      leaseExpiresAt: '2026-08-14T10:11:00.000Z',
+    };
+    expect(await appendAssignmentAttempt(ch, fresh)).toEqual(fresh);
+    releaseStale?.();
+    await staleWrite.catch(() => undefined);
+
+    await expect(getAssignmentAttempt(ch, attempt.assignmentAttemptId))
+      .resolves.toEqual(fresh);
+    await ch.command({ query: 'OPTIMIZE TABLE assignment_attempts FINAL' });
+    await expect(getAssignmentAttempt(ch, attempt.assignmentAttemptId))
+      .resolves.toEqual(fresh);
+  });
+
+  it('assignment attempt ayni max fence icindeki divergent contracti reddeder', async () => {
+    const { attempt } = fixtures();
+    await appendAssignmentAttempt(ch, attempt);
+    const divergent = { ...attempt, workerAgentId: randomUUID() };
+    await ch.insert({
+      table: 'assignment_attempts',
+      values: [{
+        assignment_attempt_id: divergent.assignmentAttemptId,
+        contract_version: divergent.contractVersion,
+        project_id: divergent.projectId,
+        task_id: divergent.taskId,
+        task_brief_id: divergent.taskBriefId,
+        attempt_number: divergent.attemptNumber,
+        worker_agent_id: divergent.workerAgentId,
+        verifier_agent_id: divergent.verifierAgentId,
+        lease_owner: divergent.leaseOwner,
+        lease_fence: divergent.leaseFence,
+        lease_expires_at: divergent.leaseExpiresAt,
+        start_reason: divergent.startReason,
+        previous_attempt_id: '00000000-0000-0000-0000-000000000000',
+        handoff_id: '00000000-0000-0000-0000-000000000000',
+        assigned_at: divergent.assignedAt,
+        contract_json: canonicalJsonV1(divergent),
+        contract_hash: canonicalSha256V1(divergent),
+      }],
+      format: 'JSONEachRow',
+    });
+    await expect(getAssignmentAttempt(ch, attempt.assignmentAttemptId))
+      .rejects.toBeInstanceOf(RepositoryConflictError);
+  });
+
   it('immutable post-ack read hatasini typed verir ve exact retry kalici contracti bulur', async () => {
     const { brief } = fixtures();
     const verification = new Error('brief verification unavailable');

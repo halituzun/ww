@@ -20,7 +20,6 @@ import {
   nextRepositoryVersion,
   readRowsAfterAcknowledgedWrite,
   readAfterUncertainWrite,
-  reconcileVersionedWrite,
   serializeJsonValue,
   storedDateTime,
   storedEnum,
@@ -48,21 +47,49 @@ export interface PlanRow {
   readonly created_by_agent_id: EntityId;
   readonly approved_by: string;
   readonly created_at: string;
+  readonly observed_at: string;
   readonly version: UInt64String;
 }
 
-export type CreatePlanInput = Omit<PlanRow, 'version'>;
+export type CreatePlanInput = Omit<PlanRow, 'version' | 'observed_at'>;
 
 export interface AppendPlanVersionInput {
   readonly expectedVersion: UInt64String;
-  readonly next: Omit<PlanRow, 'version'>;
+  readonly next: Omit<PlanRow, 'version' | 'observed_at'>;
 }
 
-const PLAN_COLUMNS = `plan_id, project_id, plan_version, status, title, content_md,
-  council_session_id, team_json, scenarios_json, replan_reason,
-  supersedes_plan_id, created_by_agent_id, approved_by, created_at, version,
-  row_hash`;
 const ROW_HASH = /^[0-9a-f]{64}$/;
+const EPOCH = '1970-01-01T00:00:00.000Z';
+const PLAN_OBSERVED_AT = `if(
+  acceptance.observation_count > 0,
+  acceptance.observed_at,
+  if(p.observed_at = toDateTime64(0, 3, 'UTC'), p.created_at, p.observed_at)
+)`;
+const PLAN_COLUMNS = `p.plan_id AS plan_id, p.project_id AS project_id,
+  p.plan_version AS plan_version, p.status AS status, p.title AS title,
+  p.content_md AS content_md, p.council_session_id AS council_session_id,
+  p.team_json AS team_json, p.scenarios_json AS scenarios_json,
+  p.replan_reason AS replan_reason, p.supersedes_plan_id AS supersedes_plan_id,
+  p.created_by_agent_id AS created_by_agent_id, p.approved_by AS approved_by,
+  p.created_at AS created_at, ${PLAN_OBSERVED_AT} AS observed_at,
+  p.version AS version, p.row_hash AS row_hash`;
+function planFrom(acceptanceScope: 'plan' | 'project'): string {
+  const observationWhere = acceptanceScope === 'plan'
+    ? 'WHERE project_id = {projectId:UUID} AND plan_id = {planId:UUID}'
+    : 'WHERE project_id = {projectId:UUID}';
+  return `plans AS p
+  LEFT JOIN (
+    SELECT project_id, plan_id, version, row_hash,
+      min(observed_at) AS observed_at, count() AS observation_count
+    FROM plan_acceptance_observations
+    ${observationWhere}
+    GROUP BY project_id, plan_id, version, row_hash
+  ) AS acceptance
+  ON acceptance.project_id = p.project_id
+    AND acceptance.plan_id = p.plan_id
+    AND acceptance.version = p.version
+    AND acceptance.row_hash = p.row_hash`;
+}
 
 function planRowHash(row: PlanRow): string {
   return canonicalSha256V1([
@@ -84,8 +111,55 @@ function planRowHash(row: PlanRow): string {
   ]);
 }
 
+function planCallerContentHash(row: PlanRow): string {
+  return canonicalSha256V1([
+    row.plan_id,
+    row.project_id,
+    row.plan_version,
+    row.status,
+    row.title,
+    row.content_md,
+    row.council_session_id,
+    row.team_json,
+    row.scenarios_json,
+    row.replan_reason,
+    row.supersedes_plan_id,
+    row.created_by_agent_id,
+    row.approved_by,
+    row.created_at,
+  ]);
+}
+
+function reconcilePlanVersion(
+  entity: string,
+  observed: readonly PlanRow[],
+  expected?: PlanRow,
+): PlanRow {
+  if (observed.length === 0) {
+    throw new RepositoryConflictError(`${entity} surumu okunamadi`);
+  }
+  const baseline = expected ?? observed[0]!;
+  const contentHash = planCallerContentHash(baseline);
+  if (observed.some((row) => (
+    row.version !== baseline.version || planCallerContentHash(row) !== contentHash
+  ))) {
+    throw new RepositoryConflictError(
+      `${entity} ayni kimlik ve surum icin farkli caller icerigi barindiriyor`,
+    );
+  }
+  return [...observed].sort((left, right) => {
+    const byObservedAt = left.observed_at.localeCompare(right.observed_at);
+    if (byObservedAt !== 0) return byObservedAt;
+    return canonicalSha256V1(left).localeCompare(canonicalSha256V1(right));
+  })[0]!;
+}
+
 function parsePlanRow(value: unknown): PlanRow {
   const row = storedRecord(value, 'plans');
+  const createdAt = storedDateTime(row['created_at'], 'plans.created_at');
+  const storedObservedAt = row['observed_at'] === undefined
+    ? EPOCH
+    : storedDateTime(row['observed_at'], 'plans.observed_at');
   const parsed: PlanRow = Object.freeze({
     plan_id: concreteEntityId(storedUuid(row['plan_id'], 'plans.plan_id'), 'plans.plan_id'),
     project_id: concreteEntityId(
@@ -112,7 +186,8 @@ function parsePlanRow(value: unknown): PlanRow {
       'plans.created_by_agent_id',
     ),
     approved_by: storedString(row['approved_by'], 'plans.approved_by'),
-    created_at: storedDateTime(row['created_at'], 'plans.created_at'),
+    created_at: createdAt,
+    observed_at: storedObservedAt === EPOCH ? createdAt : storedObservedAt,
     version: storedUInt64(row['version'], 'plans.version'),
   });
   if (row['row_hash'] !== undefined) {
@@ -124,13 +199,67 @@ function parsePlanRow(value: unknown): PlanRow {
   return parsed;
 }
 
-function toInsertRow(row: PlanRow): Record<string, unknown> {
-  return {
-    ...row,
-    team_json: serializeJsonValue(row.team_json, 'plans.team_json'),
-    scenarios_json: serializeJsonValue(row.scenarios_json, 'plans.scenarios_json'),
-    row_hash: planRowHash(row),
-  };
+function clickHouseDateTime(value: string): string {
+  return value.replace('T', ' ').replace('Z', '');
+}
+
+/**
+ * Plans are the one versioned repository whose temporal cutoff is based on
+ * database acceptance. Keep regular repositories on JSONEachRow, but use this
+ * narrow INSERT SELECT so ClickHouse, not a pre-network caller clock, assigns
+ * observed_at. The append-only observation table retains every acceptance and
+ * read queries fold its minimum for exact logical retries. The max+1ms floor
+ * orders server acceptances inside the same DateTime64(3) tick.
+ */
+async function insertPlanAtAcceptance(ch: ClickHouseClient, row: PlanRow): Promise<void> {
+  await ch.command({
+    query: `INSERT INTO plans (
+        plan_id, project_id, plan_version, status, title, content_md,
+        council_session_id, team_json, scenarios_json, replan_reason,
+        supersedes_plan_id, created_by_agent_id, approved_by, created_at,
+        observed_at, version, row_hash
+      )
+      SELECT
+        {planId:UUID}, {projectId:UUID}, {planVersion:UInt32}, {status:String},
+        {title:String}, {contentMd:String}, {councilSessionId:UUID}, {teamJson:String},
+        {scenariosJson:String}, {replanReason:String}, {supersedesPlanId:UUID},
+        {createdByAgentId:UUID}, {approvedBy:String},
+        {createdAt:DateTime64(3, 'UTC')},
+        greatest(
+          now64(3, 'UTC'),
+          ifNull(
+            (
+              SELECT maxOrNull(if(
+                observed_at = toDateTime64(0, 3, 'UTC'),
+                created_at,
+                observed_at
+              )) + INTERVAL 1 MILLISECOND
+              FROM plans
+              WHERE project_id = {projectId:UUID} AND plan_id = {planId:UUID}
+            ),
+            now64(3, 'UTC')
+          )
+        ),
+        {version:UInt64}, {rowHash:String}`,
+    query_params: {
+      planId: row.plan_id,
+      projectId: row.project_id,
+      planVersion: row.plan_version,
+      status: row.status,
+      title: row.title,
+      contentMd: row.content_md,
+      councilSessionId: row.council_session_id,
+      teamJson: serializeJsonValue(row.team_json, 'plans.team_json'),
+      scenariosJson: serializeJsonValue(row.scenarios_json, 'plans.scenarios_json'),
+      replanReason: row.replan_reason,
+      supersedesPlanId: row.supersedes_plan_id,
+      createdByAgentId: row.created_by_agent_id,
+      approvedBy: row.approved_by,
+      createdAt: clickHouseDateTime(row.created_at),
+      version: row.version,
+      rowHash: planRowHash(row),
+    },
+  });
 }
 
 async function readPlanVersion(
@@ -140,9 +269,9 @@ async function readPlanVersion(
   version: UInt64String,
 ): Promise<PlanRow[]> {
   const result = await ch.query({
-    query: `SELECT ${PLAN_COLUMNS} FROM plans
-      WHERE project_id = {projectId:UUID} AND plan_id = {planId:UUID}
-        AND version = {version:UInt64}`,
+    query: `SELECT ${PLAN_COLUMNS} FROM ${planFrom('plan')}
+      WHERE p.project_id = {projectId:UUID} AND p.plan_id = {planId:UUID}
+        AND p.version = {version:UInt64}`,
     query_params: { projectId, planId, version },
     format: 'JSONEachRow',
   });
@@ -157,18 +286,43 @@ export async function getLatestPlan(
   const project = concreteEntityId(projectId, 'projectId');
   const plan = concreteEntityId(planId, 'planId');
   const result = await ch.query({
-    query: `SELECT ${PLAN_COLUMNS} FROM plans
-      WHERE project_id = {projectId:UUID} AND plan_id = {planId:UUID}
-      ORDER BY version DESC`,
+    query: `SELECT ${PLAN_COLUMNS} FROM ${planFrom('plan')}
+      WHERE p.project_id = {projectId:UUID} AND p.plan_id = {planId:UUID}
+      ORDER BY p.version DESC`,
     query_params: { projectId: project, planId: plan },
     format: 'JSONEachRow',
   });
   const rows = (await result.json<unknown>()).map(parsePlanRow);
   if (rows.length === 0) return null;
   const maximum = rows[0]!.version;
-  return reconcileVersionedWrite(
+  return reconcilePlanVersion(
     `plan:${plan}`,
-    rows[0]!,
+    rows.filter((row) => row.version === maximum),
+  );
+}
+
+export async function getPlanAsOf(
+  ch: ClickHouseClient,
+  projectId: string,
+  planId: string,
+  cutoffAt: string,
+): Promise<PlanRow | null> {
+  const project = concreteEntityId(projectId, 'projectId');
+  const plan = concreteEntityId(planId, 'planId');
+  const cutoff = storedDateTime(cutoffAt, 'cutoffAt').replace('T', ' ').replace('Z', '');
+  const result = await ch.query({
+    query: `SELECT ${PLAN_COLUMNS} FROM ${planFrom('plan')}
+      WHERE p.project_id = {projectId:UUID} AND p.plan_id = {planId:UUID}
+        AND ${PLAN_OBSERVED_AT} <= {cutoffAt:DateTime64(3, 'UTC')}
+      ORDER BY p.version DESC`,
+    query_params: { projectId: project, planId: plan, cutoffAt: cutoff },
+    format: 'JSONEachRow',
+  });
+  const rows = (await result.json<unknown>()).map(parsePlanRow);
+  if (rows.length === 0) return null;
+  const maximum = rows[0]!.version;
+  return reconcilePlanVersion(
+    `plan:${plan}@asOf`,
     rows.filter((row) => row.version === maximum),
   );
 }
@@ -181,14 +335,14 @@ export async function listLatestPlansByStatus(
   const project = concreteEntityId(projectId, 'projectId');
   const state = storedEnum(status, PLAN_STATUSES, 'planStatus');
   const result = await ch.query({
-    query: `SELECT ${PLAN_COLUMNS} FROM plans
-      WHERE project_id = {projectId:UUID}
-        AND (plan_id, version) IN (
+    query: `SELECT ${PLAN_COLUMNS} FROM ${planFrom('project')}
+      WHERE p.project_id = {projectId:UUID}
+        AND (p.plan_id, p.version) IN (
           SELECT plan_id, max(version) FROM plans
           WHERE project_id = {projectId:UUID}
           GROUP BY plan_id
         )
-      ORDER BY plan_id`,
+      ORDER BY p.plan_id ASC, observed_at ASC`,
     query_params: { projectId: project },
     format: 'JSONEachRow',
   });
@@ -199,7 +353,13 @@ export async function listLatestPlansByStatus(
     grouped.set(row.plan_id, rows);
   }
   return [...grouped.values()]
-    .map((rows) => reconcileVersionedWrite(`plan:${rows[0]!.plan_id}`, rows[0]!, rows))
+    .map((rows) => {
+      const maximum = rows[0]!.version;
+      return reconcilePlanVersion(
+        `plan:${rows[0]!.plan_id}`,
+        rows.filter((row) => row.version === maximum),
+      );
+    })
     .filter((row) => row.status === state);
 }
 
@@ -214,9 +374,10 @@ export async function createPlan(ch: ClickHouseClient, input: CreatePlanInput): 
       plan_id: planId,
       team_json: serializeJsonValue(input.team_json, 'plans.team_json'),
       scenarios_json: serializeJsonValue(input.scenarios_json, 'plans.scenarios_json'),
+      observed_at: current.observed_at,
       version: current.version,
     });
-    if (canonicalSha256V1(current) === canonicalSha256V1(desired)) return current;
+    if (planCallerContentHash(current) === planCallerContentHash(desired)) return current;
     throw new RepositoryConflictError(`plan zaten var: ${planId}`);
   }
   const row = parsePlanRow({
@@ -225,17 +386,18 @@ export async function createPlan(ch: ClickHouseClient, input: CreatePlanInput): 
     plan_id: planId,
     team_json: serializeJsonValue(input.team_json, 'plans.team_json'),
     scenarios_json: serializeJsonValue(input.scenarios_json, 'plans.scenarios_json'),
+    observed_at: EPOCH,
     version: nextRepositoryVersion(),
   });
   try {
-    await ch.insert({ table: 'plans', values: [toInsertRow(row)], format: 'JSONEachRow' });
+    await insertPlanAtAcceptance(ch, row);
   } catch (error) {
     const observed = await readAfterUncertainWrite(
       `plan:${planId}`,
       error,
       () => readPlanVersion(ch, projectId, planId, row.version),
     );
-    if (observed.length > 0) return reconcileVersionedWrite(`plan:${planId}`, row, observed);
+    if (observed.length > 0) return reconcilePlanVersion(`plan:${planId}`, observed, row);
     throw uncertainWriteError(`plan:${planId}`, error);
   }
   const observed = await readRowsAfterAcknowledgedWrite(
@@ -243,7 +405,7 @@ export async function createPlan(ch: ClickHouseClient, input: CreatePlanInput): 
     row,
     () => readPlanVersion(ch, projectId, planId, row.version),
   );
-  return reconcileVersionedWrite(`plan:${planId}`, row, observed);
+  return reconcilePlanVersion(`plan:${planId}`, observed, row);
 }
 
 export async function appendPlanVersion(
@@ -265,11 +427,10 @@ export async function appendPlanVersion(
       plan_id: planId,
       team_json: serializeJsonValue(input.next.team_json, 'plans.team_json'),
       scenarios_json: serializeJsonValue(input.next.scenarios_json, 'plans.scenarios_json'),
+      observed_at: current.observed_at,
       version: current.version,
     });
-    if (
-      canonicalSha256V1(current) === canonicalSha256V1(desired)
-    ) return current;
+    if (planCallerContentHash(current) === planCallerContentHash(desired)) return current;
     assertExpectedVersion(`plan:${planId}`, current.version, expectedVersion);
   }
   const row = parsePlanRow({
@@ -278,20 +439,21 @@ export async function appendPlanVersion(
     plan_id: planId,
     team_json: serializeJsonValue(input.next.team_json, 'plans.team_json'),
     scenarios_json: serializeJsonValue(input.next.scenarios_json, 'plans.scenarios_json'),
+    observed_at: EPOCH,
     version: nextRepositoryVersion(current.version),
   });
   if (row.created_at !== current.created_at || row.plan_version !== current.plan_version) {
     throw new RepositoryConflictError(`plan kimlik alanlari degistirilemez: ${planId}`);
   }
   try {
-    await ch.insert({ table: 'plans', values: [toInsertRow(row)], format: 'JSONEachRow' });
+    await insertPlanAtAcceptance(ch, row);
   } catch (error) {
     const observed = await readAfterUncertainWrite(
       `plan:${planId}`,
       error,
       () => readPlanVersion(ch, projectId, planId, row.version),
     );
-    if (observed.length > 0) return reconcileVersionedWrite(`plan:${planId}`, row, observed);
+    if (observed.length > 0) return reconcilePlanVersion(`plan:${planId}`, observed, row);
     throw uncertainWriteError(`plan:${planId}`, error);
   }
   const observed = await readRowsAfterAcknowledgedWrite(
@@ -299,5 +461,5 @@ export async function appendPlanVersion(
     row,
     () => readPlanVersion(ch, projectId, planId, row.version),
   );
-  return reconcileVersionedWrite(`plan:${planId}`, row, observed);
+  return reconcilePlanVersion(`plan:${planId}`, observed, row);
 }

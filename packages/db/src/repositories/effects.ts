@@ -51,6 +51,7 @@ export interface EffectLedgerRow {
   readonly result: JsonValue;
   readonly error: string;
   readonly effect_version: UInt64String;
+  readonly lease_fence: UInt64String;
   readonly created_at: string;
 }
 
@@ -63,6 +64,7 @@ export interface ReserveEffectInput {
   readonly effect_type: string;
   readonly request: unknown;
   readonly replay_safety: EffectReplaySafety;
+  readonly lease_fence: UInt64String;
   readonly created_at: string;
 }
 
@@ -73,6 +75,7 @@ export interface AppendEffectVersionInput {
   readonly state: EffectState;
   readonly result: unknown;
   readonly error: string;
+  readonly lease_fence: UInt64String;
   readonly created_at: string;
 }
 
@@ -89,12 +92,13 @@ interface StoredEffectRow {
   readonly result_json: string;
   readonly error: string;
   readonly effect_version: UInt64String;
+  readonly lease_fence: UInt64String;
   readonly created_at: string;
 }
 
 const EFFECT_COLUMNS = `causation_id, stable_effect_id, project_id, task_id,
   assignment_attempt_id, effect_type, request_hash, replay_safety, state,
-  result_json, error, effect_version, created_at`;
+  result_json, error, effect_version, lease_fence, created_at`;
 const SHA256 = /^[a-f0-9]{64}$/;
 
 function nonempty(value: unknown, context: string): string {
@@ -153,6 +157,7 @@ function parseEffectRow(value: unknown): EffectLedgerRow {
       result,
       error: storedString(row['error'], 'effect_ledger.error'),
       effect_version: storedUInt64(row['effect_version'], 'effect_ledger.effect_version'),
+      lease_fence: storedUInt64(row['lease_fence'], 'effect_ledger.lease_fence'),
       created_at: storedDateTime(row['created_at'], 'effect_ledger.created_at'),
     });
   } catch (error) {
@@ -175,6 +180,7 @@ function toStoredRow(row: EffectLedgerRow): StoredEffectRow {
     result_json: canonicalJsonV1(row.result),
     error: row.error,
     effect_version: row.effect_version,
+    lease_fence: row.lease_fence,
     created_at: row.created_at,
   };
 }
@@ -227,6 +233,7 @@ function effectContentHash(row: EffectLedgerRow): string {
     state: row.state,
     result: row.result,
     error: row.error,
+    lease_fence: row.lease_fence,
     created_at: row.created_at,
   });
 }
@@ -242,6 +249,24 @@ function effectIdentityHash(row: EffectLedgerRow): string {
     request_hash: row.request_hash,
     replay_safety: row.replay_safety,
   });
+}
+
+function foldEffectRows(rows: readonly EffectLedgerRow[]): EffectLedgerRow {
+  const maximumVersion = rows.reduce(
+    (max, row) => BigInt(row.effect_version) > max ? BigInt(row.effect_version) : max,
+    0n,
+  );
+  const atVersion = rows.filter((row) => BigInt(row.effect_version) === maximumVersion);
+  const maximumFence = atVersion.reduce(
+    (max, row) => BigInt(row.lease_fence) > max ? BigInt(row.lease_fence) : max,
+    0n,
+  );
+  const candidates = atVersion.filter((row) => BigInt(row.lease_fence) === maximumFence);
+  const identityHash = effectIdentityHash(candidates[0]!);
+  if (candidates.some((row) => effectIdentityHash(row) !== identityHash)) {
+    throw new RepositoryConflictError('effect ayni surum/fence icinde request catismasi');
+  }
+  return reconcileEffect(candidates[0]!, candidates);
 }
 
 async function insertAndReconcile(
@@ -264,10 +289,16 @@ async function insertAndReconcile(
   } catch (error) {
     const observed = await readAfterUncertainWrite(entity, error, read);
     if (observed.length === 0) throw uncertainWriteError(entity, error);
-    return reconcileEffect(expected, observed);
+    const winner = foldEffectRows(observed);
+    return BigInt(winner.lease_fence) > BigInt(expected.lease_fence)
+      ? winner
+      : reconcileEffect(expected, observed.filter((row) => row.lease_fence === expected.lease_fence));
   }
   const observed = await readRowsAfterAcknowledgedWrite(entity, expected, read);
-  return reconcileEffect(expected, observed);
+  const winner = foldEffectRows(observed);
+  return BigInt(winner.lease_fence) > BigInt(expected.lease_fence)
+    ? winner
+    : reconcileEffect(expected, observed.filter((row) => row.lease_fence === expected.lease_fence));
 }
 
 export async function getLatestEffect(
@@ -285,18 +316,7 @@ export async function getLatestEffect(
   });
   const rows = (await result.json<unknown>()).map(parseEffectRow);
   if (rows.length === 0) return null;
-  const identityHash = effectIdentityHash(rows[0]!);
-  if (rows.some((row) => effectIdentityHash(row) !== identityHash)) {
-    throw new RepositoryConflictError(
-      `effect:${causation}:${effect} gecmisinde farkli request kimligi var`,
-    );
-  }
-  const maximum = rows.reduce(
-    (max, row) => BigInt(row.effect_version) > max ? BigInt(row.effect_version) : max,
-    0n,
-  ).toString();
-  const latest = rows.filter((row) => row.effect_version === maximum);
-  return reconcileEffect(latest[0]!, latest);
+  return foldEffectRows(rows);
 }
 
 export async function listLatestEffectsByState(
@@ -309,12 +329,6 @@ export async function listLatestEffectsByState(
   const result = await ch.query({
     query: `SELECT ${EFFECT_COLUMNS} FROM effect_ledger
       WHERE project_id = {projectId:UUID}
-        AND (causation_id, stable_effect_id, effect_version) IN (
-          SELECT causation_id, stable_effect_id, max(effect_version)
-          FROM effect_ledger
-          WHERE project_id = {projectId:UUID}
-          GROUP BY causation_id, stable_effect_id
-        )
       ORDER BY causation_id, stable_effect_id`,
     query_params: { projectId: project },
     format: 'JSONEachRow',
@@ -327,8 +341,54 @@ export async function listLatestEffectsByState(
     grouped.set(key, rows);
   }
   return [...grouped.values()]
-    .map((rows) => reconcileEffect(rows[0]!, rows))
+    .map(foldEffectRows)
     .filter((row) => row.state === effectState);
+}
+
+/**
+ * Reads only latest-version/latest-fence candidates for one durable task.
+ * Candidate ties stay visible so the JS fold can reject divergent rows instead
+ * of allowing SQL's physical row order to choose a winner.
+ */
+export async function listLatestTaskEffectsByStates(
+  ch: ClickHouseClient,
+  taskId: string,
+  states: readonly EffectState[],
+): Promise<EffectLedgerRow[]> {
+  const task = concreteEntityId(taskId, 'taskId');
+  if (states.length === 0) throw new StoredRecordError('effectStates', states);
+  const requestedStates = new Set(states.map((state) => (
+    storedEnum(state, EFFECT_STATES, 'effectState')
+  )));
+  const result = await ch.query({
+    query: `SELECT ${EFFECT_COLUMNS} FROM
+      (
+        SELECT *, max(lease_fence) OVER
+          (PARTITION BY causation_id, stable_effect_id) AS maximum_lease_fence
+        FROM
+        (
+          SELECT *, max(effect_version) OVER
+            (PARTITION BY causation_id, stable_effect_id) AS maximum_effect_version
+          FROM task_effect_ledger
+          PREWHERE task_id = {taskId:UUID}
+        )
+        WHERE effect_version = maximum_effect_version
+      )
+      WHERE lease_fence = maximum_lease_fence
+      ORDER BY causation_id, stable_effect_id`,
+    query_params: { taskId: task },
+    format: 'JSONEachRow',
+  });
+  const grouped = new Map<string, EffectLedgerRow[]>();
+  for (const row of (await result.json<unknown>()).map(parseEffectRow)) {
+    const key = canonicalJsonV1([row.causation_id, row.stable_effect_id]);
+    const rows = grouped.get(key) ?? [];
+    rows.push(row);
+    grouped.set(key, rows);
+  }
+  return [...grouped.values()]
+    .map(foldEffectRows)
+    .filter((row) => requestedStates.has(row.state));
 }
 
 export async function reserveEffect(
@@ -349,6 +409,7 @@ export async function reserveEffect(
     : optionalEntityId(storedUuid(input.assignment_attempt_id, 'assignmentAttemptId'), 'assignmentAttemptId');
   const request = JsonValueSchema.parse(input.request);
   const replaySafety = storedEnum(input.replay_safety, TOOL_REPLAY_SAFETY, 'replaySafety');
+  const leaseFence = storedUInt64(input.lease_fence, 'leaseFence');
   const effectType = nonempty(input.effect_type, 'effectType');
   const requestHash = canonicalSha256V1(request);
   const existing = await getLatestEffect(ch, causationId, stableEffectId);
@@ -363,6 +424,12 @@ export async function reserveEffect(
       throw new RepositoryConflictError(
         `effect anahtari farkli istekle kullanildi: ${causationId}:${stableEffectId}`,
       );
+    }
+    if (BigInt(leaseFence) > BigInt(existing.lease_fence)) {
+      return insertAndReconcile(ch, Object.freeze({
+        ...existing,
+        lease_fence: leaseFence,
+      }));
     }
     return existing;
   }
@@ -379,6 +446,7 @@ export async function reserveEffect(
     result_json: '{}',
     error: '',
     effect_version: nextRepositoryVersion(),
+    lease_fence: leaseFence,
     created_at: input.created_at,
   });
   return insertAndReconcile(ch, expected);
@@ -397,6 +465,12 @@ export async function appendEffectVersion(
   const state = storedEnum(input.state, EFFECT_STATES, 'effectState');
   const result = JsonValueSchema.parse(input.result);
   const expectedVersion = storedUInt64(input.expectedVersion, 'expectedVersion');
+  const leaseFence = storedUInt64(input.lease_fence, 'leaseFence');
+  if (BigInt(leaseFence) < BigInt(current.lease_fence)) {
+    throw new RepositoryConflictError(
+      `effect:${causationId}:${stableEffectId} eski lease fence ile yazilamaz`,
+    );
+  }
   if (current.effect_version !== expectedVersion) {
     if (BigInt(current.effect_version) < BigInt(expectedVersion)) {
       assertExpectedVersion(
@@ -405,11 +479,26 @@ export async function appendEffectVersion(
         expectedVersion,
       );
     }
+    if (
+      current.effect_version === nextRepositoryVersion(expectedVersion) &&
+      BigInt(leaseFence) > BigInt(current.lease_fence)
+    ) {
+      return insertAndReconcile(ch, parseEffectRow({
+        ...toStoredRow(current),
+        state,
+        result_json: canonicalJsonV1(result),
+        error: storedString(input.error, 'effectError'),
+        lease_fence: leaseFence,
+        effect_version: current.effect_version,
+        created_at: input.created_at,
+      }));
+    }
     const desired = parseEffectRow({
       ...toStoredRow(current),
       state,
       result_json: canonicalJsonV1(result),
       error: storedString(input.error, 'effectError'),
+      lease_fence: current.lease_fence,
       effect_version: current.effect_version,
       created_at: input.created_at,
     });
@@ -428,6 +517,7 @@ export async function appendEffectVersion(
     result_json: canonicalJsonV1(result),
     error: storedString(input.error, 'effectError'),
     effect_version: nextRepositoryVersion(current.effect_version),
+    lease_fence: leaseFence,
     created_at: input.created_at,
   });
   return insertAndReconcile(ch, expected);

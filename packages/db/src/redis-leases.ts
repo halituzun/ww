@@ -2,9 +2,10 @@ import { EntityIdSchema, type EntityId } from '@ww/shared';
 import { decodeRedisBoolean, type WwRedis } from './redis.js';
 
 export type TaskLockKey = `ww:task:${EntityId}:claim`;
+export type AgentLockKey = `ww:agent:${EntityId}:claim`;
 export type MessageLockKey = `ww:message:${EntityId}:claim`;
 export type ReceiptLockKey = `ww:receipt:${EntityId}:claim`;
-export type RedisLockKey = TaskLockKey | MessageLockKey | ReceiptLockKey;
+export type RedisLockKey = TaskLockKey | AgentLockKey | MessageLockKey | ReceiptLockKey;
 export type LeaseFenceKey = `${RedisLockKey}:fence`;
 
 export interface FencedLease {
@@ -23,6 +24,9 @@ function entityId(value: string): EntityId {
 export const taskLockKey = (taskId: string): TaskLockKey => (
   `ww:task:${entityId(taskId)}:claim`
 );
+export const agentLockKey = (agentId: string): AgentLockKey => (
+  `ww:agent:${entityId(agentId)}:claim`
+);
 export const messageLockKey = (messageId: string): MessageLockKey => (
   `ww:message:${entityId(messageId)}:claim`
 );
@@ -34,7 +38,7 @@ export const leaseFenceKey = (key: RedisLockKey): LeaseFenceKey => {
   return `${key}:fence`;
 };
 
-const LOCK_KEY_PATTERN = /^ww:(task|message|receipt):([^:]+):claim$/;
+const LOCK_KEY_PATTERN = /^ww:(task|agent|message|receipt):([^:]+):claim$/;
 
 function assertLockKey(key: RedisLockKey): void {
   const match = LOCK_KEY_PATTERN.exec(key);
@@ -170,4 +174,22 @@ export async function releaseFencedLease(
     arguments: [lease.owner, lease.fence],
   });
   return decodeRedisBoolean(result, 'Redis fenced lease release');
+}
+
+/** Reads one fenced lease hash in a single Redis command for release reconciliation. */
+export async function getFencedLease(
+  r: WwRedis,
+  lockKey: RedisLockKey,
+): Promise<FencedLease | null> {
+  assertLockKey(lockKey);
+  const fields = await r.hGetAll(lockKey);
+  if (Object.keys(fields).length === 0) return null;
+  const owner = fields['owner'];
+  const fence = fields['fence'];
+  if (owner === undefined || fence === undefined) {
+    throw new Error('Redis fenced lease hash owner/fence alanlarini tasimiyor');
+  }
+  assertOwner(owner);
+  assertFence(fence);
+  return Object.freeze({ lockKey, owner, fence });
 }

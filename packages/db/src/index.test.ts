@@ -9,9 +9,14 @@ describe('@ww/db public repository surface', () => {
     expect(db.appendEffectVersion).toBeTypeOf('function');
     expect(db.appendTaskBrief).toBeTypeOf('function');
     expect(db.appendTaskCausalEntry).toBeTypeOf('function');
+    expect(db.getTaskDurableMaxLeaseFence).toBeTypeOf('function');
+    expect(db.listLatestTaskEffectsByStates).toBeTypeOf('function');
+    expect(db.transferOrAcquireFileLocks).toBeTypeOf('function');
     expect(db.appendEvent).toBeTypeOf('function');
     expect(db.appendArtifact).toBeTypeOf('function');
     expect(db.appendKnowledgeVersion).toBeTypeOf('function');
+    expect(db.getPlanAsOf).toBeTypeOf('function');
+    expect(db.appendAgentVersion).toBeTypeOf('function');
     expect(db.appendAuditFindingVersion).toBeTypeOf('function');
     expect(db.appendPromptVersion).toBeTypeOf('function');
     expect(db.RepositoryConflictError).toBeTypeOf('function');

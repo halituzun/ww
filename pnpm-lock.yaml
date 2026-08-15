@@ -139,6 +139,13 @@ importers:
         version: 2.1.9(@types/node@22.20.1)
 
   packages/memory:
+    dependencies:
+      '@ww/db':
+        specifier: workspace:*
+        version: link:../db
+      '@ww/shared':
+        specifier: workspace:*
+        version: link:../shared
     devDependencies:
       typescript:
         specifier: ^5.7.0
@@ -170,6 +177,16 @@ importers:
         version: 2.1.9(@types/node@22.20.1)
 
   packages/scheduler:
+    dependencies:
+      '@ww/db':
+        specifier: workspace:*
+        version: link:../db
+      '@ww/memory':
+        specifier: workspace:*
+        version: link:../memory
+      '@ww/shared':
+        specifier: workspace:*
+        version: link:../shared
     devDependencies:
       typescript:
         specifier: ^5.7.0

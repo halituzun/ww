@@ -112,6 +112,35 @@ describe('prompt seed migration', () => {
       expect(statement).toMatch(/CREATE TABLE IF NOT EXISTS/);
     }
   });
+
+  it('Faz 4 scheduler migrationı legacy sentinel ve restart-safe DDL taşır', async () => {
+    const sql = await readFile(migrationUrl('0004_scheduler_fences.sql'), 'utf8');
+    const alterStatements = sql.match(/ALTER TABLE[\s\S]*?;/g) ?? [];
+    const addColumnStatements = alterStatements.filter((statement) => (
+      statement.includes('ADD COLUMN')
+    ));
+
+    expect(alterStatements).toHaveLength(3);
+    expect(addColumnStatements).toHaveLength(3);
+    for (const statement of addColumnStatements) {
+      expect(statement).toMatch(/ADD COLUMN IF NOT EXISTS/);
+    }
+    expect(sql).toContain("observed_at DateTime64(3, 'UTC')");
+    expect(sql).toContain("DEFAULT toDateTime64(0, 3, 'UTC')");
+    expect(sql).toContain('assignment_fence UInt64 DEFAULT 0');
+    expect(sql).toContain('lease_fence UInt64 DEFAULT 0');
+    expect(sql).toContain('CREATE TABLE IF NOT EXISTS plan_acceptance_observations');
+    expect(sql).toContain('CREATE MATERIALIZED VIEW IF NOT EXISTS');
+    expect(sql).toContain('TO plan_acceptance_observations');
+    expect(sql).toContain('INSERT INTO plan_acceptance_observations');
+    expect(sql).toContain('min(observed_at)');
+    expect(sql).toContain('CREATE TABLE IF NOT EXISTS task_effect_ledger');
+    expect(sql).toContain('TO task_effect_ledger');
+    expect(sql).toContain('CREATE TABLE IF NOT EXISTS task_lease_fence_observations');
+    expect(sql).toContain('TO task_lease_fence_observations');
+    expect(sql).toContain('INSERT INTO task_effect_ledger');
+    expect(sql).toContain('INSERT INTO task_lease_fence_observations');
+  });
 });
 
 describe.skipIf(!up)('runMigrations', () => {
@@ -136,6 +165,7 @@ describe.skipIf(!up)('runMigrations', () => {
       '0001_init.sql',
       '0002_prompt_seed.sql',
       '0003_agent_communication.sql',
+      '0004_scheduler_fences.sql',
     ]);
     expect(secondApplied).toHaveLength(0);
   });
@@ -265,13 +295,24 @@ describe.skipIf(!up)('runMigrations', () => {
         effect_ledger: [
           'causation_id', 'stable_effect_id', 'project_id', 'task_id',
           'assignment_attempt_id', 'effect_type', 'request_hash', 'replay_safety', 'state',
-          'result_json', 'error', 'effect_version', 'created_at',
+          'result_json', 'error', 'effect_version', 'created_at', 'lease_fence',
         ],
         audit_findings: [
           'finding_id', 'finding_version', 'contract_version', 'project_id', 'task_id',
           'message_id', 'profile', 'rule_id', 'rule_version', 'severity', 'summary',
           'evidence_refs', 'status', 'corrective_task_id', 'resolution', 'finding_json',
           'finding_hash', 'created_at', 'updated_at',
+        ],
+        plan_acceptance_observations: [
+          'project_id', 'plan_id', 'version', 'row_hash', 'observed_at',
+        ],
+        task_effect_ledger: [
+          'task_id', 'causation_id', 'stable_effect_id', 'project_id',
+          'assignment_attempt_id', 'effect_type', 'request_hash', 'replay_safety',
+          'state', 'result_json', 'error', 'effect_version', 'lease_fence', 'created_at',
+        ],
+        task_lease_fence_observations: [
+          'task_id', 'source', 'source_identity', 'lease_fence',
         ],
       };
 
@@ -299,7 +340,7 @@ describe.skipIf(!up)('runMigrations', () => {
         query: `SELECT table, name
           FROM system.columns
           WHERE database = {database:String}
-            AND table IN ('tasks', 'messages', 'api_usage', 'knowledge')`,
+            AND table IN ('tasks', 'messages', 'api_usage', 'knowledge', 'plans', 'agents')`,
         query_params: { database: db },
         format: 'JSONEachRow',
       });
@@ -322,6 +363,8 @@ describe.skipIf(!up)('runMigrations', () => {
         'prompt_input_snapshot_id', 'fallback_attempt',
       ]));
       expect(namesFor('knowledge')).toContain('observed_at');
+      expect(namesFor('plans')).toContain('observed_at');
+      expect(namesFor('agents')).toContain('assignment_fence');
 
       const observedAtResult = await ch.query({
         query: `SELECT type, default_kind, default_expression
@@ -336,6 +379,35 @@ describe.skipIf(!up)('runMigrations', () => {
         default_kind: 'DEFAULT',
         default_expression: 'toDateTime64(0, 3, \'UTC\')',
       }]);
+
+      const schedulerColumnsResult = await ch.query({
+        query: `SELECT table, name, type, default_kind, default_expression
+          FROM system.columns
+          WHERE database = {database:String}
+            AND (table, name) IN (
+              ('plans', 'observed_at'),
+              ('agents', 'assignment_fence')
+            )
+          ORDER BY table`,
+        query_params: { database: db },
+        format: 'JSONEachRow',
+      });
+      expect(await schedulerColumnsResult.json()).toEqual([
+        {
+          table: 'agents',
+          name: 'assignment_fence',
+          type: 'UInt64',
+          default_kind: 'DEFAULT',
+          default_expression: '0',
+        },
+        {
+          table: 'plans',
+          name: 'observed_at',
+          type: "DateTime64(3, 'UTC')",
+          default_kind: 'DEFAULT',
+          default_expression: "toDateTime64(0, 3, 'UTC')",
+        },
+      ]);
 
       const rowHashTables = ['agents', 'knowledge', 'plans', 'projects', 'prompts', 'tasks'];
       const rowHashResult = await ch.query({
@@ -361,10 +433,22 @@ describe.skipIf(!up)('runMigrations', () => {
           sorting_key: 'project_id, finding_id, finding_version, finding_hash, updated_at, created_at',
         },
         { name: 'knowledge', sorting_key: 'project_id, knowledge_id, row_hash' },
+        {
+          name: 'plan_acceptance_observations',
+          sorting_key: 'project_id, plan_id, version, row_hash, observed_at',
+        },
         { name: 'plans', sorting_key: 'project_id, plan_id, row_hash' },
         { name: 'projects', sorting_key: 'project_id, row_hash' },
         { name: 'prompts', sorting_key: 'prompt_name, prompt_version, row_hash' },
         { name: 'task_causal_entries', sorting_key: 'task_id, assignment_attempt_id, ordinal, entry_id' },
+        {
+          name: 'task_effect_ledger',
+          sorting_key: 'task_id, causation_id, stable_effect_id, effect_version, lease_fence',
+        },
+        {
+          name: 'task_lease_fence_observations',
+          sorting_key: 'task_id, source, lease_fence, source_identity',
+        },
         { name: 'tasks', sorting_key: 'project_id, task_id, row_hash' },
       ];
       const sortingResult = await ch.query({
@@ -381,12 +465,22 @@ describe.skipIf(!up)('runMigrations', () => {
       expect(await sortingResult.json()).toEqual(expectedSortingKeys);
 
       const auditEngineResult = await ch.query({
-        query: `SELECT engine FROM system.tables
-          WHERE database = {database:String} AND name = 'audit_findings'`,
+        query: `SELECT name, engine FROM system.tables
+          WHERE database = {database:String}
+            AND name IN (
+              'audit_findings',
+              'plan_acceptance_observations',
+              'plan_acceptance_observations_mv'
+            )
+          ORDER BY name`,
         query_params: { database: db },
         format: 'JSONEachRow',
       });
-      expect(await auditEngineResult.json()).toEqual([{ engine: 'MergeTree' }]);
+      expect(await auditEngineResult.json()).toEqual([
+        { name: 'audit_findings', engine: 'MergeTree' },
+        { name: 'plan_acceptance_observations', engine: 'MergeTree' },
+        { name: 'plan_acceptance_observations_mv', engine: 'MaterializedView' },
+      ]);
     } finally {
       await ch.close();
     }
@@ -714,6 +808,144 @@ describe.skipIf(!up)('runMigrations', () => {
     }
   });
 
+  it('yarıda kalan Faz 4 migrationını kolonlardan biri önceden ekliyken uzlaştırır', async () => {
+    const partialDb = `${db}_phase4_partial`;
+    const legacyProjectId = '41111111-1111-4111-8111-111111111111';
+    const legacyTaskId = '42222222-2222-4222-8222-222222222222';
+    const legacyCausationId = '43333333-3333-4333-8333-333333333333';
+    await admin.command({ query: `CREATE DATABASE ${partialDb}` });
+    try {
+      await runMigrations({
+        database: partialDb,
+        files: [
+          ...(await phase0Migrations()),
+          await migrationFile('0003_agent_communication.sql'),
+        ],
+      });
+      const ch = createCh({ database: partialDb });
+      try {
+        await ch.insert({
+          table: 'effect_ledger',
+          values: [{
+            causation_id: legacyCausationId,
+            stable_effect_id: 'phase4-partial-backfill',
+            project_id: legacyProjectId,
+            task_id: legacyTaskId,
+            effect_type: 'phase4_partial',
+            request_hash: '4'.repeat(64),
+            replay_safety: 'replay_safe',
+            state: 'pending',
+            effect_version: 1,
+            created_at: '2026-08-14T12:00:00.000Z',
+          }],
+          format: 'JSONEachRow',
+        });
+        await ch.command({
+          query: `ALTER TABLE plans
+            ADD COLUMN IF NOT EXISTS observed_at DateTime64(3, 'UTC')
+            DEFAULT toDateTime64(0, 3, 'UTC')`,
+        });
+        await ch.command({
+          query: `CREATE TABLE IF NOT EXISTS plan_acceptance_observations (
+              project_id UUID,
+              plan_id UUID,
+              version UInt64,
+              row_hash String,
+              observed_at DateTime64(3, 'UTC')
+            ) ENGINE = MergeTree
+            ORDER BY (project_id, plan_id, version, row_hash, observed_at)`,
+        });
+        await ch.command({
+          query: `CREATE MATERIALIZED VIEW IF NOT EXISTS plan_acceptance_observations_mv
+            TO plan_acceptance_observations AS
+            SELECT project_id, plan_id, version, row_hash,
+              if(
+                observed_at = toDateTime64(0, 3, 'UTC'),
+                created_at,
+                observed_at
+              ) AS observed_at
+            FROM plans`,
+        });
+      } finally {
+        await ch.close();
+      }
+
+      const phase4 = await migrationFile('0004_scheduler_fences.sql');
+      await expect(runMigrations({
+        database: partialDb,
+        files: [{
+          name: phase4.name,
+          sql: `${phase4.sql}\nSELECT throwIf(1, 'intentional phase4 projection failure');\n`,
+        }],
+      })).rejects.toThrow(/intentional phase4 projection failure/);
+      await expect(runMigrations({ database: partialDb, files: [phase4] }))
+        .resolves.toEqual({ applied: ['0004_scheduler_fences.sql'] });
+      await expect(runMigrations({ database: partialDb, files: [phase4] }))
+        .resolves.toEqual({ applied: [] });
+
+      const migrated = createCh({ database: partialDb });
+      try {
+        const columns = await migrated.query({
+          query: `SELECT table, name FROM system.columns
+            WHERE database = {database:String}
+              AND (table, name) IN (
+                ('plans', 'observed_at'),
+                ('agents', 'assignment_fence')
+              )
+            ORDER BY table`,
+          query_params: { database: partialDb },
+          format: 'JSONEachRow',
+        });
+        expect(await columns.json()).toEqual([
+          { table: 'agents', name: 'assignment_fence' },
+          { table: 'plans', name: 'observed_at' },
+        ]);
+        const sortingKey = await migrated.query({
+          query: `SELECT sorting_key FROM system.tables
+            WHERE database = {database:String} AND name = 'plans'`,
+          query_params: { database: partialDb },
+          format: 'JSONEachRow',
+        });
+        expect(await sortingKey.json()).toEqual([{
+          sorting_key: 'project_id, plan_id, row_hash',
+        }]);
+        const observationObjects = await migrated.query({
+          query: `SELECT name, engine FROM system.tables
+            WHERE database = {database:String}
+              AND name IN (
+                'plan_acceptance_observations',
+                'plan_acceptance_observations_mv'
+              )
+            ORDER BY name`,
+          query_params: { database: partialDb },
+          format: 'JSONEachRow',
+        });
+        expect(await observationObjects.json()).toEqual([
+          { name: 'plan_acceptance_observations', engine: 'MergeTree' },
+          { name: 'plan_acceptance_observations_mv', engine: 'MaterializedView' },
+        ]);
+        const backfill = await migrated.query({
+          query: `SELECT
+              uniqExact(tuple(causation_id, stable_effect_id, effect_version, lease_fence)) AS effects,
+              countIf(source = 'effect' AND source_identity LIKE concat(
+                {causationId:String}, ':phase4-partial-backfill:%'
+              )) > 0 AS has_fence
+            FROM task_effect_ledger
+            CROSS JOIN task_lease_fence_observations
+            WHERE task_effect_ledger.task_id = {taskId:UUID}
+              AND task_lease_fence_observations.task_id = {taskId:UUID}`,
+          query_params: { taskId: legacyTaskId, causationId: legacyCausationId },
+          format: 'JSONEachRow',
+        });
+        expect(await backfill.json()).toEqual([{ effects: '1', has_fence: 1 }]);
+      } finally {
+        await migrated.close();
+      }
+    } finally {
+      await admin.command({ query: `DROP DATABASE IF EXISTS ${partialDb}` });
+    }
+  });
+
   it('dolu Faz 0 satırlarını yeni legacy varsayılanlarıyla okunabilir tutar', async () => {
     const legacyDb = `${db}_legacy`;
     const projectId = '11111111-1111-4111-8111-111111111111';
@@ -836,10 +1068,28 @@ describe.skipIf(!up)('runMigrations', () => {
 
       await runMigrations({
         database: legacyDb,
-        files: [await migrationFile('0003_agent_communication.sql')],
+        files: [
+          await migrationFile('0003_agent_communication.sql'),
+          await migrationFile('0004_scheduler_fences.sql'),
+        ],
       });
       const migrated = createCh({ database: legacyDb });
       try {
+        await migrated.command({ query: 'OPTIMIZE TABLE plans FINAL' });
+        await migrated.command({
+          query: `INSERT INTO plan_acceptance_observations
+              (project_id, plan_id, version, row_hash, observed_at)
+            SELECT project_id, plan_id, version, row_hash,
+              if(
+                observed_at = toDateTime64(0, 3, 'UTC'),
+                created_at,
+                observed_at
+              )
+            FROM plans WHERE plan_id = {planId:UUID}`,
+          query_params: { planId },
+        });
+        await migrated.command({ query: 'OPTIMIZE TABLE plan_acceptance_observations FINAL' });
+
         const taskResult = await migrated.query({
           query: 'SELECT title, task_brief_id, assignment_attempt_id, row_hash FROM tasks',
           format: 'JSONEachRow',
@@ -882,6 +1132,37 @@ describe.skipIf(!up)('runMigrations', () => {
           format: 'JSONEachRow',
         });
         expect(await legacyObservedResult.json()).toEqual([{ observed_at_ms: '0' }]);
+
+        const schedulerLegacyResult = await migrated.query({
+          query: `SELECT
+              toString(toUnixTimestamp64Milli(observed_at)) AS observed_at_ms
+            FROM plans WHERE plan_id = {planId:UUID}`,
+          query_params: { planId },
+          format: 'JSONEachRow',
+        });
+        expect(await schedulerLegacyResult.json()).toEqual([{ observed_at_ms: '0' }]);
+
+        const legacyAcceptanceResult = await migrated.query({
+          query: `SELECT count() AS count, uniqExact(observed_at) AS observed_count,
+              toString(toUnixTimestamp64Milli(min(observed_at))) AS observed_at_ms
+            FROM plan_acceptance_observations
+            WHERE plan_id = {planId:UUID}`,
+          query_params: { planId },
+          format: 'JSONEachRow',
+        });
+        expect(await legacyAcceptanceResult.json()).toEqual([{
+          count: '2',
+          observed_count: '1',
+          observed_at_ms: String(Date.parse(timestamp)),
+        }]);
+
+        const agentFenceResult = await migrated.query({
+          query: `SELECT toString(assignment_fence) AS assignment_fence
+            FROM agents WHERE agent_id = {agentId:UUID}`,
+          query_params: { agentId },
+          format: 'JSONEachRow',
+        });
+        expect(await agentFenceResult.json()).toEqual([{ assignment_fence: '0' }]);
 
         const messageResult = await migrated.query({
           query: `SELECT content, model_ref, protocol_version, payload_version, payload_json,

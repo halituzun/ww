@@ -186,15 +186,49 @@ async function readAssignmentAttemptRows(ch: ClickHouseClient, assignmentAttempt
   return (await result.json<unknown>()).map(parseAssignmentAttemptRow);
 }
 
+function foldAssignmentAttempts(
+  entity: string,
+  rows: readonly AssignmentAttemptV1[],
+): AssignmentAttemptV1 {
+  const maximumFence = rows.reduce(
+    (maximum, attempt) => BigInt(attempt.leaseFence) > maximum
+      ? BigInt(attempt.leaseFence)
+      : maximum,
+    0n,
+  );
+  const candidates = rows.filter((attempt) => BigInt(attempt.leaseFence) === maximumFence);
+  return reconcileImmutable(entity, candidates[0]!, candidates);
+}
+
+function reconcileAssignmentAttemptWrite(
+  entity: string,
+  expected: AssignmentAttemptV1,
+  observed: readonly AssignmentAttemptV1[],
+): AssignmentAttemptV1 {
+  const winner = foldAssignmentAttempts(entity, observed);
+  if (winner.leaseFence > expected.leaseFence) return winner;
+  return reconcileImmutable(entity, expected, observed.filter(
+    (attempt) => attempt.leaseFence === expected.leaseFence,
+  ));
+}
+
 export async function getAssignmentAttempt(ch: ClickHouseClient, assignmentAttemptId: string): Promise<AssignmentAttemptV1 | null> {
   const rows = await readAssignmentAttemptRows(ch, assignmentAttemptId);
-  return rows.length === 0 ? null : reconcileImmutable(`assignmentAttempt:${assignmentAttemptId}`, rows[0]!, rows);
+  return rows.length === 0
+    ? null
+    : foldAssignmentAttempts(`assignmentAttempt:${assignmentAttemptId}`, rows);
 }
 
 export async function appendAssignmentAttempt(ch: ClickHouseClient, value: AssignmentAttemptV1): Promise<AssignmentAttemptV1> {
   const attempt = AssignmentAttemptV1Schema.parse(value);
   const prior = await readAssignmentAttemptRows(ch, attempt.assignmentAttemptId);
-  if (prior.length > 0) return reconcileImmutable(`assignmentAttempt:${attempt.assignmentAttemptId}`, attempt, prior);
+  if (prior.length > 0) {
+    const entity = `assignmentAttempt:${attempt.assignmentAttemptId}`;
+    const winner = foldAssignmentAttempts(entity, prior);
+    if (winner.leaseFence >= attempt.leaseFence) {
+      return reconcileAssignmentAttemptWrite(entity, attempt, prior);
+    }
+  }
   const row = {
     assignment_attempt_id: attempt.assignmentAttemptId,
     contract_version: attempt.contractVersion,
@@ -223,7 +257,13 @@ export async function appendAssignmentAttempt(ch: ClickHouseClient, value: Assig
       error,
       () => readAssignmentAttemptRows(ch, attempt.assignmentAttemptId),
     );
-    if (observed.length > 0) return reconcileImmutable(`assignmentAttempt:${attempt.assignmentAttemptId}`, attempt, observed);
+    if (observed.length > 0) {
+      return reconcileAssignmentAttemptWrite(
+        `assignmentAttempt:${attempt.assignmentAttemptId}`,
+        attempt,
+        observed,
+      );
+    }
     throw uncertainWriteError(entity, error);
   }
   const observed = await readRowsAfterAcknowledgedWrite(
@@ -231,7 +271,11 @@ export async function appendAssignmentAttempt(ch: ClickHouseClient, value: Assig
     attempt,
     () => readAssignmentAttemptRows(ch, attempt.assignmentAttemptId),
   );
-  return reconcileImmutable(`assignmentAttempt:${attempt.assignmentAttemptId}`, attempt, observed);
+  return reconcileAssignmentAttemptWrite(
+    `assignmentAttempt:${attempt.assignmentAttemptId}`,
+    attempt,
+    observed,
+  );
 }
 
 const SNAPSHOT_COLUMNS = `prompt_input_snapshot_id, contract_version,

@@ -1,5 +1,6 @@
 import { createClient, type RedisClientType } from 'redis';
 import { EntityIdSchema, type EntityId, type WsEnvelope } from '@ww/shared';
+import type { TaskLockKey } from './redis-leases.js';
 
 export type WwRedis = RedisClientType;
 
@@ -654,6 +655,23 @@ function assertFileLockKey(key: FileLockKey): void {
   if (canonical !== key) throw new Error('Redis file lock key canonical degil');
 }
 
+function assertTaskLockKey(key: TaskLockKey): void {
+  const prefix = 'ww:task:';
+  const suffix = ':claim';
+  if (!key.startsWith(prefix) || !key.endsWith(suffix)) {
+    throw new Error('gecersiz Redis task lease key');
+  }
+  const taskId = EntityIdSchema.parse(key.slice(prefix.length, -suffix.length));
+  if (`${prefix}${taskId}${suffix}` !== key) throw new Error('Redis task lease key canonical degil');
+}
+
+function taskLeaseFence(value: string): string {
+  if (!/^[1-9]\d*$/.test(value) || BigInt(value) > BigInt(Number.MAX_SAFE_INTEGER)) {
+    throw new Error('task lease fence pozitif safe integer olmalidir');
+  }
+  return value;
+}
+
 export async function acquireFileLock(
   r: WwRedis,
   key: FileLockKey,
@@ -686,6 +704,57 @@ export async function renewFileLock(
   return decodeRedisBoolean(result, 'Redis file lock renew');
 }
 
+/** Reads only the current owner projection; callers must still use compare-and-delete to release. */
+export async function getFileLockOwner(
+  r: WwRedis,
+  key: FileLockKey,
+): Promise<string | null> {
+  assertFileLockKey(key);
+  const owner = await r.get(key);
+  if (owner === null) return null;
+  return nonEmpty(owner, 'file lock owner');
+}
+
+export interface FileLockSnapshot {
+  readonly owner: string | null;
+  /** Redis PTTL semantics: -2 means absent, -1 means present without an expiry. */
+  readonly pttlMs: number;
+}
+
+const INSPECT_FILE_LOCK_LUA = `
+local owner = redis.call('get', KEYS[1])
+local pttl = redis.call('pttl', KEYS[1])
+return { owner, pttl }
+`;
+
+/** Atomically observes file-lock ownership and expiry from one Redis execution. */
+export async function inspectFileLock(
+  r: WwRedis,
+  key: FileLockKey,
+): Promise<FileLockSnapshot> {
+  assertFileLockKey(key);
+  const result: unknown = await r.eval(INSPECT_FILE_LOCK_LUA, { keys: [key] });
+  if (!Array.isArray(result) || result.length !== 2) {
+    throw new Error('Redis file lock inspect iki elemanli Lua sonucu dondurmelidir');
+  }
+  const [rawOwner, rawPttl] = result;
+  const owner = rawOwner === null ? null : nonEmpty(
+    typeof rawOwner === 'string' ? rawOwner : '',
+    'file lock owner',
+  );
+  if (!Number.isSafeInteger(rawPttl) || (rawPttl as number) < -2) {
+    throw new Error('Redis file lock inspect gecersiz PTTL dondurdu');
+  }
+  const pttlMs = rawPttl as number;
+  if (
+    (owner === null && pttlMs !== -2) ||
+    (owner !== null && pttlMs === -2)
+  ) {
+    throw new Error('Redis file lock inspect owner/PTTL sonucu tutarsiz');
+  }
+  return Object.freeze({ owner, pttlMs });
+}
+
 // Compare-and-delete: yalnızca sahibi bırakabilir.
 const RELEASE_LUA = `if redis.call('get', KEYS[1]) == ARGV[1] then return redis.call('del', KEYS[1]) else return 0 end`;
 
@@ -701,6 +770,116 @@ export async function releaseFileLock(
     arguments: [owner],
   });
   return decodeRedisBoolean(result, 'Redis file lock release');
+}
+
+const RELEASE_FILE_LOCK_UNDER_TASK_LEASE_LUA = `
+if redis.call('hget', KEYS[1], 'owner') ~= ARGV[1]
+  or redis.call('hget', KEYS[1], 'fence') ~= ARGV[2] then
+  return 0
+end
+if redis.call('get', KEYS[2]) ~= ARGV[3] then
+  return 0
+end
+return redis.call('del', KEYS[2])
+`;
+
+/** Deletes a rollback file lock only while the exact task lease still authorizes it. */
+export async function releaseFileLockUnderTaskLease(
+  r: WwRedis,
+  taskLeaseKey: TaskLockKey,
+  taskLeaseOwner: string,
+  taskLeaseFenceValue: string,
+  key: FileLockKey,
+  fileLockOwner: string,
+): Promise<boolean> {
+  assertTaskLockKey(taskLeaseKey);
+  nonEmpty(taskLeaseOwner, 'taskLeaseOwner');
+  taskLeaseFence(taskLeaseFenceValue);
+  assertFileLockKey(key);
+  nonEmpty(fileLockOwner, 'fileLockOwner');
+  const result: unknown = await r.eval(RELEASE_FILE_LOCK_UNDER_TASK_LEASE_LUA, {
+    keys: [taskLeaseKey, key],
+    arguments: [taskLeaseOwner, taskLeaseFenceValue, fileLockOwner],
+  });
+  return decodeRedisBoolean(result, 'Redis task-fenced file lock release');
+}
+
+const TRANSFER_FILE_LOCKS_LUA = `
+for index = 1, #KEYS do
+  if redis.call('get', KEYS[index]) ~= ARGV[1] then
+    return 0
+  end
+end
+for index = 1, #KEYS do
+  redis.call('set', KEYS[index], ARGV[2], 'EX', ARGV[3])
+end
+return 1
+`;
+
+const TRANSFER_OR_ACQUIRE_FILE_LOCKS_LUA = `
+for index = 1, #KEYS do
+  local owner = redis.call('get', KEYS[index])
+  if owner and owner ~= ARGV[1] and owner ~= ARGV[2] then
+    return 0
+  end
+end
+for index = 1, #KEYS do
+  redis.call('set', KEYS[index], ARGV[2], 'EX', ARGV[3])
+end
+return 1
+`;
+
+function assertCanonicalFileLockSet(keys: readonly FileLockKey[]): void {
+  for (const key of keys) assertFileLockKey(key);
+  if (new Set(keys).size !== keys.length || keys.some((key, index) => (
+    index > 0 && keys[index - 1]!.localeCompare(key) >= 0
+  ))) {
+    throw new Error('file lock anahtarlari tekil ve sirali olmalidir');
+  }
+}
+
+/** Atomically moves a complete, canonically sorted file-lock set to a new owner. */
+export async function transferFileLocks(
+  r: WwRedis,
+  keys: readonly FileLockKey[],
+  fromOwner: string,
+  toOwner: string,
+  ttlSec: number,
+): Promise<boolean> {
+  nonEmpty(fromOwner, 'fromOwner');
+  nonEmpty(toOwner, 'toOwner');
+  positiveInteger(ttlSec, 'ttlSec');
+  assertCanonicalFileLockSet(keys);
+  if (keys.length === 0 || fromOwner === toOwner) return true;
+  const result: unknown = await r.eval(TRANSFER_FILE_LOCKS_LUA, {
+    keys: [...keys],
+    arguments: [fromOwner, toOwner, String(ttlSec)],
+  });
+  return decodeRedisBoolean(result, 'Redis file lock transfer');
+}
+
+/**
+ * Atomically reconciles a complete lock set after handoff or Redis loss.
+ * Existing locks may belong to the previous/new owner or be absent; any foreign
+ * owner rejects the whole operation without changing a key.
+ */
+export async function transferOrAcquireFileLocks(
+  r: WwRedis,
+  keys: readonly FileLockKey[],
+  fromOwner: string,
+  toOwner: string,
+  ttlSec: number,
+): Promise<boolean> {
+  nonEmpty(fromOwner, 'fromOwner');
+  nonEmpty(toOwner, 'toOwner');
+  positiveInteger(ttlSec, 'ttlSec');
+  assertCanonicalFileLockSet(keys);
+  if (keys.length === 0) return true;
+  const result: unknown = await r.eval(TRANSFER_OR_ACQUIRE_FILE_LOCKS_LUA, {
+    keys: [...keys],
+    arguments: [fromOwner, toOwner, String(ttlSec)],
+  });
+  return decodeRedisBoolean(result, 'Redis file lock transfer-or-acquire');
 }
 
 export function decodeRedisBoolean(value: unknown, context: string): boolean {

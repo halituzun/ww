@@ -53,6 +53,38 @@ describe.skipIf(!up)('task causal entries repository', () => {
     expect(deterministicCausalEntryId(firstInput)).toBe(first.entry_id);
   });
 
+  it('fresh exact retry hazirlanmis stale causal yazisini fence ile ezer', async () => {
+    const staleInput = input({ lease_fence: '2' });
+    let stalePrepared: (() => void) | undefined;
+    let releaseStale: (() => void) | undefined;
+    const prepared = new Promise<void>((resolve) => { stalePrepared = resolve; });
+    const release = new Promise<void>((resolve) => { releaseStale = resolve; });
+    const delayed = new Proxy(ch, {
+      get(target, property) {
+        if (property === 'insert') return async (options: Parameters<ClickHouseClient['insert']>[0]) => {
+          if (options.table === 'task_causal_entries') {
+            stalePrepared?.();
+            await release;
+          }
+          return target.insert(options);
+        };
+        const member: unknown = Reflect.get(target, property, target);
+        return typeof member === 'function' ? member.bind(target) : member;
+      },
+    });
+    const staleWrite = appendTaskCausalEntry(delayed, staleInput);
+    await prepared;
+    const fresh = await appendTaskCausalEntry(ch, { ...staleInput, lease_fence: '3' });
+    releaseStale?.();
+
+    await expect(staleWrite).resolves.toEqual(fresh);
+    await expect(appendTaskCausalEntry(ch, { ...staleInput, lease_fence: '4' }))
+      .resolves.toMatchObject({ entry_id: fresh.entry_id, ordinal: 0, lease_fence: '4' });
+    await ch.command({ query: 'OPTIMIZE TABLE task_causal_entries FINAL' });
+    expect(await listTaskCausalEntries(ch, fresh.task_id, fresh.assignment_attempt_id))
+      .toMatchObject([{ entry_id: fresh.entry_id, ordinal: 0, lease_fence: '4' }]);
+  });
+
   it('read path ayni ordinalde farkli entry kimligini fail-closed reddeder', async () => {
     const base = await appendTaskCausalEntry(ch, input());
     await ch.insert({
@@ -117,39 +149,54 @@ describe.skipIf(!up)('task causal entries repository', () => {
     expect(injected).toBe(true);
   });
 
-  it('ambiguous attempt streaminden next ordinal ayirmaz veya yeni entry yazmaz', async () => {
-    for (const ambiguity of ['entry_id', 'ordinal'] as const) {
-      const first = await appendTaskCausalEntry(ch, input());
+  it('exact entry retryda en yuksek fence kazanir; farkli ordinal sahibi her fencede fail-closed olur', async () => {
+    const first = await appendTaskCausalEntry(ch, input());
+    await ch.insert({
+      table: 'task_causal_entries',
+      values: [{ ...first, lease_fence: '2' }],
+      format: 'JSONEachRow',
+    });
+    expect(await listTaskCausalEntries(ch, first.task_id, first.assignment_attempt_id))
+      .toMatchObject([{ entry_id: first.entry_id, ordinal: 0, lease_fence: '2' }]);
+
+    const lowerFenceCompeting = {
+      ...first,
+      entry_id: randomUUID(),
+      source_id: randomUUID(),
+      lease_fence: '1',
+    };
+    await ch.insert({
+      table: 'task_causal_entries',
+      values: [lowerFenceCompeting],
+      format: 'JSONEachRow',
+    });
+    await expect(listTaskCausalEntries(ch, first.task_id, first.assignment_attempt_id))
+      .rejects.toBeInstanceOf(RepositoryConflictError);
+
+    await ch.command({ query: 'OPTIMIZE TABLE task_causal_entries FINAL' });
+    await expect(listTaskCausalEntries(ch, first.task_id, first.assignment_attempt_id))
+      .rejects.toBeInstanceOf(RepositoryConflictError);
+  });
+
+  it('exact logical entry farkli fiziksel sirada en yuksek fence ile order-independent katlanir', async () => {
+    const entries = [];
+    for (const highFirst of [false, true]) {
+      const base = await appendTaskCausalEntry(ch, input());
+      const high = { ...base, lease_fence: '9' };
       await ch.insert({
         table: 'task_causal_entries',
-        values: [ambiguity === 'entry_id'
-          ? { ...first, lease_fence: '2' }
-          : { ...first, entry_id: randomUUID(), source_id: randomUUID() }],
+        values: highFirst ? [high, base] : [base, high],
         format: 'JSONEachRow',
       });
-      const nextInput = input({
-        task_id: first.task_id,
-        task_brief_id: first.task_brief_id,
-        assignment_attempt_id: first.assignment_attempt_id,
-      });
-      const nextEntryId = deterministicCausalEntryId(nextInput);
+      entries.push(base);
+      await expect(listTaskCausalEntries(ch, base.task_id, base.assignment_attempt_id))
+        .resolves.toMatchObject([{ entry_id: base.entry_id, ordinal: 0, lease_fence: '9' }]);
+    }
 
-      await expect(appendTaskCausalEntry(ch, nextInput)).rejects.toBeInstanceOf(
-        RepositoryConflictError,
-      );
-      const result = await ch.query({
-        query: `SELECT count() AS count FROM task_causal_entries
-          WHERE task_id = {taskId:UUID}
-            AND assignment_attempt_id = {assignmentAttemptId:UUID}
-            AND entry_id = {entryId:UUID}`,
-        query_params: {
-          taskId: first.task_id,
-          assignmentAttemptId: first.assignment_attempt_id,
-          entryId: nextEntryId,
-        },
-        format: 'JSONEachRow',
-      });
-      expect(await result.json()).toEqual([{ count: '0' }]);
+    await ch.command({ query: 'OPTIMIZE TABLE task_causal_entries FINAL' });
+    for (const base of entries) {
+      await expect(listTaskCausalEntries(ch, base.task_id, base.assignment_attempt_id))
+        .resolves.toMatchObject([{ entry_id: base.entry_id, ordinal: 0, lease_fence: '9' }]);
     }
   });
 

@@ -8,13 +8,20 @@ import {
   MAX_QUEUE_BLOCK_MS, MAX_RECLAIM_BATCH, MIN_RECLAIM_IDLE_MS,
   SUBSCRIPTION_CLEANUP_TIMEOUT_MS, ackQueue, acquireFileLock, checkHeartbeat,
   createQueueReader, createRedis, enqueueTask, ensureGroup, fileLockKey,
-  heartbeatKey, publishEvent, queueKey, readQueue, reclaimQueue, releaseFileLock,
-  renewFileLock, setHeartbeat, subscribeEvents, type FileLockKey, type QueueKey,
+  getFileLockOwner, heartbeatKey, inspectFileLock, publishEvent, queueKey, readQueue, reclaimQueue,
+  releaseFileLock,
+  releaseFileLockUnderTaskLease, renewFileLock, setHeartbeat, subscribeEvents,
+  transferFileLocks, transferOrAcquireFileLocks,
+  type FileLockKey, type QueueKey,
   type QueueMessage, type ReclaimedQueueMessage, type ReclaimQueueResult,
   type WwRedis,
 } from './redis.js';
-import { taskLockKey } from './redis-leases.js';
-import type { RedisLockKey } from './redis-leases.js';
+import {
+  acquireFencedLease,
+  releaseFencedLease,
+  taskLockKey,
+} from './redis-leases.js';
+import type { RedisLockKey, TaskLockKey } from './redis-leases.js';
 import { redisUp } from './testutil.js';
 
 const up = await redisUp();
@@ -405,6 +412,25 @@ describe('queue girdi sinirlari', () => {
     await expect(acquireFileLock(redis, forged, 'owner', 10)).rejects.toThrow(/file lock/);
     await expect(renewFileLock(redis, forged, 'owner', 10)).rejects.toThrow(/file lock/);
     await expect(releaseFileLock(redis, forged, 'owner')).rejects.toThrow(/file lock/);
+    await expect(transferOrAcquireFileLocks(redis, [forged], 'old', 'new', 10))
+      .rejects.toThrow(/file lock/);
+    const file = fileLockKey(randomUUID(), 'f'.repeat(40));
+    await expect(releaseFileLockUnderTaskLease(
+      redis,
+      file as unknown as TaskLockKey,
+      'task-owner',
+      '1',
+      file,
+      'file-owner',
+    )).rejects.toThrow(/task lease/);
+    await expect(releaseFileLockUnderTaskLease(
+      redis,
+      taskLockKey(randomUUID()),
+      'task-owner',
+      '0',
+      file,
+      'file-owner',
+    )).rejects.toThrow(/fence/);
     expect(redis.set).not.toHaveBeenCalled();
     expect(redis.eval).not.toHaveBeenCalled();
   });
@@ -437,7 +463,54 @@ describe('queue girdi sinirlari', () => {
         .rejects.toThrow(/0 veya 1/);
       await expect(releaseFileLock(redis, key, 'owner'))
         .rejects.toThrow(/0 veya 1/);
+      await expect(transferOrAcquireFileLocks(redis, [key], 'old', 'new', 10))
+        .rejects.toThrow(/0 veya 1/);
     }
+  });
+
+  it('file lock atomik snapshot sonucunu strict decode eder', async () => {
+    const key = fileLockKey(randomUUID(), '8'.repeat(40));
+    await expect(inspectFileLock({
+      eval: vi.fn(async () => ['owner', 12_345]),
+    } as unknown as WwRedis, key)).resolves.toEqual({ owner: 'owner', pttlMs: 12_345 });
+    await expect(inspectFileLock({
+      eval: vi.fn(async () => [null, -2]),
+    } as unknown as WwRedis, key)).resolves.toEqual({ owner: null, pttlMs: -2 });
+    for (const invalid of [
+      null,
+      ['owner'],
+      ['owner', '1000'],
+      [null, 1000],
+      ['owner', -2],
+      ['', 1000],
+    ]) {
+      await expect(inspectFileLock({
+        eval: vi.fn(async () => invalid),
+      } as unknown as WwRedis, key)).rejects.toThrow(/inspect|owner/);
+    }
+  });
+
+  it('file transfer siniri sirali ve tekil canonical anahtar ister', async () => {
+    const projectId = randomUUID();
+    const first = fileLockKey(projectId, 'a'.repeat(40));
+    const second = fileLockKey(projectId, 'b'.repeat(40));
+    const redis = { eval: vi.fn(async () => 1) } as unknown as WwRedis;
+    await expect(transferFileLocks(redis, [second, first], 'old', 'new', 10))
+      .rejects.toThrow(/sirali/);
+    await expect(transferFileLocks(redis, [first, first], 'old', 'new', 10))
+      .rejects.toThrow(/tekil/);
+    await expect(transferFileLocks(redis, [first, second], 'old', 'new', 10))
+      .resolves.toBe(true);
+    expect(redis.eval).toHaveBeenCalledWith(expect.any(String), {
+      keys: [first, second],
+      arguments: ['old', 'new', '10'],
+    });
+    await expect(transferOrAcquireFileLocks(redis, [second, first], 'old', 'new', 10))
+      .rejects.toThrow(/sirali/);
+    await expect(transferOrAcquireFileLocks(redis, [first, first], 'old', 'new', 10))
+      .rejects.toThrow(/tekil/);
+    await expect(transferOrAcquireFileLocks(redis, [first, second], 'old', 'new', 10))
+      .resolves.toBe(true);
   });
 });
 
@@ -617,12 +690,14 @@ describe.skipIf(!up)('redis yardımcıları', () => {
     const key = fileLockKey(randomUUID(), 'a'.repeat(40));
     cleanupKeys.add(key);
     expect(await acquireFileLock(r, key, 'owner-a', 10)).toBe(true);
+    expect(await getFileLockOwner(r, key)).toBe('owner-a');
     expect(await acquireFileLock(r, key, 'owner-b', 10)).toBe(false);
     expect(await renewFileLock(r, key, 'owner-b', 30)).toBe(false);
     expect(await renewFileLock(r, key, 'owner-a', 30)).toBe(true);
     expect(await r.ttl(key)).toBeGreaterThan(20);
     expect(await releaseFileLock(r, key, 'owner-b')).toBe(false);
     expect(await releaseFileLock(r, key, 'owner-a')).toBe(true);
+    expect(await getFileLockOwner(r, key)).toBeNull();
     expect(await acquireFileLock(r, key, 'owner-b', 10)).toBe(true);
     await r.del(key);
   });
@@ -635,6 +710,173 @@ describe.skipIf(!up)('redis yardımcıları', () => {
       expect(await r.exists(key)).toBe(0);
     }, { timeout: 2_000, interval: 25 });
     expect(await renewFileLock(r, key, 'owner-a', 10)).toBe(false);
+  });
+
+  it('file lock owner ve PTTL degerini gercek Redis Lua calismasinda atomik okur', async () => {
+    const key = fileLockKey(randomUUID(), '9'.repeat(40));
+    cleanupKeys.add(key);
+    expect(await inspectFileLock(r, key)).toEqual({ owner: null, pttlMs: -2 });
+    expect(await acquireFileLock(r, key, 'snapshot-owner', 30)).toBe(true);
+    const held = await inspectFileLock(r, key);
+    expect(held.owner).toBe('snapshot-owner');
+    expect(held.pttlMs).toBeGreaterThan(25_000);
+    expect(held.pttlMs).toBeLessThanOrEqual(30_000);
+    await r.persist(key);
+    expect(await inspectFileLock(r, key)).toEqual({ owner: 'snapshot-owner', pttlMs: -1 });
+    await releaseFileLock(r, key, 'snapshot-owner');
+    expect(await inspectFileLock(r, key)).toEqual({ owner: null, pttlMs: -2 });
+  });
+
+  it('rollback file kilidini yalniz exact task owner/fence hala gecerliyken siler', async () => {
+    const taskId = randomUUID();
+    const taskKey = taskLockKey(taskId);
+    const fenceKey = `${taskKey}:fence`;
+    const key = fileLockKey(randomUUID(), '0'.repeat(40));
+    cleanupKeys.add(taskKey);
+    cleanupKeys.add(fenceKey);
+    cleanupKeys.add(key);
+    const stale = await acquireFencedLease(r, taskKey, 'stale-cleanup', 30_000, '0');
+    if (stale === null) throw new Error('stale task lease alinamadi');
+    expect(await acquireFileLock(r, key, 'attempt-owner', 30)).toBe(true);
+    expect(await releaseFileLockUnderTaskLease(
+      r,
+      taskKey,
+      stale.owner,
+      stale.fence,
+      key,
+      'attempt-owner',
+    )).toBe(true);
+    expect(await getFileLockOwner(r, key)).toBeNull();
+
+    expect(await acquireFileLock(r, key, 'attempt-owner', 30)).toBe(true);
+    expect(await releaseFencedLease(r, stale)).toBe(true);
+    const fresh = await acquireFencedLease(r, taskKey, 'fresh-retry', 30_000, stale.fence);
+    if (fresh === null) throw new Error('fresh task lease alinamadi');
+    expect(await releaseFileLockUnderTaskLease(
+      r,
+      taskKey,
+      stale.owner,
+      stale.fence,
+      key,
+      'attempt-owner',
+    )).toBe(false);
+    expect(await getFileLockOwner(r, key)).toBe('attempt-owner');
+    expect(await releaseFileLockUnderTaskLease(
+      r,
+      taskKey,
+      fresh.owner,
+      fresh.fence,
+      key,
+      'foreign-owner',
+    )).toBe(false);
+    expect(await getFileLockOwner(r, key)).toBe('attempt-owner');
+    expect(await releaseFencedLease(r, fresh)).toBe(true);
+  });
+
+  it('file kilit setini sahiplik tam eslesirse atomik transfer eder', async () => {
+    const projectId = randomUUID();
+    const first = fileLockKey(projectId, 'c'.repeat(40));
+    const second = fileLockKey(projectId, 'd'.repeat(40));
+    cleanupKeys.add(first);
+    cleanupKeys.add(second);
+    expect(await acquireFileLock(r, first, 'owner-a', 10)).toBe(true);
+    expect(await acquireFileLock(r, second, 'intruder', 10)).toBe(true);
+    expect(await transferFileLocks(r, [first, second], 'owner-a', 'owner-b', 10)).toBe(false);
+    expect(await r.get(first)).toBe('owner-a');
+    expect(await r.get(second)).toBe('intruder');
+    expect(await releaseFileLock(r, second, 'intruder')).toBe(true);
+    expect(await acquireFileLock(r, second, 'owner-a', 10)).toBe(true);
+    expect(await transferFileLocks(r, [first, second], 'owner-a', 'owner-b', 20)).toBe(true);
+    expect(await r.get(first)).toBe('owner-b');
+    expect(await r.get(second)).toBe('owner-b');
+  });
+
+  it('file lock transfer-or-acquire old/new/expired karmasini atomik uzlastirir ve TTL yeniler', async () => {
+    const projectId = randomUUID();
+    const first = fileLockKey(projectId, '1'.repeat(40));
+    const second = fileLockKey(projectId, '2'.repeat(40));
+    const expired = fileLockKey(projectId, '3'.repeat(40));
+    for (const key of [first, second, expired]) cleanupKeys.add(key);
+    expect(await acquireFileLock(r, first, 'old-owner', 10)).toBe(true);
+    expect(await acquireFileLock(r, second, 'new-owner', 10)).toBe(true);
+    expect(await acquireFileLock(r, expired, 'old-owner', 10)).toBe(true);
+    await r.del(expired);
+
+    expect(await transferOrAcquireFileLocks(
+      r,
+      [first, second, expired],
+      'old-owner',
+      'new-owner',
+      30,
+    )).toBe(true);
+    for (const key of [first, second, expired]) {
+      expect(await getFileLockOwner(r, key)).toBe('new-owner');
+      expect(await r.ttl(key)).toBeGreaterThan(20);
+    }
+  });
+
+  it('file lock transfer-or-acquire foreign owner gorurse hicbir anahtari degistirmez', async () => {
+    const projectId = randomUUID();
+    const old = fileLockKey(projectId, '4'.repeat(40));
+    const absent = fileLockKey(projectId, '5'.repeat(40));
+    const foreign = fileLockKey(projectId, '6'.repeat(40));
+    for (const key of [old, absent, foreign]) cleanupKeys.add(key);
+    expect(await acquireFileLock(r, old, 'old-owner', 30)).toBe(true);
+    expect(await acquireFileLock(r, foreign, 'intruder', 30)).toBe(true);
+
+    expect(await transferOrAcquireFileLocks(
+      r,
+      [old, absent, foreign],
+      'old-owner',
+      'new-owner',
+      30,
+    )).toBe(false);
+    expect(await getFileLockOwner(r, old)).toBe('old-owner');
+    expect(await getFileLockOwner(r, absent)).toBeNull();
+    expect(await getFileLockOwner(r, foreign)).toBe('intruder');
+  });
+
+  it('file lock transfer-or-acquire accepted-response kaybinda exact retry ile uzlasir', async () => {
+    const projectId = randomUUID();
+    const first = fileLockKey(projectId, '7'.repeat(40));
+    const second = fileLockKey(projectId, '8'.repeat(40));
+    for (const key of [first, second]) cleanupKeys.add(key);
+    expect(await acquireFileLock(r, first, 'old-owner', 10)).toBe(true);
+    let loseResponse = true;
+    const uncertain = new Proxy(r, {
+      get(target, property) {
+        if (property === 'eval') return async (
+          script: Parameters<WwRedis['eval']>[0],
+          options: Parameters<WwRedis['eval']>[1],
+        ) => {
+          const result = await target.eval(script, options);
+          if (loseResponse) {
+            loseResponse = false;
+            throw new Error('simulated Redis response loss after accepted eval');
+          }
+          return result;
+        };
+        const member: unknown = Reflect.get(target, property, target);
+        return typeof member === 'function' ? member.bind(target) : member;
+      },
+    });
+
+    await expect(transferOrAcquireFileLocks(
+      uncertain,
+      [first, second],
+      'old-owner',
+      'new-owner',
+      30,
+    )).rejects.toThrow(/response loss/);
+    expect(await getFileLockOwner(r, first)).toBe('new-owner');
+    expect(await getFileLockOwner(r, second)).toBe('new-owner');
+    await expect(transferOrAcquireFileLocks(
+      r,
+      [first, second],
+      'old-owner',
+      'new-owner',
+      30,
+    )).resolves.toBe(true);
   });
 
   it('pending mesaji ancak idle esigi dolunca reclaim eder ve sayaci artirir', async () => {

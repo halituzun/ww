@@ -23,7 +23,6 @@ import {
   nextRepositoryVersion,
   readRowsAfterAcknowledgedWrite,
   readAfterUncertainWrite,
-  reconcileVersionedWrite,
   storedDateTime,
   storedEnum,
   storedRecord,
@@ -51,19 +50,21 @@ export interface AgentRow {
   readonly tasks_rejected: number;
   readonly created_at: string;
   readonly updated_at: string;
+  readonly assignment_fence: UInt64String;
   readonly version: UInt64String;
 }
 
-export type CreateAgentInput = Omit<AgentRow, 'version'>;
+export type CreateAgentInput = Omit<AgentRow, 'version' | 'assignment_fence'>;
 
 export interface AppendAgentVersionInput {
   readonly expectedVersion: UInt64String;
-  readonly next: Omit<AgentRow, 'version'>;
+  readonly assignmentFence: UInt64String;
+  readonly next: Omit<AgentRow, 'version' | 'assignment_fence'>;
 }
 
 const AGENT_COLUMNS = `agent_id, project_id, role, \`group\`, name, model_ref,
   parent_agent_id, clone_of, status, current_task_id, prompt_name, prompt_version,
-  tasks_done, tasks_rejected, created_at, updated_at, version, row_hash`;
+  tasks_done, tasks_rejected, created_at, updated_at, assignment_fence, version, row_hash`;
 const ROW_HASH = /^[0-9a-f]{64}$/;
 
 function agentRowHash(row: AgentRow): string {
@@ -84,8 +85,91 @@ function agentRowHash(row: AgentRow): string {
     row.tasks_rejected,
     row.created_at,
     row.updated_at,
+    row.assignment_fence,
     row.version,
   ]);
+}
+
+function legacyAgentRowHash(row: AgentRow): string {
+  return canonicalSha256V1([
+    row.agent_id,
+    row.project_id,
+    row.role,
+    row.group,
+    row.name,
+    row.model_ref,
+    row.parent_agent_id,
+    row.clone_of,
+    row.status,
+    row.current_task_id,
+    row.prompt_name,
+    row.prompt_version,
+    row.tasks_done,
+    row.tasks_rejected,
+    row.created_at,
+    row.updated_at,
+    row.version,
+  ]);
+}
+
+function agentCallerContentHash(row: AgentRow): string {
+  return canonicalSha256V1([
+    row.agent_id,
+    row.project_id,
+    row.role,
+    row.group,
+    row.name,
+    row.model_ref,
+    row.parent_agent_id,
+    row.clone_of,
+    row.status,
+    row.current_task_id,
+    row.prompt_name,
+    row.prompt_version,
+    row.tasks_done,
+    row.tasks_rejected,
+    row.created_at,
+    row.updated_at,
+  ]);
+}
+
+function reconcileAgentVersion(
+  entity: string,
+  observed: readonly AgentRow[],
+  expected?: AgentRow,
+): AgentRow {
+  if (observed.length === 0) {
+    throw new RepositoryConflictError(`${entity} surumu okunamadi`);
+  }
+  const version = observed[0]!.version;
+  if (observed.some((row) => row.version !== version)) {
+    throw new RepositoryConflictError(`${entity} farkli surumleri birlikte katlayamaz`);
+  }
+  const highestFence = observed.reduce(
+    (maximum, row) => BigInt(row.assignment_fence) > maximum
+      ? BigInt(row.assignment_fence)
+      : maximum,
+    0n,
+  );
+  const candidates = observed.filter((row) => BigInt(row.assignment_fence) === highestFence);
+  const baseline = candidates[0]!;
+  const baselineHash = canonicalSha256V1(baseline);
+  if (candidates.some((row) => canonicalSha256V1(row) !== baselineHash)) {
+    throw new RepositoryConflictError(
+      `${entity} ayni surum ve assignment fence icin farkli icerik barindiriyor`,
+    );
+  }
+  if (expected !== undefined) {
+    const expectedFence = BigInt(expected.assignment_fence);
+    if (
+      expected.version !== version ||
+      expectedFence > highestFence ||
+      agentCallerContentHash(expected) !== agentCallerContentHash(baseline)
+    ) {
+      throw new RepositoryConflictError(`${entity} beklenen assignment yazimini uzlastiramadi`);
+    }
+  }
+  return baseline;
 }
 
 function parseAgentRow(value: unknown): AgentRow {
@@ -124,11 +208,17 @@ function parseAgentRow(value: unknown): AgentRow {
     ),
     created_at: storedDateTime(row['created_at'], 'agents.created_at'),
     updated_at: storedDateTime(row['updated_at'], 'agents.updated_at'),
+    assignment_fence: row['assignment_fence'] === undefined
+      ? '0'
+      : storedUInt64(row['assignment_fence'], 'agents.assignment_fence'),
     version: storedUInt64(row['version'], 'agents.version'),
   });
   if (row['row_hash'] !== undefined) {
     const hash = storedString(row['row_hash'], 'agents.row_hash');
-    if (hash !== '' && (!ROW_HASH.test(hash) || hash !== agentRowHash(parsed))) {
+    const hashMatches = hash === agentRowHash(parsed) || (
+      parsed.assignment_fence === '0' && hash === legacyAgentRowHash(parsed)
+    );
+    if (hash !== '' && (!ROW_HASH.test(hash) || !hashMatches)) {
       throw new StoredRecordError('agents.row_hash integrity', { hash, row: parsed });
     }
   }
@@ -165,16 +255,19 @@ export async function getLatestAgent(
   const result = await ch.query({
     query: `SELECT ${AGENT_COLUMNS} FROM agents
       WHERE project_id = {projectId:UUID} AND agent_id = {agentId:UUID}
-      ORDER BY version DESC`,
+        AND version = (
+          SELECT max(version) FROM agents
+          WHERE project_id = {projectId:UUID} AND agent_id = {agentId:UUID}
+        )
+      ORDER BY assignment_fence DESC`,
     query_params: { projectId: project, agentId: agent },
     format: 'JSONEachRow',
   });
   const rows = (await result.json<unknown>()).map(parseAgentRow);
   if (rows.length === 0) return null;
   const maximum = rows[0]!.version;
-  return reconcileVersionedWrite(
+  return reconcileAgentVersion(
     `agent:${agent}`,
-    rows[0]!,
     rows.filter((row) => row.version === maximum),
   );
 }
@@ -194,7 +287,7 @@ export async function listLatestAgentsByStatus(
           WHERE project_id = {projectId:UUID}
           GROUP BY agent_id
         )
-      ORDER BY agent_id`,
+      ORDER BY agent_id ASC, assignment_fence DESC`,
     query_params: { projectId: project },
     format: 'JSONEachRow',
   });
@@ -205,7 +298,13 @@ export async function listLatestAgentsByStatus(
     grouped.set(row.agent_id, rows);
   }
   return [...grouped.values()]
-    .map((rows) => reconcileVersionedWrite(`agent:${rows[0]!.agent_id}`, rows[0]!, rows))
+    .map((rows) => {
+      const maximum = rows[0]!.version;
+      return reconcileAgentVersion(
+        `agent:${rows[0]!.agent_id}`,
+        rows.filter((row) => row.version === maximum),
+      );
+    })
     .filter((row) => row.status === state);
 }
 
@@ -221,15 +320,17 @@ export async function createAgent(
       ...input,
       project_id: projectId,
       agent_id: agentId,
+      assignment_fence: '0',
       version: current.version,
     });
-    if (canonicalSha256V1(current) === canonicalSha256V1(desired)) return current;
+    if (agentCallerContentHash(current) === agentCallerContentHash(desired)) return current;
     throw new RepositoryConflictError(`agent zaten var: ${agentId}`);
   }
   const row = parseAgentRow({
     ...input,
     project_id: projectId,
     agent_id: agentId,
+    assignment_fence: '0',
     version: nextRepositoryVersion(),
   });
   try {
@@ -240,7 +341,7 @@ export async function createAgent(
       error,
       () => readAgentVersion(ch, projectId, agentId, row.version),
     );
-    if (observed.length > 0) return reconcileVersionedWrite(`agent:${agentId}`, row, observed);
+    if (observed.length > 0) return reconcileAgentVersion(`agent:${agentId}`, observed, row);
     throw uncertainWriteError(`agent:${agentId}`, error);
   }
   const observed = await readRowsAfterAcknowledgedWrite(
@@ -248,7 +349,7 @@ export async function createAgent(
     row,
     () => readAgentVersion(ch, projectId, agentId, row.version),
   );
-  return reconcileVersionedWrite(`agent:${agentId}`, row, observed);
+  return reconcileAgentVersion(`agent:${agentId}`, observed, row);
 }
 
 export async function appendAgentVersion(
@@ -260,6 +361,7 @@ export async function appendAgentVersion(
   const current = await getLatestAgent(ch, projectId, agentId);
   if (current === null) throw new RepositoryNotFoundError(`agent bulunamadi: ${agentId}`);
   const expectedVersion = storedUInt64(input.expectedVersion, 'expectedVersion');
+  const assignmentFence = storedUInt64(input.assignmentFence, 'assignmentFence');
   if (current.version !== expectedVersion) {
     if (BigInt(current.version) < BigInt(expectedVersion)) {
       assertExpectedVersion(`agent:${agentId}`, current.version, expectedVersion);
@@ -268,17 +370,23 @@ export async function appendAgentVersion(
       ...input.next,
       project_id: projectId,
       agent_id: agentId,
+      assignment_fence: current.assignment_fence,
       version: current.version,
     });
     if (
-      canonicalSha256V1(current) === canonicalSha256V1(desired)
+      BigInt(current.assignment_fence) >= BigInt(assignmentFence) &&
+      agentCallerContentHash(current) === agentCallerContentHash(desired)
     ) return current;
     assertExpectedVersion(`agent:${agentId}`, current.version, expectedVersion);
+  }
+  if (BigInt(assignmentFence) < BigInt(current.assignment_fence)) {
+    throw new RepositoryConflictError(`agent assignment fence stale: ${agentId}`);
   }
   const row = parseAgentRow({
     ...input.next,
     project_id: projectId,
     agent_id: agentId,
+    assignment_fence: assignmentFence,
     version: nextRepositoryVersion(current.version),
   });
   if (row.created_at !== current.created_at) {
@@ -292,7 +400,7 @@ export async function appendAgentVersion(
       error,
       () => readAgentVersion(ch, projectId, agentId, row.version),
     );
-    if (observed.length > 0) return reconcileVersionedWrite(`agent:${agentId}`, row, observed);
+    if (observed.length > 0) return reconcileAgentVersion(`agent:${agentId}`, observed, row);
     throw uncertainWriteError(`agent:${agentId}`, error);
   }
   const observed = await readRowsAfterAcknowledgedWrite(
@@ -300,5 +408,5 @@ export async function appendAgentVersion(
     row,
     () => readAgentVersion(ch, projectId, agentId, row.version),
   );
-  return reconcileVersionedWrite(`agent:${agentId}`, row, observed);
+  return reconcileAgentVersion(`agent:${agentId}`, observed, row);
 }
