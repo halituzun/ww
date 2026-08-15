@@ -126,8 +126,10 @@ agent/task'i kuyruğa alıp ikinci restart'ta duplicate üretmediğini doğrular
 ## Faz 3 — Panel Temeli {#faz-3}
 
 **İlerleme (2026-08-15):** Proje listesi REST ucu, görev/mesaj REST akışları,
-`/events` WebSocket gateway'i ve project-scoped cursor replay'i çalışır. Panel
-canlı görev/zaman çizelgesi, proje seçici ve altyapı sağlık görünümünü sunar.
+  `/events` WebSocket gateway'i ve project-scoped cursor replay'i çalışır. Panel
+  canlı görev/zaman çizelgesi, proje seçici, proje duraklatma/devam/arşivleme ve
+  altyapı sağlık görünümünü sunar. Sağlık, maliyet ve API artifact uçları panelde
+  kullanılabilir.
 
 **Kapsam:**
 
@@ -199,7 +201,8 @@ tuvali, salt-okunur Monaco fihrist editörü, API test/maliyet konsolu ve sandbo
 
 **İlerleme (2026-08-15):** Docker sandbox executor, starter paketleme kapıları,
 kurulum dokümanı ve API/mobile starter şablonları hazırlandı. Web/API/mobile
-örnek kapıları executor'ın izole pipeline'ında çalıştırılır. Android AVD için
+örnek kapıları executor'ın izole pipeline'ında çalıştırılır. API artifact listesi
+ve panel test konsolu endpoint metadata'sını kullanır. Android AVD için
 güvenli injected `MobilePreviewPort`/frame/tap sözleşmesi ve preview iframe
 yüzeyi hazırdır; makineye özgü gerçek AVD adapter'ı deployment konfigürasyonudur.
 
