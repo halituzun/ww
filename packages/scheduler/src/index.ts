@@ -6,3 +6,5 @@ export * from './task-brief-service.js';
 export * from './assignment-service.js';
 export * from './scheduler-worker.js';
 export * from './phase1-orchestrator.js';
+export * from './orchestration-port.js';
+export * from './service-backed-orchestration.js';

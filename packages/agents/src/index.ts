@@ -14,3 +14,4 @@ export * from './worker-loop.js';
 export * from './verifier-loop.js';
 export * from './pm-loop.js';
 export * from './agent-runtime.js';
+export * from './runtime-bridge.js';

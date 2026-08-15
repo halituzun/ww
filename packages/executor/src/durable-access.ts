@@ -73,7 +73,7 @@ export class DurableExecutorAccess implements ExecutorAccessPort {
       attempt.taskBriefId !== input.taskBriefId ||
       attempt.assignmentAttemptId !== input.assignmentAttemptId ||
       attempt.leaseOwner !== input.leaseOwner ||
-      attempt.leaseFence !== input.leaseFence ||
+      input.leaseFence < attempt.leaseFence ||
       (attempt.workerAgentId !== input.agentId && attempt.verifierAgentId !== input.agentId)
     ) {
       throw new ExecutorError('LEASE_REQUIRED', 'Kalıcı assignment fence bağlamı eşleşmiyor');

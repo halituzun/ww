@@ -41,6 +41,7 @@ export interface TaskRow {
   readonly parent_task_id: StoredOptionalEntityId;
   readonly title: string;
   readonly description: string;
+  readonly acceptance_criteria: readonly string[];
   readonly status: TaskStatus;
   readonly priority: number;
   readonly issuer_agent_id: EntityId;
@@ -72,7 +73,7 @@ export interface AppendTaskVersionInput {
 }
 
 const TASK_COLUMNS = `task_id, project_id, plan_id, parent_task_id, title,
-  description, status, priority, issuer_agent_id, worker_agent_id,
+  description, acceptance_criteria, status, priority, issuer_agent_id, worker_agent_id,
   verifier_agent_id, \`group\`, depends_on, target_files, attempt, max_attempts,
   delegation_depth, token_budget, tokens_spent, commit_hash, result_summary,
   reject_reason, task_brief_id, assignment_attempt_id, created_at, updated_at,
@@ -87,6 +88,7 @@ function taskRowHash(row: TaskRow): string {
     row.parent_task_id,
     row.title,
     row.description,
+    [...row.acceptance_criteria],
     row.status,
     row.priority,
     row.issuer_agent_id,
@@ -111,6 +113,18 @@ function taskRowHash(row: TaskRow): string {
   ]);
 }
 
+function legacyTaskRowHash(row: TaskRow): string {
+  return canonicalSha256V1([
+    row.task_id, row.project_id, row.plan_id, row.parent_task_id, row.title,
+    row.description, row.status, row.priority, row.issuer_agent_id,
+    row.worker_agent_id, row.verifier_agent_id, row.group, [...row.depends_on],
+    [...row.target_files], row.attempt, row.max_attempts, row.delegation_depth,
+    row.token_budget, row.tokens_spent, row.commit_hash, row.result_summary,
+    row.reject_reason, row.task_brief_id, row.assignment_attempt_id,
+    row.created_at, row.updated_at, row.version,
+  ]);
+}
+
 function parseTaskRow(value: unknown): TaskRow {
   const row = storedRecord(value, 'tasks');
   const parsed: TaskRow = Object.freeze({
@@ -126,6 +140,7 @@ function parseTaskRow(value: unknown): TaskRow {
     ),
     title: storedString(row['title'], 'tasks.title'),
     description: storedString(row['description'], 'tasks.description'),
+    acceptance_criteria: storedStringArray(row['acceptance_criteria'] ?? [], 'tasks.acceptance_criteria'),
     status: storedEnum(row['status'], TASK_STATUSES, 'tasks.status'),
     priority: storedUnsignedInteger(row['priority'], 'tasks.priority', 9),
     issuer_agent_id: concreteEntityId(
@@ -169,7 +184,7 @@ function parseTaskRow(value: unknown): TaskRow {
   });
   if (row['row_hash'] !== undefined) {
     const hash = storedString(row['row_hash'], 'tasks.row_hash');
-    if (hash !== '' && (!ROW_HASH.test(hash) || hash !== taskRowHash(parsed))) {
+    if (hash !== '' && (!ROW_HASH.test(hash) || (hash !== taskRowHash(parsed) && hash !== legacyTaskRowHash(parsed)))) {
       throw new StoredRecordError('tasks.row_hash integrity', { hash, row: parsed });
     }
   }

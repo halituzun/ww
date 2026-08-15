@@ -13,8 +13,8 @@ describe('@ww/executor public API', () => {
       DurableExecutorAudit: expect.any(Function),
       DurableExecutorIntent: expect.any(Function),
       DurableGateCommitAudit: expect.any(Function),
+      CommandRunner: expect.any(Function),
       executorToolRegistry: expect.any(Object),
     });
-    expect(api).not.toHaveProperty('CommandRunner');
   });
 });

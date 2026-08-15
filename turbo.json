@@ -40,6 +40,11 @@
         "WW_REQUIRE_INTEGRATION"
       ]
     },
+    "@ww/executor#test": {
+      "dependsOn": ["^build"],
+      "cache": false,
+      "passThroughEnv": ["WW_DOCKER_LIVE", "WW_EXECUTOR_IMAGE"]
+    },
     "@ww/scheduler#test": {
       "dependsOn": ["^build"],
       "cache": false,
@@ -61,7 +66,8 @@
         "WW_CH_URL",
         "WW_CH_USER",
         "WW_REDIS_URL",
-        "WW_REQUIRE_INTEGRATION"
+        "WW_REQUIRE_INTEGRATION",
+        "WW_LOCAL_SESSION_TOKEN"
       ]
     },
     "@ww/server#dev": {
@@ -75,7 +81,8 @@
         "WW_CH_USER",
         "WW_PANEL_ORIGINS",
         "WW_PORT",
-        "WW_REDIS_URL"
+        "WW_REDIS_URL",
+        "WW_LOCAL_SESSION_TOKEN"
       ]
     },
     "@ww/panel#build": {

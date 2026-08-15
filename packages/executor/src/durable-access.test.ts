@@ -70,6 +70,13 @@ describe('DurableExecutorAccess', () => {
     expect(test.state.loadFileLockOwner).toHaveBeenCalledWith(test.input.projectId, 'src/a.ts');
   });
 
+  it('assignment satırı immutable kalırken yeniden alınmış daha yüksek task fence kabul eder', async () => {
+    const test = fixture();
+    test.state.loadTaskLease = vi.fn(async () => ({ owner: 'scheduler:one', fence: '10' }));
+    await expect(new DurableExecutorAccess(test.state).assertAuthorized({ ...test.input, leaseFence: 10 })).resolves.toBeUndefined();
+    expect(test.attempt.leaseFence).toBe(9);
+  });
+
   it('stale task attempt veya durumunu LEASE_REQUIRED ile reddeder', async () => {
     const test = fixture();
     test.state.loadTask = vi.fn(async () => ({

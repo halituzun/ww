@@ -24,6 +24,10 @@ import type {
   GateCommitAuditPort,
 } from './ports.js';
 
+// Concrete repository identity for infrastructure-only gate audit rows.
+// NIL_UUID and SYSTEM_SENTINEL are intentionally rejected by EntityIdSchema.
+const EXECUTOR_AUDIT_ENTITY_ID = '00000000-0000-4000-8000-000000000001' as EntityId;
+
 export interface ExecutorEventStorePort {
   get(eventId: EntityId): Promise<EventRow | null>;
   append(event: AppendEventInput): Promise<EventRow>;
@@ -224,9 +228,13 @@ export class DurableGateCommitAudit implements GateCommitAuditPort {
         index: input.step.index,
         name: input.step.name,
       }),
-      projectId: NIL_UUID,
-      taskId: NIL_UUID,
-      agentId: NIL_UUID,
+      // Gate audits are infrastructure events and have no task principal.
+      // NIL_UUID is a valid optional-storage sentinel, but not a concrete
+      // EntityId; use the stable system sentinel so repository parsing remains
+      // strict while retaining the projectKey hash in the payload.
+      projectId: EXECUTOR_AUDIT_ENTITY_ID,
+      taskId: EXECUTOR_AUDIT_ENTITY_ID,
+      agentId: EXECUTOR_AUDIT_ENTITY_ID,
       eventType: 'test_run',
       toolName: 'executor_gate',
       payload: {
@@ -235,7 +243,9 @@ export class DurableGateCommitAudit implements GateCommitAuditPort {
         operationId: input.operationId,
         step: input.step,
       },
-      durationMs: input.step.durationMs,
+      // Sandbox timings may be fractional (performance.now); DB duration_ms
+      // is an unsigned integer contract.
+      durationMs: Math.max(0, Math.round(input.step.durationMs)),
       occurredAt: input.occurredAt,
     }), 'AUDIT_FAILED');
   }

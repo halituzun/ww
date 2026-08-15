@@ -187,6 +187,7 @@ describe.skipIf(!up)('runMigrations', () => {
       '0003_agent_communication.sql',
       '0004_scheduler_fences.sql',
       '0005_receipt_quarantine.sql',
+      '0006_task_acceptance_criteria.sql',
     ]);
     expect(secondApplied).toHaveLength(0);
   });
