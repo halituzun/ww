@@ -33,7 +33,7 @@ export class DelegationService {
     // The project is read from the parent task; this keeps delegation scoped
     // even when the caller only has a parent task id.
     const parentRows = await this.#ch.query({
-      query: `SELECT task_id, project_id, delegation_depth, token_budget, tokens_spent, issuer_agent_id
+      query: `SELECT task_id, project_id, parent_task_id, delegation_depth, token_budget, tokens_spent, issuer_agent_id
         FROM tasks WHERE task_id = {taskId:UUID} ORDER BY version DESC LIMIT 1`,
       query_params: { taskId: input.parentTaskId },
       format: 'JSONEachRow',
@@ -44,15 +44,29 @@ export class DelegationService {
     const projectId = String(raw['project_id']) as EntityId;
     const depth = Number(raw['delegation_depth']);
     const budget = Number(raw['token_budget']);
+    const spent = Number(raw['tokens_spent']);
     const maxDepth = input.maxDepth ?? 3;
     if (!Number.isSafeInteger(depth) || depth >= maxDepth) throw new DelegationError('delegation depth limiti asildi');
-    if (!Number.isSafeInteger(input.budget) || input.budget < 0 || input.budget > budget) throw new DelegationError('subtask budget parent kalan butcesini asiyor');
-    if (input.dependencies?.includes(input.parentTaskId)) throw new DelegationError('delegation dependency cycle');
+    if (!Number.isSafeInteger(spent) || spent < 0 || spent > budget) throw new DelegationError('parent token harcamasi gecersiz');
+    if (!Number.isSafeInteger(input.budget) || input.budget < 0 || input.budget > budget - spent) throw new DelegationError('subtask budget parent kalan butcesini asiyor');
+    const ancestors = new Set<string>([input.parentTaskId]);
+    let ancestor = String(raw['parent_task_id'] ?? NIL_UUID);
+    for (let depthGuard = 0; ancestor !== NIL_UUID && depthGuard < 64; depthGuard += 1) {
+      if (ancestors.has(ancestor)) throw new DelegationError('delegation parent cycle');
+      ancestors.add(ancestor);
+      const ancestorResult = await this.#ch.query({ query: `SELECT parent_task_id FROM tasks WHERE project_id = {projectId:UUID} AND task_id = {taskId:UUID} ORDER BY version DESC LIMIT 1`, query_params: { projectId, taskId: ancestor }, format: 'JSONEachRow' });
+      const ancestorRows = await ancestorResult.json<Record<string, unknown>>();
+      if (ancestorRows.length === 0) throw new DelegationError(`ancestor task bulunamadi: ${ancestor}`);
+      ancestor = String(ancestorRows[0]!['parent_task_id'] ?? NIL_UUID);
+    }
+    if (ancestor !== NIL_UUID) throw new DelegationError('delegation ancestor derinligi asildi');
     const dependencies = [...new Set(input.dependencies ?? [])];
     for (const dependency of dependencies) {
-      const dependencyResult = await this.#ch.query({ query: `SELECT parent_task_id FROM tasks WHERE task_id = {taskId:UUID} ORDER BY version DESC LIMIT 1`, query_params: { taskId: dependency }, format: 'JSONEachRow' });
+      const dependencyResult = await this.#ch.query({ query: `SELECT parent_task_id, project_id FROM tasks WHERE task_id = {taskId:UUID} ORDER BY version DESC LIMIT 1`, query_params: { taskId: dependency }, format: 'JSONEachRow' });
       const dependencyRows = await dependencyResult.json<Record<string, unknown>>();
       if (dependencyRows.length === 0) throw new DelegationError(`dependency task bulunamadi: ${dependency}`);
+      if (String(dependencyRows[0]!['project_id']) !== projectId) throw new DelegationError('dependency farkli projeye ait');
+      if (ancestors.has(dependency)) throw new DelegationError('delegation dependency cycle');
     }
     const now = new Date().toISOString();
     return createTask(this.#ch, {
