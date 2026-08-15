@@ -1,0 +1,51 @@
+{
+  "version": 1,
+  "inputs": [
+    ".prettierrc.json",
+    "eslint.config.js",
+    "index.html",
+    "package.json",
+    "pnpm-lock.yaml",
+    "pnpm-workspace.yaml",
+    "src/App.test.tsx",
+    "src/App.tsx",
+    "src/main.tsx",
+    "src/models/Task.ts",
+    "src/services/TaskService.ts",
+    "src/styles.css",
+    "src/test/setup.ts",
+    "src/viewmodels/useTaskListViewModel.ts",
+    "src/views/tasks/TaskListView.tsx",
+    "src/vite-env.d.ts",
+    "tsconfig.json",
+    "vite.config.ts"
+  ],
+  "discardedOutputs": ["node_modules", "dist", "coverage", ".turbo"],
+  "steps": [
+    {
+      "name": "install",
+      "command": "pnpm",
+      "args": ["install", "--frozen-lockfile"]
+    },
+    {
+      "name": "typecheck",
+      "command": "pnpm",
+      "args": ["run", "typecheck"]
+    },
+    {
+      "name": "lint",
+      "command": "pnpm",
+      "args": ["run", "lint"]
+    },
+    {
+      "name": "test",
+      "command": "pnpm",
+      "args": ["run", "test"]
+    },
+    {
+      "name": "build",
+      "command": "pnpm",
+      "args": ["run", "build"]
+    }
+  ]
+}

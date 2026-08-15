@@ -1,2 +1,11 @@
-// Phase 1 package boundary. Executor behavior lands in Phase 6.
-export {};
+export * from './errors.js';
+export * from './ports.js';
+export * from './tool-registry.js';
+export * from './capability-policy.js';
+export * from './durable-access.js';
+export * from './durable-audit.js';
+export * from './workspace-paths.js';
+export * from './sandbox.js';
+export * from './gate-runner.js';
+export * from './git-workspace.js';
+export * from './tool-executor.js';

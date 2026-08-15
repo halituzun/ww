@@ -1,0 +1,22 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "write_file",
+  "description": "Atomically replace a declared, locked workspace file.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "path": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 4096,
+      "pattern": "^[^\\u0000]+$",
+      "description": "Workspace-relative path to the declared target file."
+    },
+    "content": {
+      "type": "string",
+      "maxLength": 4194304,
+      "description": "Complete UTF-8 text content to write."
+    }
+  },
+  "required": ["path", "content"]
+}

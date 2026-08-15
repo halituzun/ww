@@ -445,29 +445,33 @@ output as authorization.
 
 ### Implement
 
-- [ ] Load schemas once, compile Ajv validators once, and expose the same schema
+- [x] Load schemas once, compile Ajv validators once, and expose the same schema
   objects as provider `ToolDef.parameters`.
-- [ ] Resolve paths relative to the task workspace. Reject absolute paths, `..`,
+- [x] Resolve paths relative to the task workspace. Reject absolute paths, `..`,
   `.git`, null bytes, symlink escapes, undeclared targets, and missing lock/fence.
-- [ ] Implement atomic writes via sibling temporary file + rename; preserve unrelated
+- [x] Implement atomic writes via sibling temporary file + rename; preserve unrelated
   user changes and never run broad cleanup.
-- [ ] Execute allowlisted binaries with argument arrays and `shell: false`; enforce
+- [x] Execute allowlisted binaries with argument arrays and `shell: false`; enforce
   deadline, output cap, process-tree termination, concurrency and brief capability.
-- [ ] Parse `ww.gate.json`, run gates in declared order, and return typed evidence.
-- [ ] Git diff/commit use the same command runner; commit only after successful gate
+- [x] Parse `ww.gate.json`, run gates in declared order, and return typed evidence.
+- [x] Git diff/commit use the same command runner; commit only after successful gate
   with `task(<short-id>): <title>`, then return the actual hash.
-- [ ] `ask_question`, `report_result`, and `submit_verdict` call narrow communication
+- [x] `ask_question`, `report_result`, and `submit_verdict` call narrow communication
   ports; they do not write DB/task state themselves.
-- [ ] Materialize the packaged starter into an empty workspace, install with frozen
+- [x] Materialize the packaged starter into an empty workspace, install with frozen
   lockfile, initialize Git, and prove its declared gate passes before agent edits.
 
 ### Verification
 
-- [ ] Tests cover path traversal, symlink escape, `.git`, scope/lock failures,
+- [x] Tests cover path traversal, symlink escape, `.git`, scope/lock failures,
   injection-shaped args, timeout, output truncation, process cleanup, gate order,
   gate failure, dirty unrelated file preservation, no commit before gate, and hash.
-- [ ] `pnpm --filter @ww/executor build && pnpm --filter @ww/executor test &&
+- [x] `pnpm --filter @ww/executor build && pnpm --filter @ww/executor test &&
   pnpm --filter @ww/executor lint`.
+
+**Evidence:** executor 87 unit tests and 4 live ClickHouse/Docker tests passed;
+root build and lint passed 9/9 tasks, serial root tests passed 648/648, and
+diff/pack cleanliness checks passed.
 
 ### Anti-patterns
 

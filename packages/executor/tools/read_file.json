@@ -1,0 +1,29 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "read_file",
+  "description": "Read a bounded section of a declared, workspace-relative file.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "path": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 4096,
+      "pattern": "^[^\\u0000]+$",
+      "description": "Workspace-relative path to the file."
+    },
+    "offset": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 10000000,
+      "description": "Zero-based byte offset at which reading starts."
+    },
+    "limit": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 1048576,
+      "description": "Maximum number of bytes to return."
+    }
+  },
+  "required": ["path"]
+}
