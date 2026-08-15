@@ -1,0 +1,1 @@
+{"version":1,"inputs":["README.md"],"steps":[{"name":"starter","argv":["node","-e","process.stdout.write('mobile starter')"]}]}

@@ -1,0 +1,1 @@
+{"version":1,"inputs":["package.json","src/server.mjs"],"steps":[{"name":"build","argv":["node","--check","src/server.mjs"]},{"name":"test","argv":["node","--test"]}]}

@@ -1,0 +1,1 @@
+{"name":"ww-api-starter","private":true,"type":"module","scripts":{"gate":"node src/server.mjs","test":"node --test","build":"node --check src/server.mjs"}}
