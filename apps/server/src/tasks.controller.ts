@@ -12,4 +12,6 @@ export class TasksController {
   }
   @Get(':taskId')
   get(@Param('projectId') projectId: string, @Param('taskId') taskId: string) { return this.tasks.get(projectId, taskId); }
+  @Get()
+  list(@Param('projectId') projectId: string) { return this.tasks.list(projectId); }
 }

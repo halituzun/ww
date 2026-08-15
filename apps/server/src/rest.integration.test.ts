@@ -69,6 +69,13 @@ describe.skipIf(probeCh === undefined || probeRedis === undefined)('REST gerçek
     expect(dependent.body.depends_on).toEqual([task.body.task_id]);
     const finalTask = await request(app.getHttpServer()).post(`/projects/${projectId}/tasks`).set('Authorization', `Bearer ${token}`).send({ title: 'Final task', acceptanceCriteria: ['must ship'], dependencies: [dependent.body.task_id], files: ['src/c.ts'], budget: 3 }).expect(201);
     expect(finalTask.body.depends_on).toEqual([dependent.body.task_id]);
+    await request(app.getHttpServer()).get(`/projects/${projectId}/tasks`).expect(200).then((response) => {
+      expect(new Set(response.body.map((row: { task_id: string }) => row.task_id))).toEqual(new Set([
+        task.body.task_id,
+        dependent.body.task_id,
+        finalTask.body.task_id,
+      ]));
+    });
     await request(app.getHttpServer()).post(`/projects/${projectId}/messages`).send({ kind: 'user_command', text: 'unauthorized' }).expect(401);
     await request(app.getHttpServer()).post(`/projects/${projectId}/messages`).set('Authorization', `Bearer ${token}`).send({ kind: 'answer', text: 'missing question reference' }).expect(400);
     const message = await request(app.getHttpServer()).post(`/projects/${projectId}/messages`).set('Authorization', `Bearer ${token}`).send({ kind: 'user_command', text: 'please inspect the task' }).expect(201);

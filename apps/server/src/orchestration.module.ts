@@ -16,6 +16,7 @@ import {
   enqueueTask,
   getLatestProject,
   getLatestTask,
+  listLatestTasksByStatus,
   listLatestAgents,
   getMessage,
   type ClickHouseClient,
@@ -56,7 +57,7 @@ export type MessageApplicationInput = Readonly<{ projectId: EntityId; principal:
 
 export interface ServerDatabase { readonly ch: ClickHouseClient; readonly redis?: WwRedis; }
 export interface ProjectApplication { create(input: ReturnType<typeof parseProjectInput>): Promise<ProjectRow>; get(projectId: string): Promise<ProjectRow | null>; }
-export interface TaskApplication { create(projectId: string, input: ReturnType<typeof parseTaskInput>): Promise<TaskRow>; get(projectId: string, taskId: string): Promise<TaskRow | null>; }
+export interface TaskApplication { create(projectId: string, input: ReturnType<typeof parseTaskInput>): Promise<TaskRow>; get(projectId: string, taskId: string): Promise<TaskRow | null>; list(projectId: string): Promise<TaskRow[]>; }
 export interface MessageApplication { send(input: MessageApplicationInput): Promise<unknown>; get(projectId: string, messageId: string): Promise<unknown>; }
 
 @Injectable()
@@ -91,6 +92,7 @@ export class TaskApplicationService implements TaskApplication {
     return task;
   }
   get(projectId: string, taskId: string): Promise<TaskRow | null> { return getLatestTask(this.database.ch, projectId, taskId); }
+  list(projectId: string): Promise<TaskRow[]> { return listLatestTasksByStatus(this.database.ch, projectId, 'queued'); }
 }
 
 @Injectable()
