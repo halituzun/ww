@@ -5,6 +5,7 @@ export * from './capability-policy.js';
 export * from './durable-access.js';
 export * from './durable-audit.js';
 export * from './workspace-paths.js';
+export * from './mobile-preview.js';
 export * from './sandbox.js';
 export * from './gate-runner.js';
 export * from './git-workspace.js';
