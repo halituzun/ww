@@ -539,25 +539,31 @@ prompt reconstruction on replay, or new model call after attribution-only failur
 
 ### Implement
 
-- [ ] Worker loop receives immutable brief/snapshot, calls only `ModelRouter`, and
+- [x] Worker loop receives immutable brief/snapshot, calls only `ModelRouter`, and
   calls it only through the invocation effect boundary, then executes only validated
   executor tool calls. It exits only on question/report,
   deadline/budget, or bounded loop failure.
-- [ ] Verifier receives task/criteria/standards/diff/summary, never worker reasoning;
+- [x] Verifier receives task/criteria/standards/diff/summary, never worker reasoning;
   it must call `submit_verdict` with the strict schema. Free text cannot transition.
-- [ ] PM handles user commands and direct worker questions only. No council, group
+- [x] PM handles user commands and direct worker questions only. No council, group
   lead, professor, clone or replan protocol in Phase 1.
-- [ ] Orchestrator connects scheduler ports to agent runtime without a package import
+- [x] Orchestrator connects scheduler ports to agent runtime without a package import
   cycle and follows assign → work/question → answer → report → verify/reject →
   correction → gate → approve → commit/artifact → done.
-- [ ] Enforce max attempts: third persistent rejection becomes `escalated`.
+- [x] Enforce max attempts: third persistent rejection becomes `escalated`.
 
 ### Verification
 
-- [ ] Mock tests cover question/resume, one rejection/correction, verifier
+- [x] Mock tests cover question/resume, one rejection/correction, verifier
   independence, malformed/forged verdict, tool injection, gate failure, attempt
   limit, provider fallback and clean terminal state.
-- [ ] Agents and scheduler targeted build/test/lint pass with live DB/Redis.
+- [x] Agents and scheduler targeted build/test/lint pass with live DB/Redis.
+
+**Evidence:** agents 49 tests, scheduler 62 tests; root 14/14 test tasks,
+build 9/9 and lint 9/9 pass. MockProvider question/resume, rejection/correction,
+verifier independence, strict malformed/forged verdict, tool injection,
+gate failure, attempt escalation, fallback and clean terminal scenarios pass.
+Root integration gates pass; diff, secret and scope checks are clean.
 
 ### Anti-patterns
 

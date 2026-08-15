@@ -1,0 +1,103 @@
+import { EntityIdSchema, type AssignmentAttemptV1, type EntityId, type StructuredVerdictV1, type TaskBriefV1, type TaskStatus } from '@ww/shared';
+
+/** Narrow bridge owned by server composition; scheduler does not import agents. */
+export interface Phase1RuntimePort {
+  work(input: Readonly<{ brief: TaskBriefV1; attempt: AssignmentAttemptV1 }>): Promise<Readonly<{ kind: 'question' | 'report' | 'failure'; summary?: string; question?: string; questionMessageId?: EntityId }>>;
+  verify(input: Readonly<{ brief: TaskBriefV1; attempt: AssignmentAttemptV1; summary: string }>): Promise<Readonly<{ verdict: StructuredVerdictV1; diff: string }>>;
+}
+
+export interface Phase1SchedulerPort {
+  assign(taskId: EntityId): Promise<AssignmentAttemptV1>;
+  awaitUserAnswer(input: Readonly<{ taskId: EntityId; attempt: AssignmentAttemptV1; question: string; questionMessageId?: EntityId }>): Promise<void>;
+  resumeUserAnswer(input: Readonly<{ projectId: EntityId; taskId: EntityId; taskBriefId: EntityId; previousAttemptId: EntityId; questionMessageId: EntityId; replyMessageId: EntityId; answer: string }>): Promise<AssignmentAttemptV1>;
+  handleExecutionError(input: Readonly<{ taskId: EntityId; attempt: AssignmentAttemptV1; phase: 'working' | 'verifying' | 'testing' | 'committing'; error: unknown }>): Promise<TaskStatus>;
+  transition(input: Readonly<{ taskId: EntityId; attempt: AssignmentAttemptV1; action: 'start_work' | 'report_result' | 'verifier_approved' | 'gate_passed' | 'commit_completed' | 'fail'; evidenceRefs?: readonly string[] }>): Promise<Readonly<{ status: TaskStatus }>>;
+  reassign(input: Readonly<{ taskId: EntityId; reason: 'retry_after_rejection' | 'retry_after_gate_failure'; evidenceRefs: readonly string[] }>): Promise<AssignmentAttemptV1>;
+  escalate(input: Readonly<{ taskId: EntityId; attempt: AssignmentAttemptV1; reason: string }>): Promise<void>;
+  gate(input: Readonly<{ taskId: EntityId; attempt: AssignmentAttemptV1 }>): Promise<Readonly<{ passed: boolean; evidenceRefs: readonly string[] }>>;
+  commit(input: Readonly<{ taskId: EntityId; attempt: AssignmentAttemptV1 }>): Promise<Readonly<{ commitHash: string }>>;
+}
+
+export interface Phase1OrchestratorInput { readonly taskId: EntityId; readonly brief: TaskBriefV1; readonly scheduler: Phase1SchedulerPort; readonly runtime: Phase1RuntimePort; readonly maxAttempts?: number; }
+export interface Phase1OrchestratorResult { readonly status: TaskStatus; readonly attempts: number; readonly commitHash?: string; }
+export interface Phase1ResumeInput extends Omit<Phase1OrchestratorInput, 'taskId'> { readonly taskId: EntityId; readonly replyMessageId: EntityId; readonly answer: string; readonly questionMessageId: EntityId; readonly previousAttemptId: EntityId; }
+export class Phase1OrchestratorError extends Error { constructor(message: string) { super(message); this.name = 'Phase1OrchestratorError'; } }
+
+function boundedAttempts(value: number | undefined): number {
+  const attempts = value ?? 3;
+  if (!Number.isSafeInteger(attempts) || attempts < 1 || attempts > 3) throw new Phase1OrchestratorError('maxAttempts 1 ile 3 arasında güvenli tam sayı olmalıdır');
+  return attempts;
+}
+
+async function runAssignedLifecycle(input: Phase1OrchestratorInput, initialAttempt: AssignmentAttemptV1, maxAttempts: number, initialCount: number): Promise<Phase1OrchestratorResult> {
+  let attempt = initialAttempt;
+  for (let attempts = initialCount; attempts <= maxAttempts; attempts += 1) {
+    await input.scheduler.transition({ taskId: input.taskId, attempt, action: 'start_work' });
+    const work = await input.runtime.work({ brief: input.brief, attempt });
+    if (work.kind === 'question') {
+      if (work.question === undefined || work.question.trim() === '') throw new Phase1OrchestratorError('worker sorusu boş olamaz');
+      if (work.questionMessageId !== undefined) EntityIdSchema.parse(work.questionMessageId);
+      await input.scheduler.awaitUserAnswer({ taskId: input.taskId, attempt, question: work.question, ...(work.questionMessageId === undefined ? {} : { questionMessageId: work.questionMessageId }) });
+      return { status: 'waiting_user', attempts };
+    }
+    if (work.kind === 'failure') {
+      await input.scheduler.transition({ taskId: input.taskId, attempt, action: 'fail' });
+      return { status: 'failed', attempts };
+    }
+    if (work.summary === undefined || work.summary.trim() === '') throw new Phase1OrchestratorError('worker raporu boş olamaz');
+    await input.scheduler.transition({ taskId: input.taskId, attempt, action: 'report_result' });
+    const checked = await input.runtime.verify({ brief: input.brief, attempt, summary: work.summary });
+    if (checked.verdict.decision === 'reject') {
+      if (attempts >= maxAttempts) {
+        await input.scheduler.escalate({ taskId: input.taskId, attempt, reason: 'verifier third persistent rejection' });
+        return { status: 'escalated', attempts };
+      }
+      attempt = await input.scheduler.reassign({ taskId: input.taskId, reason: 'retry_after_rejection', evidenceRefs: checked.verdict.evidenceRefs });
+      continue;
+    }
+    await input.scheduler.transition({ taskId: input.taskId, attempt, action: 'verifier_approved', evidenceRefs: checked.verdict.evidenceRefs });
+    const gate = await input.scheduler.gate({ taskId: input.taskId, attempt });
+    if (!gate.passed) {
+      if (attempts >= maxAttempts) {
+        await input.scheduler.escalate({ taskId: input.taskId, attempt, reason: 'gate failed at attempt limit' });
+        return { status: 'escalated', attempts };
+      }
+      attempt = await input.scheduler.reassign({ taskId: input.taskId, reason: 'retry_after_gate_failure', evidenceRefs: gate.evidenceRefs });
+      continue;
+    }
+    await input.scheduler.transition({ taskId: input.taskId, attempt, action: 'gate_passed', evidenceRefs: gate.evidenceRefs });
+    const commit = await input.scheduler.commit({ taskId: input.taskId, attempt });
+    await input.scheduler.transition({ taskId: input.taskId, attempt, action: 'commit_completed', evidenceRefs: [commit.commitHash] });
+    return { status: 'done', attempts, commitHash: commit.commitHash };
+  }
+  throw new Phase1OrchestratorError('orchestrator attempt sınırına ulaştı');
+}
+
+/** Executes one serial task lifecycle. All state changes remain scheduler-owned. */
+export async function runPhase1Orchestrator(input: Phase1OrchestratorInput): Promise<Phase1OrchestratorResult> {
+  const maxAttempts = boundedAttempts(input.maxAttempts);
+  const attempt = await input.scheduler.assign(input.taskId);
+  try {
+    return await runAssignedLifecycle(input, attempt, maxAttempts, 1);
+  } catch (error) {
+    const status = await input.scheduler.handleExecutionError({ taskId: input.taskId, attempt, phase: 'working', error });
+    return { status, attempts: 1 };
+  }
+}
+
+/** Resumes only an explicitly answered, exact pending question and starts a fresh attempt. */
+export async function resumePhase1Orchestrator(input: Phase1ResumeInput): Promise<Phase1OrchestratorResult> {
+  const maxAttempts = boundedAttempts(input.maxAttempts);
+  const replyMessageId = EntityIdSchema.parse(input.replyMessageId);
+  const questionMessageId = EntityIdSchema.parse(input.questionMessageId);
+  const previousAttemptId = EntityIdSchema.parse(input.previousAttemptId);
+  if (input.answer.trim() === '') throw new Phase1OrchestratorError('kullanıcı cevabı boş olamaz');
+  if (replyMessageId === questionMessageId) throw new Phase1OrchestratorError('cevap mesajı soru mesajıyla aynı olamaz');
+  const attempt = await input.scheduler.resumeUserAnswer({ projectId: input.brief.projectId, taskId: input.taskId, taskBriefId: input.brief.taskBriefId, previousAttemptId, questionMessageId, replyMessageId, answer: input.answer });
+  try {
+    return await runAssignedLifecycle(input, attempt, maxAttempts, 1);
+  } catch (error) {
+    const status = await input.scheduler.handleExecutionError({ taskId: input.taskId, attempt, phase: 'working', error });
+    return { status, attempts: 1 };
+  }
+}

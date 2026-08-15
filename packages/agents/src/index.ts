@@ -9,3 +9,8 @@ export * from './communication-service.js';
 export * from './effect-runner.js';
 export * from './inbox-worker.js';
 export * from './escalation-delivery.js';
+export * from './prompt-loader.js';
+export * from './worker-loop.js';
+export * from './verifier-loop.js';
+export * from './pm-loop.js';
+export * from './agent-runtime.js';
