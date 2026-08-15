@@ -65,6 +65,10 @@ describe.skipIf(probeCh === undefined || probeRedis === undefined)('REST gerçek
     expect(task.body.target_files).toEqual(['src/a.ts']);
     expect(task.body.token_budget).toBe(10);
     expect(await request(app.getHttpServer()).get(`/projects/${projectId}/tasks/${task.body.task_id}`).expect(200).then((response) => response.body.acceptance_criteria)).toEqual(['must compile']);
+    const dependent = await request(app.getHttpServer()).post(`/projects/${projectId}/tasks`).set('Authorization', `Bearer ${token}`).send({ title: 'Dependent task', acceptanceCriteria: ['must review'], dependencies: [task.body.task_id], files: ['src/b.ts'], budget: 5 }).expect(201);
+    expect(dependent.body.depends_on).toEqual([task.body.task_id]);
+    const finalTask = await request(app.getHttpServer()).post(`/projects/${projectId}/tasks`).set('Authorization', `Bearer ${token}`).send({ title: 'Final task', acceptanceCriteria: ['must ship'], dependencies: [dependent.body.task_id], files: ['src/c.ts'], budget: 3 }).expect(201);
+    expect(finalTask.body.depends_on).toEqual([dependent.body.task_id]);
     await request(app.getHttpServer()).post(`/projects/${projectId}/messages`).send({ kind: 'user_command', text: 'unauthorized' }).expect(401);
     const message = await request(app.getHttpServer()).post(`/projects/${projectId}/messages`).set('Authorization', `Bearer ${token}`).send({ kind: 'user_command', text: 'please inspect the task' }).expect(201);
     expect(message.body.messageId).toMatch(/^[0-9a-f-]{36}$/);

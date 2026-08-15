@@ -599,8 +599,8 @@ free-form verdict parser, Phase 4 hierarchy, or direct repository/task writes.
 
 ### End-to-end scenario
 
-- [ ] Start from a fresh temporary DB and Git workspace.
-- [ ] Seed an approved plan plus PM, worker, and independent verifier records with
+- [x] Start from a fresh temporary DB and Git workspace.
+- [x] Seed an approved plan plus PM, worker, and independent verifier records with
   deterministic model refs; bind all three tasks to that plan before enqueue.
 - [ ] Create project and three tasks, one dependency-gated.
 - [ ] Mock worker asks a question; authenticated user answers exact message.
