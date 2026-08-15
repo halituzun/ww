@@ -59,9 +59,11 @@ describe.skipIf(probeCh === undefined || probeRedis === undefined)('REST gerçek
     });
     const agentId = randomUUID();
     await createAgent(ch, { agent_id: agentId, project_id: projectId, role: 'pm', group: 'management', name: 'PM', model_ref: 'mock:pm', parent_agent_id: '00000000-0000-0000-0000-000000000000', clone_of: '00000000-0000-0000-0000-000000000000', status: 'idle', current_task_id: '00000000-0000-0000-0000-000000000000', prompt_name: 'role.pm', prompt_version: 2, tasks_done: 0, tasks_rejected: 0, created_at: new Date().toISOString(), updated_at: new Date().toISOString() });
-    const task = await request(app.getHttpServer()).post(`/projects/${projectId}/tasks`).set('Authorization', `Bearer ${token}`).send({ title: 'Persist criteria', acceptanceCriteria: ['must compile'], files: ['src/a.ts'], budget: 10 }).expect(201);
+    const task = await request(app.getHttpServer()).post(`/projects/${projectId}/tasks`).set('Authorization', `Bearer ${token}`).send({ title: 'Persist criteria', acceptanceCriteria: ['must compile'], dependencies: [], files: ['src/a.ts'], budget: 10 }).expect(201);
     expect(task.body.issuer_agent_id).toBe(agentId);
     expect(task.body.acceptance_criteria).toEqual(['must compile']);
+    expect(task.body.target_files).toEqual(['src/a.ts']);
+    expect(task.body.token_budget).toBe(10);
     expect(await request(app.getHttpServer()).get(`/projects/${projectId}/tasks/${task.body.task_id}`).expect(200).then((response) => response.body.acceptance_criteria)).toEqual(['must compile']);
     await request(app.getHttpServer()).post(`/projects/${projectId}/messages`).send({ kind: 'user_command', text: 'unauthorized' }).expect(401);
     const message = await request(app.getHttpServer()).post(`/projects/${projectId}/messages`).set('Authorization', `Bearer ${token}`).send({ kind: 'user_command', text: 'please inspect the task' }).expect(201);

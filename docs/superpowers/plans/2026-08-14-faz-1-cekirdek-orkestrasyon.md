@@ -587,14 +587,14 @@ free-form verdict parser, Phase 4 hierarchy, or direct repository/task writes.
 
 ### REST contract
 
-- [ ] `POST /projects` creates a project.
-- [ ] `POST /projects/:projectId/tasks` creates/enqueues a task with criteria,
+- [x] `POST /projects` creates a project.
+- [x] `POST /projects/:projectId/tasks` creates/enqueues a task with criteria,
   dependencies, files and budget.
-- [ ] `GET /projects/:projectId` and `GET /projects/:projectId/tasks/:taskId` return
+- [x] `GET /projects/:projectId` and `GET /projects/:projectId/tasks/:taskId` return
   latest projections.
 - [ ] `POST /projects/:projectId/messages` accepts user command/answer input but
   derives the user principal from the bearer session.
-- [ ] Mutating endpoints reject absent/invalid local session; DTOs use shared runtime
+- [x] Mutating endpoints reject absent/invalid local session; DTOs use shared runtime
   parsers. Controllers call application services only.
 
 ### End-to-end scenario
