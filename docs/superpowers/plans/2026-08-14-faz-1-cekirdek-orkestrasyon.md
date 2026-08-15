@@ -592,7 +592,7 @@ free-form verdict parser, Phase 4 hierarchy, or direct repository/task writes.
   dependencies, files and budget.
 - [x] `GET /projects/:projectId` and `GET /projects/:projectId/tasks/:taskId` return
   latest projections.
-- [ ] `POST /projects/:projectId/messages` accepts user command/answer input but
+- [x] `POST /projects/:projectId/messages` accepts user command/answer input but
   derives the user principal from the bearer session.
 - [x] Mutating endpoints reject absent/invalid local session; DTOs use shared runtime
   parsers. Controllers call application services only.
@@ -602,11 +602,11 @@ free-form verdict parser, Phase 4 hierarchy, or direct repository/task writes.
 - [x] Start from a fresh temporary DB and Git workspace.
 - [x] Seed an approved plan plus PM, worker, and independent verifier records with
   deterministic model refs; bind all three tasks to that plan before enqueue.
-- [ ] Create project and three tasks, one dependency-gated.
-- [ ] Mock worker asks a question; authenticated user answers exact message.
-- [ ] Worker writes a file and reports; independent verifier rejects once.
-- [ ] Worker corrects; verifier approves; tsc/eslint/vitest gate passes.
-- [ ] Commit is created and hash persists with artifacts/task/event records.
+- [x] Create project and three tasks, one dependency-gated.
+- [x] Mock worker asks a question; authenticated user answers exact message.
+- [x] Worker writes a file and reports; independent verifier rejects once.
+- [x] Worker corrects; verifier approves; tsc/eslint/vitest gate passes.
+- [x] Commit is created and hash persists with artifacts/task/event records.
 - [ ] Stop after a durable completed effect but before receipt, restart services, and
   prove no duplicate effect/commit/invocation; separately stop after an uncertain
   provider call and prove typed escalation without replay. Lost Redis wakeup is
