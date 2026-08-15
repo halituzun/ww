@@ -622,5 +622,21 @@ describe.skipIf(probe === undefined || probeRedis === undefined)('Phase 9 runtim
       verdictMessageId: randomUUID(),
     });
     expect(approved.status).toBe('testing');
+    const gated = await composition.taskTransitionService.apply(systemPrincipal('phase9-gate', new Date().toISOString()), {
+      ...transitionBase,
+      taskBriefId: corrected.taskBriefId,
+      assignmentAttemptId: corrected.assignmentAttemptId,
+      transitionRequestId: randomUUID(), causationId: randomUUID(), action: 'gate_passed',
+    });
+    expect(gated.status).toBe('approved');
+    const committed = await composition.taskTransitionService.apply(systemPrincipal('phase9-commit', new Date().toISOString()), {
+      ...transitionBase,
+      taskBriefId: corrected.taskBriefId,
+      assignmentAttemptId: corrected.assignmentAttemptId,
+      transitionRequestId: randomUUID(), causationId: randomUUID(), action: 'commit_completed',
+      commitHash: '0123456789abcdef0123456789abcdef01234567',
+      artifactIds: [randomUUID()],
+    });
+    expect(committed.status).toBe('done');
   }, 60_000);
 });
