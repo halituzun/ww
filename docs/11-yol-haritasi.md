@@ -99,7 +99,7 @@
 ## Faz 2 — Hafıza ve Dayanıklılık {#faz-2}
 
 **İlerleme (2026-08-15):** ContextPack/`memory_query`, bütün-chunk token
-bütçesi, özet/embedding yazma portları, startup `RecoveryService` ve scheduler
+bütçesi, özet/embedding/file-index yazma portları, startup `RecoveryService` ve scheduler
 token/maliyet/döngü/duvar-saati frenleri uygulandı. Server açılışında migration
 sonrası bounded proje recovery çalışır; kalan gerçek sağlayıcı embedding ve
 öldürülmüş süreç e2e senaryosu entegrasyon kapısında ayrıca izlenir.
@@ -176,10 +176,10 @@ ReplanningService eklendi; Phase4 policy rotaları fail-closed olarak genişleti
 
 ## Faz 5 — Tuval ve Dosya Gezgini {#faz-5}
 
-**İlerleme (2026-08-15):** Panelde canlı event timeline yanında görev tuvali ve
-hedef dosya fihristi görünümleri eklendi. React Flow/Monaco ve narrator
-entegrasyonu sonraki görsel derinleştirme işidir; mevcut görünüm güvenli
-salt-okunur başlangıç yüzeyidir.
+**İlerleme (2026-08-15):** Panelde canlı event timeline yanında görev tuvali,
+hedef dosya fihristi, API maliyet konsolu ve sandbox önizleme yüzeyi eklendi.
+Dosya içeriği hâlâ salt-okunur port üzerinden; narrator kanıt çekirdeği
+`packages/memory` içinde.
 
 **Kapsam:**
 
@@ -199,8 +199,9 @@ salt-okunur başlangıç yüzeyidir.
 
 **İlerleme (2026-08-15):** Docker sandbox executor, starter paketleme kapıları,
 kurulum dokümanı ve API/mobile starter şablonları hazırlandı. Web/API/mobile
-örnek kapıları executor'ın izole pipeline'ında çalıştırılır; gerçek Android AVD
-adaptörü ve önizleme iframe'i ayrıca ürünleştirme adımıdır.
+örnek kapıları executor'ın izole pipeline'ında çalıştırılır. Android AVD için
+güvenli injected `MobilePreviewPort`/frame/tap sözleşmesi ve preview iframe
+yüzeyi hazırdır; makineye özgü gerçek AVD adapter'ı deployment konfigürasyonudur.
 
 **Kapsam:**
 
