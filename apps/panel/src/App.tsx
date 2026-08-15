@@ -56,7 +56,13 @@ export default function App() {
     const socket = new WebSocket(`${apiBase.replace(/^http/, 'ws')}/events`);
     socket.onopen = () => socket.send(JSON.stringify({ event: 'subscribe', data: { projectId, afterSeq: 0 } }));
     socket.onmessage = (event) => {
-      try { setEvents((current) => [...current.slice(-99), JSON.parse(event.data) as EventItem]); } catch { /* malformed frames are ignored */ }
+      try {
+        const next = JSON.parse(event.data) as EventItem;
+        setEvents((current) => [...current.slice(-99), next]);
+        if (document.visibilityState !== 'visible' && 'Notification' in window && Notification.permission === 'granted') {
+          new Notification(`ww · ${next.event}`, { body: 'Proje zaman çizelgesinde yeni bir olay var.' });
+        }
+      } catch { /* malformed frames are ignored */ }
     };
     return () => socket.close();
   }, [projectId]);
@@ -74,10 +80,13 @@ export default function App() {
     try { const response = await fetch(`${apiBase}${apiPath}`); setApiResponse(`${response.status} ${await response.text()}`); }
     catch { setApiResponse('İstek başarısız'); }
   };
+  const enableNotifications = async () => {
+    if ('Notification' in window && Notification.permission === 'default') await Notification.requestPermission();
+  };
 
   return (
     <main className="shell">
-      <header className="topbar"><div><p className="eyebrow">ww / ORCHESTRATION</p><h1>Agent çalışma alanı</h1></div><input aria-label="Proje kimliği" placeholder="Proje UUID" value={projectId} onChange={(event) => setProjectId(event.target.value)} /></header>
+      <header className="topbar"><div><p className="eyebrow">ww / ORCHESTRATION</p><h1>Agent çalışma alanı</h1></div><div className="topbar-actions"><button type="button" onClick={() => void enableNotifications()}>Bildirimleri aç</button><input aria-label="Proje kimliği" placeholder="Proje UUID" value={projectId} onChange={(event) => setProjectId(event.target.value)} /></div></header>
 
       <section className={`status-card status-card--${state}`} aria-live="polite">
         <div>

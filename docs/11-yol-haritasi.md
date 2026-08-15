@@ -101,8 +101,8 @@
 **İlerleme (2026-08-15):** ContextPack/`memory_query`, bütün-chunk token
 bütçesi, özet/embedding/file-index yazma portları, startup `RecoveryService` ve scheduler
 token/maliyet/döngü/duvar-saati frenleri uygulandı. Server açılışında migration
-sonrası bounded proje recovery çalışır; kalan gerçek sağlayıcı embedding ve
-öldürülmüş süreç e2e senaryosu entegrasyon kapısında ayrıca izlenir.
+sonrası bounded proje recovery çalışır; ClickHouse/Redis entegrasyon testi stale
+agent/task'i kuyruğa alıp ikinci restart'ta duplicate üretmediğini doğrular.
 
 **Kapsam:**
 
@@ -184,9 +184,10 @@ tuvali, salt-okunur Monaco fihrist editörü, API test/maliyet konsolu ve sandbo
 
 - Canlı tuval: React Flow, hiyerarşi + hareketli iş/mesaj okları, düğüm/kenar
   detay panelleri, zaman çizelgesi modu (`events` yeniden oynatma).
-- Dosya gezgini: ağaç + Monaco (salt-okunur) + fihrist paneli + commit geçmişi +
+- Dosya gezgini: kalıcı `file_index` REST kaynağından ağaç + Monaco (salt-okunur) + fihrist paneli + commit geçmişi +
   "kim neden değiştirdi" (narrator entegrasyonu).
-- Bildirim sistemi (zil + tarayıcı bildirimi).
+- Bildirim sistemi (zil + tarayıcı bildirimi); panel arka plandayken WebSocket
+  olayları için izinli tarayıcı bildirimi üretir.
 
 **Bitti tanımı / doğrulama:**
 
