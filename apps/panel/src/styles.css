@@ -77,6 +77,13 @@ button:hover { background: #8ff2d5; }
 .timeline { margin-top: 1rem; }
 .timeline li { display: grid; grid-template-columns: 7rem 1fr auto; gap: 1rem; padding: .7rem 0; border-bottom: 1px solid #344054; }
 .timeline time, .timeline code { color: #98a2b3; font-size: .78rem; }
+.canvas-grid { min-height: 260px; padding: 1.5rem; display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 1.25rem; background: linear-gradient(135deg, #101a2c, #0b1220); }
+.canvas-node { display: grid; gap: .45rem; padding: 1rem; border: 1px solid #355075; border-radius: 14px; background: #17243a; box-shadow: 0 10px 24px #03060d66; transform: translateY(calc((var(--node-index, 0) % 3) * 10px)); }
+.canvas-node strong { color: #f5f7fb; }
+.canvas-node span { color: #8dd6bb; text-transform: capitalize; }
+.canvas-node small, .file-list small { color: #91a4c2; }
+.file-list { list-style: none; margin: 0; padding: 0; }
+.file-list li { display: flex; justify-content: space-between; gap: 1rem; padding: .75rem 0; border-bottom: 1px solid #344054; }
 
 .status-card {
   display: grid;

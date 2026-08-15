@@ -1,7 +1,8 @@
 import { useHealth } from './viewmodels/useHealth.js';
 import { useEffect, useMemo, useState } from 'react';
+import type { CSSProperties } from 'react';
 
-type Task = { task_id: string; title: string; status: string; priority: number; updated_at: string };
+type Task = { task_id: string; title: string; status: string; priority: number; updated_at: string; target_files?: string[] };
 type EventItem = { event: string; seq: number; ts: string; data: unknown };
 type Project = { project_id: string; name: string; status: string; type: string };
 
@@ -15,7 +16,7 @@ export default function App() {
   const [events, setEvents] = useState<EventItem[]>([]);
   const [message, setMessage] = useState('');
   const [messageStatus, setMessageStatus] = useState('');
-  const [tab, setTab] = useState<'tasks' | 'timeline'>('tasks');
+  const [tab, setTab] = useState<'tasks' | 'timeline' | 'canvas' | 'files'>('tasks');
 
   useEffect(() => {
     if (projectId) return;
@@ -83,8 +84,8 @@ export default function App() {
         {messageStatus ? <small>{messageStatus}</small> : null}
       </section>
       {projectId ? <section className="workspace-card">
-        <nav className="tabs"><button className={tab === 'tasks' ? 'active' : ''} onClick={() => setTab('tasks')}>Görevler <span>{tasks.length}</span></button><button className={tab === 'timeline' ? 'active' : ''} onClick={() => setTab('timeline')}>Canlı zaman çizelgesi <span>{events.length}</span></button></nav>
-        {tab === 'tasks' ? <><div className="metrics">{Object.entries(statusCounts).map(([key, count]) => <div key={key}><strong>{count}</strong><span>{key}</span></div>)}</div><ul className="task-list">{tasks.map((task) => <li key={task.task_id}><div><strong>{task.title}</strong><small>{task.task_id}</small></div><span className={`pill pill--${task.status}`}>{task.status}</span></li>)}</ul></> : <ol className="timeline">{events.slice().reverse().map((item) => <li key={`${item.seq}-${item.event}`}><time>{new Date(item.ts).toLocaleTimeString()}</time><strong>{item.event}</strong><code>#{item.seq}</code></li>)}</ol>}
+        <nav className="tabs"><button className={tab === 'tasks' ? 'active' : ''} onClick={() => setTab('tasks')}>Görevler <span>{tasks.length}</span></button><button className={tab === 'canvas' ? 'active' : ''} onClick={() => setTab('canvas')}>Tuval</button><button className={tab === 'files' ? 'active' : ''} onClick={() => setTab('files')}>Dosyalar</button><button className={tab === 'timeline' ? 'active' : ''} onClick={() => setTab('timeline')}>Zaman çizelgesi <span>{events.length}</span></button></nav>
+        {tab === 'tasks' ? <><div className="metrics">{Object.entries(statusCounts).map(([key, count]) => <div key={key}><strong>{count}</strong><span>{key}</span></div>)}</div><ul className="task-list">{tasks.map((task) => <li key={task.task_id}><div><strong>{task.title}</strong><small>{task.task_id}</small></div><span className={`pill pill--${task.status}`}>{task.status}</span></li>)}</ul></> : tab === 'timeline' ? <ol className="timeline">{events.slice().reverse().map((item) => <li key={`${item.seq}-${item.event}`}><time>{new Date(item.ts).toLocaleTimeString()}</time><strong>{item.event}</strong><code>#{item.seq}</code></li>)}</ol> : tab === 'canvas' ? <div className="canvas-grid">{tasks.map((task, index) => <article className="canvas-node" key={task.task_id} style={{ '--node-index': index } as CSSProperties}><strong>{task.title}</strong><span>{task.status}</span><small>{task.target_files?.length ?? 0} dosya</small></article>)}</div> : <ul className="file-list">{[...new Set(tasks.flatMap((task) => task.target_files ?? []))].sort().map((file) => <li key={file}><code>{file}</code><small>fihrist / salt-okunur</small></li>)}</ul>}
       </section> : <section className="workspace-card project-picker"><h2>Projeler</h2><p className="hint">Bir proje seçin veya UUID ile doğrudan açın.</p><ul className="task-list">{projects.map((project) => <li key={project.project_id} onClick={() => setProjectId(project.project_id)}><div><strong>{project.name}</strong><small>{project.type} · {project.project_id}</small></div><span className={`pill pill--${project.status}`}>{project.status}</span></li>)}</ul></section>}
     </main>
   );
