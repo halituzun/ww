@@ -70,6 +70,7 @@ describe.skipIf(probeCh === undefined || probeRedis === undefined)('REST gerçek
     const finalTask = await request(app.getHttpServer()).post(`/projects/${projectId}/tasks`).set('Authorization', `Bearer ${token}`).send({ title: 'Final task', acceptanceCriteria: ['must ship'], dependencies: [dependent.body.task_id], files: ['src/c.ts'], budget: 3 }).expect(201);
     expect(finalTask.body.depends_on).toEqual([dependent.body.task_id]);
     await request(app.getHttpServer()).post(`/projects/${projectId}/messages`).send({ kind: 'user_command', text: 'unauthorized' }).expect(401);
+    await request(app.getHttpServer()).post(`/projects/${projectId}/messages`).set('Authorization', `Bearer ${token}`).send({ kind: 'answer', text: 'missing question reference' }).expect(400);
     const message = await request(app.getHttpServer()).post(`/projects/${projectId}/messages`).set('Authorization', `Bearer ${token}`).send({ kind: 'user_command', text: 'please inspect the task' }).expect(201);
     expect(message.body.messageId).toMatch(/^[0-9a-f-]{36}$/);
     await request(app.getHttpServer()).get(`/projects/${projectId}/messages/${message.body.messageId}`).expect(200).then((response) => {
