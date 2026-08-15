@@ -648,5 +648,75 @@ describe.skipIf(probe === undefined || probeRedis === undefined)('Phase 9 runtim
       artifactIds: [randomUUID()],
     });
     expect(committed.status).toBe('done');
+
+    const alwaysRejectTaskId = randomUUID();
+    const alwaysRejectNow = new Date().toISOString();
+    await createTask(ch, {
+      task_id: alwaysRejectTaskId,
+      project_id: projectId,
+      plan_id: planId,
+      parent_task_id: NIL_UUID,
+      title: 'Phase 9 attempt three escalation',
+      description: 'always rejected verifier fixture',
+      acceptance_criteria: ['must escalate on attempt three'],
+      status: 'queued',
+      priority: 5,
+      issuer_agent_id: pmId,
+      worker_agent_id: NIL_UUID,
+      verifier_agent_id: NIL_UUID,
+      group: 'coding',
+      depends_on: [],
+      target_files: [],
+      attempt: 0,
+      max_attempts: 3,
+      delegation_depth: 0,
+      token_budget: 1000,
+      tokens_spent: '0',
+      commit_hash: '',
+      result_summary: '',
+      reject_reason: '',
+      task_brief_id: NIL_UUID,
+      assignment_attempt_id: NIL_UUID,
+      created_at: alwaysRejectNow,
+      updated_at: alwaysRejectNow,
+    });
+    let rejectAttempt = await composition.assignmentService.assign(alwaysRejectTaskId as never);
+    await composition.taskBriefService.seal({
+      taskId: alwaysRejectTaskId as never,
+      workerPrompt: { name: `phase9.${projectId}.worker`, version: 1 },
+      verifierPrompt: { name: `phase9.${projectId}.verifier`, version: 1 },
+      allowedTools: [],
+      cutoffAt: new Date().toISOString(),
+    });
+    for (let rejection = 0; rejection < 3; rejection += 1) {
+      const rejectionAt = new Date().toISOString();
+      const rejectionBase = {
+        protocolVersion: 1 as const,
+        projectId,
+        taskId: alwaysRejectTaskId,
+        taskBriefId: rejectAttempt.taskBriefId,
+        assignmentAttemptId: rejectAttempt.assignmentAttemptId,
+        requestedAt: rejectionAt,
+      };
+      await composition.taskTransitionService.apply(systemPrincipal('phase9-always-reject', rejectionAt), {
+        ...rejectionBase,
+        transitionRequestId: randomUUID(), causationId: randomUUID(), action: 'start_work',
+      });
+      await composition.taskTransitionService.apply(systemPrincipal('phase9-always-reject', rejectionAt), {
+        ...rejectionBase,
+        transitionRequestId: randomUUID(), causationId: randomUUID(), action: 'report_result',
+        resultSummary: `rejected attempt ${rejection + 1}`,
+        evidenceRefs: [],
+      });
+      await composition.taskTransitionService.apply(systemPrincipal('phase9-always-reject', rejectionAt), {
+        ...rejectionBase,
+        transitionRequestId: randomUUID(), causationId: randomUUID(), action: 'verifier_rejected',
+        verdictMessageId: randomUUID(), reason: 'always reject fixture',
+      });
+      if (rejection < 2) {
+        rejectAttempt = await composition.assignmentService.retry(alwaysRejectTaskId as never, 'retry_after_rejection');
+      }
+    }
+    expect((await getLatestTask(ch, projectId, alwaysRejectTaskId))?.status).toBe('escalated');
   }, 60_000);
 });
