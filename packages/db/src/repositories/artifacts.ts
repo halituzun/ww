@@ -115,6 +115,35 @@ export async function listTaskArtifacts(
   return [...logical.values()].slice(0, limit);
 }
 
+export async function listProjectArtifacts(
+  ch: ClickHouseClient,
+  projectId: string,
+  options: { readonly artifactType?: ArtifactType; readonly limit?: number } = {},
+): Promise<ArtifactRow[]> {
+  const project = concreteEntityId(projectId, 'projectId');
+  const limit = storedUnsignedInteger(options.limit ?? 1_000, 'artifacts.limit', 1_000);
+  const typeClause = options.artifactType === undefined ? '' : ' AND artifact_type = {artifactType:String}';
+  const result = await ch.query({
+    query: `SELECT ${ARTIFACT_COLUMNS} FROM artifacts
+      WHERE project_id = {projectId:UUID}${typeClause}
+        AND artifact_id IN (
+          SELECT artifact_id FROM artifacts
+          WHERE project_id = {projectId:UUID}${typeClause}
+          GROUP BY artifact_id ORDER BY min(created_at) ASC, artifact_id ASC LIMIT {limit:UInt32}
+        )
+      ORDER BY created_at ASC, artifact_id ASC`,
+    query_params: { projectId: project, limit, ...(options.artifactType === undefined ? {} : { artifactType: options.artifactType }) },
+    format: 'JSONEachRow',
+  });
+  const physical = (await result.json<unknown>()).map(parseArtifact);
+  const logical = new Map<string, ArtifactRow>();
+  for (const row of physical) {
+    const prior = logical.get(row.artifact_id);
+    logical.set(row.artifact_id, prior === undefined ? row : reconcileArtifact(row, [prior]));
+  }
+  return [...logical.values()].slice(0, limit);
+}
+
 export async function appendArtifact(
   ch: ClickHouseClient,
   input: AppendArtifactInput,

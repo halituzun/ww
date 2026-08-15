@@ -1,5 +1,6 @@
-import { Controller, Get, Inject, Param } from '@nestjs/common';
-import { EntityIdSchema } from '@ww/shared';
+import { Controller, Get, Inject, Param, Query } from '@nestjs/common';
+import { ARTIFACT_TYPES, EntityIdSchema } from '@ww/shared';
+import { listProjectArtifacts } from '@ww/db';
 import { SERVER_DATABASE, type ServerDatabase } from './orchestration.module.js';
 
 @Controller('projects/:projectId')
@@ -31,5 +32,13 @@ export class OperationsController {
       query_params: {}, format: 'JSONEachRow',
     });
     return await result.json();
+  }
+
+  @Get('artifacts')
+  async artifacts(@Param('projectId') projectId: string, @Query('type') type?: string) {
+    const id = EntityIdSchema.parse(projectId);
+    const artifactType = type === undefined ? undefined : ARTIFACT_TYPES.find((item) => item === type);
+    if (type !== undefined && artifactType === undefined) throw new Error('artifact tipi gecersiz');
+    return listProjectArtifacts(this.database.ch, id, artifactType === undefined ? {} : { artifactType });
   }
 }

@@ -4,7 +4,7 @@ import type { INestApplication } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import request from 'supertest';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { createAgent, createCh, createRedis, runMigrations, upsertFileIndex, type ClickHouseClient, type WwRedis } from '@ww/db';
+import { appendArtifact, createAgent, createCh, createRedis, runMigrations, upsertFileIndex, type ClickHouseClient, type WwRedis } from '@ww/db';
 import { AppModule } from './app.module.js';
 import { SERVER_DATABASE } from './orchestration.module.js';
 
@@ -67,6 +67,11 @@ describe.skipIf(probeCh === undefined || probeRedis === undefined)('REST gerçek
     await request(app.getHttpServer()).get(`/projects/${projectId}/files`).expect(200).then((response) => {
       expect(response.body).toHaveLength(1);
       expect(response.body[0]).toMatchObject({ file_path: 'src/a.ts', summary: 'REST tarafından indekslendi', related_task_ids: [task.body.task_id] });
+    });
+    await appendArtifact(ch, { artifact_id: randomUUID(), project_id: projectId, task_id: task.body.task_id, agent_id: agentId, artifact_type: 'api_endpoint', name: 'health', path: '/health', summary: 'Health endpoint', commit_hash: '', created_at: new Date().toISOString() });
+    await request(app.getHttpServer()).get(`/projects/${projectId}/artifacts?type=api_endpoint`).expect(200).then((response) => {
+      expect(response.body).toHaveLength(1);
+      expect(response.body[0]).toMatchObject({ name: 'health', path: '/health' });
     });
     expect(task.body.token_budget).toBe(10);
     expect(await request(app.getHttpServer()).get(`/projects/${projectId}/tasks/${task.body.task_id}`).expect(200).then((response) => response.body.acceptance_criteria)).toEqual(['must compile']);
