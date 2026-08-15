@@ -376,20 +376,30 @@ describe.skipIf(probe === undefined || probeRedis === undefined)('Phase 9 runtim
     expect(orchestrated.status).toBe('done');
     expect(orchestrated.commitHash).toMatch(/^[a-f0-9]{40}$/);
 
+    const completionInvocationId = randomUUID();
+    const completionTaskBriefId = randomUUID();
+    const completionPromptSnapshotId = randomUUID();
+    const completionMeta = {
+      projectId,
+      agentId: pmId,
+      taskId,
+      purpose: 'completion' as const,
+      invocationId: completionInvocationId,
+      taskBriefId: completionTaskBriefId,
+      assignmentAttemptId: assigned.assignmentAttemptId,
+      promptInputSnapshotId: completionPromptSnapshotId,
+    };
     const result = await composition.router.complete('mock:smoke', {
       messages: [],
-      meta: {
-        projectId,
-        agentId: pmId,
-        taskId,
-        purpose: 'completion',
-        invocationId: randomUUID(),
-        taskBriefId: randomUUID(),
-        assignmentAttemptId: assigned.assignmentAttemptId,
-        promptInputSnapshotId: randomUUID(),
-      },
+      meta: completionMeta,
     });
     expect(result.result.content).toBe('runtime-ok');
+    expect(provider.calls).toHaveLength(1);
+    const replay = await composition.router.complete('mock:smoke', {
+      messages: [],
+      meta: completionMeta,
+    });
+    expect(replay.result.content).toBe('runtime-ok');
     expect(provider.calls).toHaveLength(1);
     expect(composition.inboxPollingModule).toBeDefined();
 
