@@ -333,6 +333,8 @@ describe.skipIf(probe === undefined || probeRedis === undefined)('Phase 9 runtim
             return { kind: 'question' as const, question: question.payload.type === 'question' ? question.payload.text : 'Which source directory should I use?', questionMessageId: question.messageId };
           }
           if (currentBrief.taskId === questionTaskId) {
+            // The orchestration runtime stands in for the worker model here;
+            // it writes only the task's declared target before the real gate.
             await writeFile(path.join(workspaceRoot, 'src/phase9.ts'), 'export const phase9 = true;\n// answered by user\n');
           }
           return { kind: 'report' as const, summary: 'Phase 9 worker report' };
