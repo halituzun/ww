@@ -98,6 +98,12 @@
 
 ## Faz 2 — Hafıza ve Dayanıklılık {#faz-2}
 
+**İlerleme (2026-08-15):** ContextPack/`memory_query`, bütün-chunk token
+bütçesi, özet/embedding yazma portları, startup `RecoveryService` ve scheduler
+token/maliyet/döngü/duvar-saati frenleri uygulandı. Server açılışında migration
+sonrası bounded proje recovery çalışır; kalan gerçek sağlayıcı embedding ve
+öldürülmüş süreç e2e senaryosu entegrasyon kapısında ayrıca izlenir.
+
 **Kapsam:**
 
 - `packages/memory`: Context Builder (katmanlı doldurma + token bütçesi),
@@ -119,6 +125,10 @@
 
 ## Faz 3 — Panel Temeli {#faz-3}
 
+**İlerleme (2026-08-15):** Proje listesi REST ucu, görev/mesaj REST akışları,
+`/events` WebSocket gateway'i ve project-scoped cursor replay'i çalışır. Panel
+canlı görev/zaman çizelgesi, proje seçici ve altyapı sağlık görünümünü sunar.
+
 **Kapsam:**
 
 - WebSocket gateway + olay zarfı + REST tamamlama ucu.
@@ -138,6 +148,10 @@
   çalışır → panel rozeti görünür.
 
 ## Faz 4 — Tam Agent Sistemi {#faz-4}
+
+**İlerleme (2026-08-15):** CouncilService (3–4 üye, bounded tur/sentez),
+delegation depth/budget guard, clone limit/idle kapatma, StandardsAuditor ve
+ReplanningService eklendi; Phase4 policy rotaları fail-closed olarak genişletildi.
 
 **Kapsam:**
 
@@ -162,6 +176,11 @@
 
 ## Faz 5 — Tuval ve Dosya Gezgini {#faz-5}
 
+**İlerleme (2026-08-15):** Panelde canlı event timeline yanında görev tuvali ve
+hedef dosya fihristi görünümleri eklendi. React Flow/Monaco ve narrator
+entegrasyonu sonraki görsel derinleştirme işidir; mevcut görünüm güvenli
+salt-okunur başlangıç yüzeyidir.
+
 **Kapsam:**
 
 - Canlı tuval: React Flow, hiyerarşi + hareketli iş/mesaj okları, düğüm/kenar
@@ -177,6 +196,11 @@
   anlatısına gidilir.
 
 ## Faz 6 — Test Ortamları ve Cila {#faz-6}
+
+**İlerleme (2026-08-15):** Docker sandbox executor, starter paketleme kapıları,
+kurulum dokümanı ve API/mobile starter şablonları hazırlandı. Web/API/mobile
+örnek kapıları executor'ın izole pipeline'ında çalıştırılır; gerçek Android AVD
+adaptörü ve önizleme iframe'i ayrıca ürünleştirme adımıdır.
 
 **Kapsam:**
 
