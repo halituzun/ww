@@ -279,6 +279,45 @@ export async function listTaskCausalEntries(
   return foldAttemptRows(task, attempt, await readAttemptRows(ch, task, attempt));
 }
 
+const PROMPT_CAUSAL_SOURCE_TYPES = [
+  'message', 'handoff', 'rejection', 'gate', 'answer', 'escalation',
+  'retry_after_rejection', 'retry_after_gate_failure', 'retry_sealed',
+] as const;
+
+/** Bounded causal read for prompt sealing. It never scans an entire attempt and
+ * excludes protocol entries that are not safe prompt ancestors. */
+export async function listTaskCausalEntriesThroughCursor(
+  ch: ClickHouseClient,
+  taskId: string,
+  assignmentAttemptId: string,
+  cursorOrdinal: number,
+): Promise<TaskCausalEntryRow[]> {
+  const task = concreteEntityId(taskId, 'taskId');
+  const attempt = concreteEntityId(assignmentAttemptId, 'assignmentAttemptId');
+  if (!Number.isSafeInteger(cursorOrdinal) || cursorOrdinal < 0) {
+    throw new RepositoryConflictError('causal cursor ordinal gecersiz');
+  }
+  const result = await ch.query({
+    query: `SELECT ${CAUSAL_COLUMNS} FROM task_causal_entries
+      WHERE task_id = {taskId:UUID}
+        AND assignment_attempt_id = {assignmentAttemptId:UUID}
+        AND ordinal <= {cursorOrdinal:UInt64}
+        AND source_type IN ('message', 'handoff', 'rejection', 'gate', 'answer',
+          'escalation', 'retry_after_rejection', 'retry_after_gate_failure', 'retry_sealed')
+      ORDER BY ordinal ASC, entry_id ASC
+      LIMIT 1025`,
+    query_params: { taskId: task, assignmentAttemptId: attempt, cursorOrdinal },
+    format: 'JSONEachRow',
+  });
+  const rows = (await result.json<unknown>()).map(parseCausalEntry);
+  if (rows.length > 1024) {
+    throw new RepositoryConflictError('prompt causal cursor 1024 kayit sinirini asti');
+  }
+  const folded = await foldAttemptRows(task, attempt, rows);
+  return folded.filter((row) => row.ordinal <= cursorOrdinal &&
+    (PROMPT_CAUSAL_SOURCE_TYPES as readonly string[]).includes(row.source_type));
+}
+
 function nextOrdinal(stream: readonly TaskCausalEntryRow[]): number {
   const maximum = stream.at(-1)?.ordinal;
   if (maximum === undefined) return 0;

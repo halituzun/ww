@@ -13,6 +13,8 @@
   },
   "dependencies": {
     "@ww/db": "workspace:*",
+    "@ww/memory": "workspace:*",
+    "@ww/providers": "workspace:*",
     "@ww/shared": "workspace:*"
   },
   "devDependencies": {

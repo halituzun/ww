@@ -27,6 +27,36 @@ export interface CompletionMeta extends Partial<ProviderInvocationProvenanceV1> 
   purpose: 'completion' | 'embedding' | 'health_check';
 }
 
+/** Durable boundary supplied by the orchestration layer. Providers must not
+ * invent or change invocation identity; the router supplies the fallback
+ * attempt while keeping the invocation id stable. */
+export interface ProviderInvocationEffect {
+  run<T>(input: {
+    readonly invocationId: string;
+    readonly fallbackAttempt: number;
+    readonly modelRef: string;
+    readonly request: CompletionRequest;
+    readonly execute: () => Promise<T>;
+  }): Promise<T>;
+  /** Records a durable attribution/sink reconciliation item. */
+  reconcile?(input: {
+    readonly invocationId: string;
+    readonly modelRef: string;
+    readonly request: CompletionRequest;
+    readonly error: unknown;
+    readonly usage?: { readonly promptTokens: number; readonly completionTokens: number };
+    readonly latencyMs?: number;
+  }): Promise<void>;
+}
+
+export class ProviderUsageReconciliationError extends Error {
+  readonly code = 'PROVIDER_USAGE_RECONCILIATION_FAILED';
+  constructor(readonly invocationId: string, cause: unknown) {
+    super(`provider usage kaydi uzlastirilamadi: ${invocationId}`, { cause });
+    this.name = 'ProviderUsageReconciliationError';
+  }
+}
+
 export interface CompletionRequest {
   model: string;
   messages: readonly ChatMessage[];

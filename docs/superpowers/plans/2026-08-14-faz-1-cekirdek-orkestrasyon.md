@@ -492,29 +492,33 @@ agents, duplicate TypeScript tool schema, `git checkout .`, or `git clean -fd`.
 
 ### Implement
 
-- [ ] Require invocation, brief, attempt and prompt-snapshot IDs for agent completion;
+- [x] Require invocation, brief, attempt and prompt-snapshot IDs for agent completion;
   preserve optional fields only for health checks.
-- [ ] Record fallback index on every attempt and the same invocation ID throughout;
+- [x] Record fallback index on every attempt and the same invocation ID throughout;
   return/store actual `usedRef` in result messages.
-- [ ] Separate provider result from usage-write reconciliation so a successful paid
+- [x] Separate provider result from usage-write reconciliation so a successful paid
   call is never automatically repeated after a sink error.
-- [ ] Run each provider invocation through the durable effect ledger with
+- [x] Run each provider invocation through the durable effect ledger with
   `started/completed/uncertain` states. A completed replay returns the stored result;
   an uncertain non-idempotent provider call escalates instead of calling again.
-- [ ] Build Phase 1 context from the brief-pinned plan/prompt/rules/standards at
+- [x] Build Phase 1 context from the brief-pinned plan/prompt/rules/standards at
   `baseContextCutoffAt`, plus only ancestor-bounded task causal entries at the input
   cursor. Keep this builder in `@ww/memory`; no semantic similarity search.
-- [ ] Seal exact provider messages, source-version manifest, causal high-water and
+- [x] Seal exact provider messages, source-version manifest, causal high-water and
   prompt hash before each call. Replay loads that immutable snapshot exactly.
 
 ### Verification
 
-- [ ] Primary/fallback/error tests assert invocation identity, fallback order,
+- [x] Primary/fallback/error tests assert invocation identity, fallback order,
   `usedRef`, and usage rows.
-- [ ] Usage-sink-after-success failure produces one model call and a reconciliation
+- [x] Usage-sink-after-success failure produces one model call and a reconciliation
   finding.
-- [ ] Temporal tests exclude future plan/prompt/rule/summary/knowledge rows, include
+- [x] Temporal tests exclude future plan/prompt/rule/summary/knowledge rows, include
   allowed rejection/gate/answer/escalation, and prove replay ignores later feedback.
+
+**Evidence:** providers 28 tests, agents 40 tests, memory 4 tests, db 235 tests,
+root 655 tests; targeted/root builds and lints pass, including ClickHouse/Redis
+integration gates. Diff and secret checks are clean; no migration was added.
 
 ### Anti-patterns
 

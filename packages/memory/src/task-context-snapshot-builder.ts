@@ -1,7 +1,7 @@
 import {
   getKnowledgeAsOf,
   getKnowledgeSourceRefAsOf,
-  getLatestTask,
+  getTaskAsOf,
   getPlanAsOf,
   getPromptSourceRefAsOf,
   RepositoryConflictError,
@@ -74,11 +74,15 @@ export class TaskContextSnapshotBuilder implements TaskContextSnapshotPort {
     if (input.planSource.sourceType !== 'plan') {
       throw new RepositoryConflictError('task context planSource turu plan olmalidir');
     }
-    const task = await getLatestTask(this.#ch, input.projectId, input.taskSource.sourceId);
+    const task = await getTaskAsOf(
+      this.#ch,
+      input.projectId,
+      input.taskSource.sourceId,
+      cutoff.toISOString(),
+    );
     if (
       task === null || Number(task.version) !== input.taskSource.version ||
-      canonicalSha256V1(task) !== input.taskSource.hash ||
-      Date.parse(task.updated_at) > cutoff.getTime()
+      canonicalSha256V1(task) !== input.taskSource.hash
     ) {
       throw new RepositoryConflictError(
         `task context taskSource repository/cutoff ile eslesmiyor: ${input.taskSource.sourceId}`,

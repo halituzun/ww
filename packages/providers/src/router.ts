@@ -1,5 +1,5 @@
 import type { ApiUsageRow } from '@ww/shared';
-import { NIL_UUID } from '@ww/shared';
+import { NIL_UUID, ProviderInvocationProvenanceV1Schema } from '@ww/shared';
 import { costUsd } from './pricing.js';
 import { newUsageId, type UsageSink } from './usage.js';
 import {
@@ -8,17 +8,21 @@ import {
   type CompletionRequest,
   type CompletionResult,
   type LlmProvider,
+  ProviderUsageReconciliationError,
+  type ProviderInvocationEffect,
 } from './types.js';
 
 export interface RouterOptions {
   fallbacks: (modelRef: string) => string[];
   usageSink: UsageSink;
   timeoutMs?: number;
+  invocationEffect?: ProviderInvocationEffect;
 }
 
 export interface RouteResult {
   result: CompletionResult;
   usedRef: string;
+  actualModelRef: string;
   fallbackUsed: boolean;
 }
 
@@ -55,6 +59,17 @@ export class ModelRouter {
   ) {}
 
   async complete(modelRef: string, req: Omit<CompletionRequest, 'model'>): Promise<RouteResult> {
+    if (req.meta.purpose === 'completion') {
+      if (this.opts.invocationEffect === undefined) {
+        throw new Error('completion durable effect boundary gerekli');
+      }
+      const provenance = ['invocationId', 'taskBriefId', 'assignmentAttemptId', 'promptInputSnapshotId'] as const;
+      for (const key of provenance) {
+        if (req.meta[key] === undefined || req.meta[key] === '') {
+          throw new Error(`completion provenance zorunlu: ${key}`);
+        }
+      }
+    }
     const chain = [modelRef, ...this.opts.fallbacks(modelRef)];
     let lastErr: unknown = new Error(`kullanılabilir sağlayıcı yok: ${modelRef}`);
 
@@ -64,26 +79,68 @@ export class ModelRouter {
       if (!provider) continue;
 
       const t0 = Date.now();
+      const attemptRequest = {
+        ...req,
+        model,
+        meta: {
+          ...req.meta,
+          ...(req.meta.purpose === 'completion' ? { fallbackAttempt: i } : {}),
+        },
+      };
+      if (attemptRequest.meta.purpose === 'completion') {
+        ProviderInvocationProvenanceV1Schema.parse({
+          invocationId: attemptRequest.meta.invocationId,
+          taskBriefId: attemptRequest.meta.taskBriefId,
+          assignmentAttemptId: attemptRequest.meta.assignmentAttemptId,
+          promptInputSnapshotId: attemptRequest.meta.promptInputSnapshotId,
+          fallbackAttempt: i,
+        });
+      }
+      let result: CompletionResult;
       try {
-        const result = await withTimeout(
-          provider.complete({ ...req, model }),
-          this.opts.timeoutMs ?? 120_000,
-        );
-        await this.record(ref, req, result.usage, Date.now() - t0, i > 0 ? 'fallback_used' : 'ok', '');
-        return { result, usedRef: ref, fallbackUsed: i > 0 };
+        result = await (this.opts.invocationEffect === undefined
+          ? withTimeout(provider.complete(attemptRequest), this.opts.timeoutMs ?? 120_000)
+          : this.opts.invocationEffect.run({
+            invocationId: req.meta.invocationId ?? '',
+            fallbackAttempt: i,
+            modelRef: ref,
+            request: attemptRequest,
+            execute: () => withTimeout(provider.complete(attemptRequest), this.opts.timeoutMs ?? 120_000),
+          }));
       } catch (e) {
         lastErr = e;
         await this.record(
           ref,
-          req,
+          attemptRequest,
           { promptTokens: 0, completionTokens: 0 },
           Date.now() - t0,
           errStatus(e),
           errKind(e),
         );
+        // Provider-level retryable failures are a completed durable attempt
+        // and may advance the explicit fallback chain. Ledger failures
+        // (uncertain/reconciliation) are terminal and never do so.
+        if (!(e instanceof ProviderError)) throw e;
         // Kalıcı hatalarda (kötü istek / kimlik) yedek denemek anlamsız.
         if (e instanceof ProviderError && !e.retryable) throw e;
+        continue;
       }
+      try {
+        await this.record(ref, attemptRequest, result.usage, Date.now() - t0, i > 0 ? 'fallback_used' : 'ok', '');
+      } catch (error) {
+        // A completed provider call is never repeated because its usage write
+        // failed; reconciliation can repair the sink later.
+        await this.opts.invocationEffect?.reconcile?.({
+          invocationId: req.meta.invocationId ?? '',
+          modelRef: ref,
+          request: attemptRequest,
+          error,
+          usage: result.usage,
+          latencyMs: Date.now() - t0,
+        }).catch(() => undefined);
+        throw new ProviderUsageReconciliationError(req.meta.invocationId ?? '', error);
+      }
+      return { result, usedRef: ref, actualModelRef: ref, fallbackUsed: i > 0 };
     }
     throw lastErr;
   }
@@ -112,6 +169,11 @@ export class ModelRouter {
       latency_ms: latencyMs,
       status,
       error_kind: errorKind,
+      ...(req.meta.invocationId === undefined ? {} : { invocation_id: req.meta.invocationId }),
+      ...(req.meta.taskBriefId === undefined ? {} : { task_brief_id: req.meta.taskBriefId }),
+      ...(req.meta.assignmentAttemptId === undefined ? {} : { assignment_attempt_id: req.meta.assignmentAttemptId }),
+      ...(req.meta.promptInputSnapshotId === undefined ? {} : { prompt_input_snapshot_id: req.meta.promptInputSnapshotId }),
+      ...(req.meta.fallbackAttempt === undefined ? {} : { fallback_attempt: req.meta.fallbackAttempt }),
     });
   }
 }

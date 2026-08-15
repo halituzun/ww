@@ -109,6 +109,12 @@ importers:
       '@ww/db':
         specifier: workspace:*
         version: link:../db
+      '@ww/memory':
+        specifier: workspace:*
+        version: link:../memory
+      '@ww/providers':
+        specifier: workspace:*
+        version: link:../providers
       '@ww/shared':
         specifier: workspace:*
         version: link:../shared

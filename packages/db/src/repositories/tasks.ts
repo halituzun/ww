@@ -220,6 +220,36 @@ export async function getLatestTask(
   );
 }
 
+/** Immutable temporal read used by prompt sealing; future task versions are
+ * intentionally invisible even when a later projection already exists. */
+export async function getTaskAsOf(
+  ch: ClickHouseClient,
+  projectId: string,
+  taskId: string,
+  cutoffAt: string,
+): Promise<TaskRow | null> {
+  const project = concreteEntityId(projectId, 'projectId');
+  const task = concreteEntityId(taskId, 'taskId');
+  const clickhouseCutoff = cutoffAt.replace('T', ' ').replace('Z', '');
+  const result = await ch.query({
+    query: `SELECT ${TASK_COLUMNS} FROM tasks
+      WHERE project_id = {projectId:UUID} AND task_id = {taskId:UUID}
+        AND updated_at <= {cutoffAt:DateTime64(3)}
+      ORDER BY version DESC
+      LIMIT 1024`,
+    query_params: { projectId: project, taskId: task, cutoffAt: clickhouseCutoff },
+    format: 'JSONEachRow',
+  });
+  const rows = (await result.json<unknown>()).map(parseTaskRow);
+  if (rows.length === 0) return null;
+  const maximum = rows.reduce((max, row) => row.version > max ? row.version : max, rows[0]!.version);
+  return reconcileVersionedWrite(
+    `task:${task}:asOf:${cutoffAt}`,
+    rows.find((row) => row.version === maximum)!,
+    rows.filter((row) => row.version === maximum),
+  );
+}
+
 export async function listLatestTasksByStatus(
   ch: ClickHouseClient,
   projectId: string,

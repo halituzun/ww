@@ -9,14 +9,14 @@ import { ModelRouter } from './router.js';
 import { ProviderError, type CompletionMeta, type LlmProvider } from './types.js';
 
 const meta: CompletionMeta = {
-  projectId: 'p',
-  agentId: 'a',
-  taskId: 't',
+  projectId: '10000000-0000-4000-8000-000000000010',
+  agentId: '10000000-0000-4000-8000-000000000011',
+  taskId: '10000000-0000-4000-8000-000000000012',
   purpose: 'completion',
-  invocationId: 'invocation-1',
-  taskBriefId: 'brief-1',
-  assignmentAttemptId: 'attempt-1',
-  promptInputSnapshotId: 'snapshot-1',
+  invocationId: '10000000-0000-4000-8000-000000000013',
+  taskBriefId: '10000000-0000-4000-8000-000000000014',
+  assignmentAttemptId: '10000000-0000-4000-8000-000000000015',
+  promptInputSnapshotId: '10000000-0000-4000-8000-000000000016',
   fallbackAttempt: 0,
 };
 
@@ -26,6 +26,9 @@ function makeRouter(providers: Record<string, LlmProvider>, fallbacks: Record<st
     fallbacks: (ref) => fallbacks[ref] ?? [],
     usageSink: async (row) => {
       rows.push(row);
+    },
+    invocationEffect: {
+      run: async ({ execute }) => execute(),
     },
   });
   return { router, rows };
@@ -88,6 +91,11 @@ describe('ModelRouter', () => {
     expect(rows).toHaveLength(1);
     expect(rows[0]!.status).toBe('ok');
     expect(rows[0]!.provider_id).toBe('mock');
+    expect(rows[0]!.invocation_id).toBe(meta.invocationId);
+    expect(rows[0]!.task_brief_id).toBe(meta.taskBriefId);
+    expect(rows[0]!.assignment_attempt_id).toBe(meta.assignmentAttemptId);
+    expect(rows[0]!.prompt_input_snapshot_id).toBe(meta.promptInputSnapshotId);
+    expect(rows[0]!.fallback_attempt).toBe(0);
   });
 
   it('retryable hatada yedek kullanılır; usage error + fallback_used', async () => {
@@ -101,6 +109,8 @@ describe('ModelRouter', () => {
     expect(res.fallbackUsed).toBe(true);
     expect(res.usedRef).toBe('good:m2');
     expect(rows.map((r) => r.status)).toEqual(['error', 'fallback_used']);
+    expect(rows.map((r) => r.invocation_id)).toEqual([meta.invocationId, meta.invocationId]);
+    expect(rows.map((r) => r.fallback_attempt)).toEqual([0, 1]);
   });
 
   it('bad_request fallback tetiklemez, hata fırlar', async () => {
