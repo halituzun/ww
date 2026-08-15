@@ -5,7 +5,7 @@ import {
   type EntityId,
   type JsonObject,
 } from '@ww/shared';
-import { getTaskAsOf, listLatestKnowledgeByStatus, type KnowledgeRow } from '@ww/db';
+import { getTaskAsOf, listFileIndex, listLatestKnowledgeByStatus, upsertFileIndex, type FileIndexLayer, type KnowledgeRow } from '@ww/db';
 
 export interface MemoryChunk {
   readonly sourceTable: 'knowledge' | 'summaries' | 'file_index' | 'messages';
@@ -56,6 +56,19 @@ export interface EmbeddingInput {
   readonly vector: readonly number[];
   readonly embeddingModel: string;
   readonly createdAt: string;
+}
+
+export interface FileIndexInput {
+  readonly projectId: EntityId;
+  readonly filePath: string;
+  readonly summary: string;
+  readonly layer: FileIndexLayer;
+  readonly exports?: readonly string[];
+  readonly relatedTaskIds?: readonly EntityId[];
+  readonly relatedArtifactIds?: readonly EntityId[];
+  readonly relatedKnowledgeIds?: readonly EntityId[];
+  readonly lastCommitHash?: string;
+  readonly updatedAt: string;
 }
 
 const MAX_TOKEN_BUDGET = 100_000;
@@ -130,6 +143,7 @@ export class MemoryService {
     if (query.length === 0) throw new Error('memory query bos olamaz');
     const cutoff = input.cutoffAt === undefined ? undefined : validCutoff(input.cutoffAt);
     const knowledge = await listLatestKnowledgeByStatus(this.#ch, projectId, 'active');
+    const files = await listFileIndex(this.#ch, projectId, Math.min(1_000, limit * 20));
     const terms = query.toLocaleLowerCase('tr-TR').split(/\s+/u).filter(Boolean);
     const scored = knowledge
       .filter((row) => cutoff === undefined || Date.parse(row.created_at) <= Date.parse(cutoff))
@@ -142,6 +156,13 @@ export class MemoryService {
       .sort((left, right) => right.score - left.score || left.row.knowledge_id.localeCompare(right.row.knowledge_id))
       .slice(0, limit)
       .map(({ row, score }) => knowledgeChunk(row, score));
+    const fileScored = files
+      .map((row) => ({ row, score: terms.reduce((total, term) => total + (`${row.file_path} ${row.summary} ${row.exports.join(' ')}`.toLocaleLowerCase('tr-TR').includes(term) ? 1 : 0), 0) }))
+      .filter(({ score }) => score > 0)
+      .sort((a, b) => b.score - a.score || a.row.file_path.localeCompare(b.row.file_path))
+      .slice(0, limit)
+      .map(({ row, score }) => ({ sourceTable: 'file_index' as const, sourceId: id('file-index', { projectId, path: row.file_path }), text: `${row.file_path}\n${row.summary}`, label: `[file:${row.file_path}]`, score }));
+    if (fileScored.length > 0) return [...scored, ...fileScored].sort((a, b) => b.score - a.score).slice(0, limit);
     if (scored.length > 0) return scored;
 
     const result = await this.#ch.query({
@@ -202,6 +223,22 @@ export class MemoryService {
     const embeddingId = id('embedding-v1', input);
     await this.#ch.insert({ table: 'embeddings', values: [{ embedding_id: embeddingId, project_id: input.projectId, source_table: input.sourceTable, source_id: input.sourceId, chunk_index: input.chunkIndex, text: input.text, vector: [...input.vector], embedding_model: input.embeddingModel, created_at: input.createdAt }], format: 'JSONEachRow' });
     return embeddingId;
+  }
+
+  async updateFileIndex(input: FileIndexInput): Promise<EntityId> {
+    const row = await upsertFileIndex(this.#ch, {
+      project_id: input.projectId,
+      file_path: input.filePath,
+      summary: input.summary,
+      layer: input.layer,
+      exports: input.exports ?? [],
+      related_task_ids: input.relatedTaskIds ?? [],
+      related_artifact_ids: input.relatedArtifactIds ?? [],
+      related_knowledge_ids: input.relatedKnowledgeIds ?? [],
+      last_commit_hash: input.lastCommitHash ?? '',
+      updated_at: input.updatedAt,
+    });
+    return id('file-index-row', row);
   }
 }
 

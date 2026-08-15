@@ -20,6 +20,7 @@ export * from './repositories/causal-entries.js';
 export * from './repositories/scheduler-fences.js';
 export * from './repositories/events.js';
 export * from './repositories/artifacts.js';
+export * from './repositories/file-index.js';
 export * from './repositories/knowledge.js';
 export * from './repositories/audit-findings.js';
 export * from './repositories/prompts.js';
