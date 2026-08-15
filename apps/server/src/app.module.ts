@@ -3,6 +3,7 @@ import { HealthController } from './health.controller.js';
 import { MessagesController } from './messages.controller.js';
 import { ProjectsController } from './projects.controller.js';
 import { TasksController } from './tasks.controller.js';
+import { EventsGateway } from './events.gateway.js';
 import {
   MESSAGE_APPLICATION,
   MessageApplicationService,
@@ -28,6 +29,7 @@ import {
   imports: [OrchestrationModule],
   controllers: [HealthController, ProjectsController, TasksController, MessagesController],
   providers: [
+    EventsGateway,
     { provide: HEALTH_DEPENDENCIES, useValue: DEFAULT_HEALTH_DEPENDENCIES },
     HealthService,
     { provide: PROJECT_APPLICATION, useExisting: ProjectApplicationService },
