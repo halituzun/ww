@@ -57,7 +57,7 @@ export type MessageApplicationInput = Readonly<{ projectId: EntityId; principal:
 export interface ServerDatabase { readonly ch: ClickHouseClient; readonly redis?: WwRedis; }
 export interface ProjectApplication { create(input: ReturnType<typeof parseProjectInput>): Promise<ProjectRow>; get(projectId: string): Promise<ProjectRow | null>; }
 export interface TaskApplication { create(projectId: string, input: ReturnType<typeof parseTaskInput>): Promise<TaskRow>; get(projectId: string, taskId: string): Promise<TaskRow | null>; }
-export interface MessageApplication { send(input: MessageApplicationInput): Promise<unknown>; }
+export interface MessageApplication { send(input: MessageApplicationInput): Promise<unknown>; get(projectId: string, messageId: string): Promise<unknown>; }
 
 @Injectable()
 export class ProjectApplicationService implements ProjectApplication {
@@ -157,6 +157,10 @@ export class MessageApplicationService implements MessageApplication {
       priority: 'normal',
       createdAt: now,
     });
+  }
+
+  get(projectId: string, messageId: string): Promise<unknown> {
+    return getMessage(this.database.ch, projectId, messageId);
   }
 }
 

@@ -66,5 +66,8 @@ describe.skipIf(probeCh === undefined || probeRedis === undefined)('REST gerçek
     await request(app.getHttpServer()).post(`/projects/${projectId}/messages`).send({ kind: 'user_command', text: 'unauthorized' }).expect(401);
     const message = await request(app.getHttpServer()).post(`/projects/${projectId}/messages`).set('Authorization', `Bearer ${token}`).send({ kind: 'user_command', text: 'please inspect the task' }).expect(201);
     expect(message.body.messageId).toMatch(/^[0-9a-f-]{36}$/);
+    await request(app.getHttpServer()).get(`/projects/${projectId}/messages/${message.body.messageId}`).expect(200).then((response) => {
+      expect(response.body.envelope.messageId).toBe(message.body.messageId);
+    });
   });
 });

@@ -1,4 +1,4 @@
-import { Body, Controller, Inject, Param, Post, Req } from '@nestjs/common';
+import { Body, Controller, Get, Inject, Param, Post, Req } from '@nestjs/common';
 import { z } from 'zod';
 import { EntityIdSchema } from '@ww/shared';
 import { parseLocalSession, type LocalSessionRequest } from './auth/local-session.js';
@@ -8,6 +8,10 @@ const MessageInput = z.strictObject({ kind: z.enum(['user_command', 'answer']), 
 @Controller('projects/:projectId/messages')
 export class MessagesController {
   constructor(@Inject(MESSAGE_APPLICATION) private readonly messages: MessageApplication) {}
+  @Get(':messageId')
+  get(@Param('projectId') projectId: string, @Param('messageId') messageId: string) {
+    return this.messages.get(projectId, messageId);
+  }
   @Post()
   create(@Req() request: LocalSessionRequest, @Param('projectId') projectId: string, @Body() body: unknown) {
     const principal = parseLocalSession(request);
