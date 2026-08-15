@@ -176,10 +176,9 @@ ReplanningService eklendi; Phase4 policy rotaları fail-closed olarak genişleti
 
 ## Faz 5 — Tuval ve Dosya Gezgini {#faz-5}
 
-**İlerleme (2026-08-15):** Panelde canlı event timeline yanında görev tuvali,
-hedef dosya fihristi, API maliyet konsolu ve sandbox önizleme yüzeyi eklendi.
-Dosya içeriği hâlâ salt-okunur port üzerinden; narrator kanıt çekirdeği
-`packages/memory` içinde.
+**İlerleme (2026-08-15):** Panelde canlı event timeline yanında React Flow görev
+tuvali, salt-okunur Monaco fihrist editörü, API test/maliyet konsolu ve sandbox
+önizleme yüzeyi eklendi. Narrator kanıt çekirdeği `packages/memory` içinde.
 
 **Kapsam:**
 
