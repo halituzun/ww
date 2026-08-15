@@ -26,6 +26,11 @@ body {
 
 .topbar { display: flex; align-items: end; justify-content: space-between; gap: 2rem; margin-bottom: 2rem; }
 .topbar-actions { display: flex; align-items: center; gap: .75rem; }
+.provider-health { display: flex; flex-wrap: wrap; gap: .5rem; margin: .75rem 0 1rem; }
+.provider-badge { display: inline-flex; align-items: center; gap: .4rem; border: 1px solid #344054; border-radius: 999px; padding: .35rem .65rem; color: #d0d5dd; font-size: .8rem; }
+.provider-badge i { width: .45rem; height: .45rem; border-radius: 50%; background: #98a2b3; }
+.provider-badge--healthy i, .provider-badge--ok i { background: #6ce9c5; }
+.provider-badge--error i, .provider-badge--unhealthy i { background: #f97068; }
 .topbar input, .command-row input { min-width: 16rem; padding: .75rem 1rem; border: 1px solid #475467; border-radius: .65rem; color: #f8fafc; background: #1d2939; }
 .topbar input::placeholder, .command-row input::placeholder { color: #667085; }
 
