@@ -15,6 +15,7 @@ import {
   createProject,
   createTask,
   createRedis,
+  CommunicationWakeupPublisher,
   enqueueTask,
   getLatestTask,
   getMessage,
@@ -26,6 +27,7 @@ import { canonicalSha256V1 } from '@ww/shared';
 import { NIL_UUID } from '@ww/shared';
 import { systemPrincipal, TaskTransitionService } from '@ww/scheduler';
 import { MockProvider, chUsageSink } from '@ww/providers';
+import { CommunicationEscalationDelivery, CommunicationService, PrincipalResolver, createDurableModelRouter } from '@ww/agents';
 import {
   DockerSandboxAdapter,
   CommandRunner,
@@ -405,6 +407,23 @@ describe.skipIf(probe === undefined || probeRedis === undefined)('Phase 9 runtim
       meta: completionMeta,
     });
     expect(replay.result.content).toBe('runtime-ok');
+    expect(provider.calls).toHaveLength(1);
+    const restartedCommunication = new CommunicationService(
+      ch,
+      redis,
+      new PrincipalResolver(ch, { localSessionToken: 'phase9-test-token' }),
+      new CommunicationWakeupPublisher(redis),
+    );
+    const restarted = createDurableModelRouter(new Map([['mock', provider]]), {
+      ch,
+      redis,
+      usageSink: chUsageSink(ch),
+      fallbacks: () => [],
+      escalationPort: new CommunicationEscalationDelivery(restartedCommunication, { type: 'internal_service', credential: 'phase9', issuedAt: now }),
+      providerContext: { sessionId: randomUUID() as never, owningPmId: pmId as never },
+    });
+    const restartedReplay = await restarted.router.complete('mock:smoke', { messages: [], meta: completionMeta });
+    expect(restartedReplay.result.content).toBe('runtime-ok');
     expect(provider.calls).toHaveLength(1);
     expect(composition.inboxPollingModule).toBeDefined();
 
