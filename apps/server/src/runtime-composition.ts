@@ -47,7 +47,9 @@ import {
 } from '@ww/executor';
 import {
   runPhase1Orchestrator,
+  resumePhase1Orchestrator,
   type Phase1OrchestratorInput,
+  type Phase1ResumeInput,
   type Phase1OrchestratorResult,
 } from '@ww/scheduler';
 import { InboxPollingModule, inboxWorkerDrainPort } from './inbox-poll.module.js';
@@ -204,6 +206,7 @@ export interface Phase9RuntimeComposition extends Phase8RuntimeComposition {
   readonly toolExecutor: ToolExecutor;
   readonly scheduler: Phase1SchedulerPort;
   readonly inboxPollingModule: DynamicModule;
+  readonly resume: (input: Omit<Phase1ResumeInput, 'scheduler' | 'runtime'>) => Promise<Phase1OrchestratorResult>;
 }
 
 /** Build one project-scoped runtime.  The project scope is intentional: an
@@ -361,6 +364,12 @@ export function createPhase9RuntimeComposition(
     inboxPollingModule,
     orchestrate: (orchestrationInput: Omit<Phase1OrchestratorInput, 'scheduler' | 'runtime'>) =>
       runPhase1Orchestrator({
+        ...orchestrationInput,
+        scheduler,
+        runtime: orchestrationRuntime,
+      }),
+    resume: (orchestrationInput: Omit<Phase1ResumeInput, 'scheduler' | 'runtime'>) =>
+      resumePhase1Orchestrator({
         ...orchestrationInput,
         scheduler,
         runtime: orchestrationRuntime,
