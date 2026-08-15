@@ -64,7 +64,9 @@ describe('Phase 1 orchestrator', () => {
     const runtime: Phase1RuntimePort = { work: async () => ({ kind: 'report', summary: 'cevap sonrası tamam' }), verify: async () => ({ verdict: verdict('approve'), diff: 'diff' }) };
     const result = await resumePhase1Orchestrator({ taskId: id(2), brief, scheduler: s, runtime, replyMessageId: id(50), questionMessageId: id(49), previousAttemptId: id(4), answer: 'src', maxAttempts: 3 });
     expect(result.status).toBe('done');
-    expect(s.calls[0]).toBe('start_work');
+    // resumeUserAnswer returns a fresh attempt already activated as working;
+    // the resumed lifecycle must not emit a duplicate start_work transition.
+    expect(s.calls[0]).toBe('report_result');
   });
 
   it('soru mesajının kendisini cevap veya boş cevabı resume olarak kabul etmez', async () => {

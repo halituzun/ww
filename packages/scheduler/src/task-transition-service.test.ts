@@ -81,7 +81,7 @@ function request(action: (typeof TASK_TRANSITION_ACTIONS)[number], status: TaskR
 
 const allowed = new Set([
   'queued:assign', 'queued:cancel', 'assigned:start_work',
-  'working:report_result', 'working:fail', 'working:request_user_input',
+  'working:start_work', 'working:report_result', 'working:fail', 'working:request_user_input',
   'verifying:verifier_approved', 'verifying:verifier_rejected',
   'testing:gate_passed', 'testing:gate_failed',
   'approved:commit_completed', 'escalated:escalation_resolved',

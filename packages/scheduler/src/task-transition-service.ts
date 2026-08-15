@@ -1306,9 +1306,13 @@ export class TaskTransitionService {
       this.#ch,
       task.assignment_attempt_id,
     ));
+    const previous = attempt?.previousAttemptId === undefined
+      ? null
+      : await taskGuard.after(getAssignmentAttempt(this.#ch, attempt.previousAttemptId));
     if (
       attempt === null || attempt.previousAttemptId === undefined ||
-      attempt.attemptNumber !== task.attempt + 1 ||
+      previous === null || attempt.attemptNumber !== previous.attemptNumber + 1 ||
+      (task.attempt !== attempt.attemptNumber && task.attempt !== attempt.attemptNumber - 1) ||
       attempt.taskBriefId !== task.task_brief_id ||
       attempt.workerAgentId !== task.worker_agent_id ||
       attempt.verifierAgentId !== task.verifier_agent_id
