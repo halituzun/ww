@@ -38,9 +38,26 @@ export interface ProviderConfigInput {
   fallbackOrder: number;
 }
 
+// Vite dev sunucusu yalnız /health'i proxy'ler. Göreli yol üretilirse istek panele
+// gider ve index.html döner; bu yüzden varsayılan API kökü açıkça verilir
+// (App.tsx ile aynı gelenek).
+export const DEFAULT_API_BASE = 'http://localhost:4000';
+
 function apiUrl(baseUrl: string | undefined, path: string): string {
-  const configured = baseUrl ?? import.meta.env['VITE_API_URL'] ?? '';
+  const configured = baseUrl ?? import.meta.env['VITE_API_URL'] ?? DEFAULT_API_BASE;
   return `${configured.trim().replace(/\/+$/, '')}${path}`;
+}
+
+// Yanlış hedefe giden istek HTML döndürür; ham JSON.parse hatası yerine
+// nedenini söyleyen bir hata verilir.
+async function parseJson(response: Response, what: string): Promise<unknown> {
+  const text = await response.text();
+  try {
+    return JSON.parse(text) as unknown;
+  } catch {
+    const contentType = response.headers.get('content-type') ?? 'bilinmiyor';
+    throw new Error(`${what}: JSON beklendi ama '${contentType}' geldi — API adresi (VITE_API_URL) yanlış olabilir`);
+  }
 }
 
 function sessionToken(options: ProviderRequestOptions): string {
@@ -64,7 +81,7 @@ export async function fetchProviders(options: ProviderRequestOptions = {}): Prom
   const init: RequestInit = options.signal ? { signal: options.signal } : {};
   const response = await fetchImpl(apiUrl(options.baseUrl, '/providers'), init);
   await ensureOk(response, 'Sağlayıcılar okunamadı');
-  const body: unknown = await response.json();
+  const body = await parseJson(response, 'Sağlayıcılar okunamadı');
   if (!Array.isArray(body)) throw new Error('Sağlayıcı yanıtı geçersiz');
   return body as Provider[];
 }
@@ -83,7 +100,7 @@ export async function saveProviderKey(
     { method: 'POST', headers: authHeaders(options), body: JSON.stringify({ apiKey: key }) },
   );
   await ensureOk(response, 'Anahtar kaydedilemedi');
-  return (await response.json()) as SaveKeyResult;
+  return (await parseJson(response, 'Anahtar kaydedilemedi')) as SaveKeyResult;
 }
 
 export async function upsertProvider(
@@ -107,6 +124,6 @@ export async function upsertProvider(
     }),
   });
   await ensureOk(response, 'Sağlayıcı kaydedilemedi');
-  const saved = (await response.json()) as Omit<Provider, 'keyConfigured' | 'maskedKey'>;
+  const saved = (await parseJson(response, 'Sağlayıcı kaydedilemedi')) as Omit<Provider, 'keyConfigured' | 'maskedKey'>;
   return { ...saved, keyConfigured: false, maskedKey: '' };
 }

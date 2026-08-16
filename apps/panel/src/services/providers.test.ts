@@ -33,6 +33,24 @@ describe('fetchProviders', () => {
     const fetchImpl = vi.fn(async () => jsonResponse([], { status: 500 })) as unknown as typeof fetch;
     await expect(fetchProviders({ baseUrl: '', fetchImpl })).rejects.toThrow(/500/);
   });
+
+  // Regresyon: baseUrl verilmediğinde göreli '/providers' üretilirse istek Vite dev
+  // sunucusuna gider ve index.html döner ("Unexpected token '<'"). Vite yalnız
+  // /health'i proxy'ler; sağlayıcı uçları doğrudan API'ye gitmelidir.
+  it('baseUrl verilmediğinde API kökünü kullanır, göreli yola düşmez', async () => {
+    const mock = vi.fn(async () => jsonResponse([provider]));
+    await fetchProviders({ fetchImpl: mock as unknown as typeof fetch });
+    const [url] = mock.mock.calls[0] as unknown as [string];
+    expect(url).toMatch(/^https?:\/\/.+\/providers$/);
+  });
+
+  it('HTML yanıtını sessizce JSON sanmaz', async () => {
+    const fetchImpl = vi.fn(async () => new Response('<!doctype html><html></html>', {
+      headers: { 'content-type': 'text/html' },
+    })) as unknown as typeof fetch;
+    await expect(fetchProviders({ baseUrl: '', fetchImpl }))
+      .rejects.toThrow(/JSON beklendi|geçersiz/i);
+  });
 });
 
 describe('saveProviderKey', () => {
