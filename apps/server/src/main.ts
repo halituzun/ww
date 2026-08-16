@@ -29,6 +29,10 @@ async function bootstrap(): Promise<void> {
   const app = await NestFactory.create(AppModule);
   app.useWebSocketAdapter(new WsAdapter(app));
   app.enableCors({ origin: panelOrigins() });
+  // Doğrulama hatası 500 değil 400 olmalı; istemci "girdim hatalı" ile
+  // "sunucu bozuldu"yu ayırt edebilsin.
+  const { ZodExceptionFilter } = await import('./zod-exception.filter.js');
+  app.useGlobalFilters(new ZodExceptionFilter());
   const port = serverPort();
   await app.listen(port);
   console.log(`[ww] server hazır: http://localhost:${port}`);
