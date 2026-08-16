@@ -173,3 +173,25 @@ dd {
   margin: 0.3rem 0 0;
   font-weight: 650;
 }
+
+/* API sağlayıcıları sayfası (docs/08 → API Yönetimi) */
+.providers-page { display: grid; gap: 1.25rem; }
+.provider-status { margin: 0; padding: 0.5rem 0.75rem; border-radius: 6px;
+  background: rgba(120, 170, 255, 0.12); font-size: 0.9rem; }
+.provider-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.85rem; }
+.provider-card { border: 1px solid rgba(140, 160, 200, 0.28); border-radius: 10px;
+  padding: 0.9rem 1rem; display: grid; gap: 0.65rem; }
+.provider-card__head { display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap; }
+.provider-card__head code { opacity: 0.65; font-size: 0.85rem; }
+.provider-card__meta { display: flex; gap: 1.5rem; flex-wrap: wrap; margin: 0; }
+.provider-card__meta dt { font-size: 0.75rem; opacity: 0.6; text-transform: uppercase;
+  letter-spacing: 0.04em; }
+.provider-card__meta dd { margin: 0.15rem 0 0; font-size: 0.9rem; }
+.provider-card__key { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; }
+.provider-card__key label { font-size: 0.85rem; min-width: 9rem; }
+.provider-card__key input { flex: 1 1 16rem; min-width: 12rem; }
+.provider-create { border-top: 1px solid rgba(140, 160, 200, 0.22); padding-top: 1rem;
+  display: grid; gap: 0.75rem; justify-items: start; }
+.provider-create h3 { margin: 0; }
+.provider-create__grid { display: grid; gap: 0.5rem;
+  grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr)); width: 100%; }

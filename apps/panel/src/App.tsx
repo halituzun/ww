@@ -2,6 +2,7 @@ import { useHealth } from './viewmodels/useHealth.js';
 import { useEffect, useMemo, useState } from 'react';
 import { TaskCanvas } from './components/TaskCanvas.js';
 import { FileEditor } from './components/FileEditor.js';
+import { ProvidersPage } from './components/ProvidersPage.js';
 
 type Task = { task_id: string; title: string; status: string; priority: number; updated_at: string; target_files?: string[] };
 type EventItem = { event: string; seq: number; ts: string; data: unknown };
@@ -16,6 +17,7 @@ const apiBase = import.meta.env.VITE_API_URL ?? 'http://localhost:4000';
 
 export default function App() {
   const { health, state, status } = useHealth();
+  const [page, setPage] = useState<'workspace' | 'providers'>(() => new URLSearchParams(window.location.search).get('page') === 'providers' ? 'providers' : 'workspace');
   const [projectId, setProjectId] = useState(() => new URLSearchParams(window.location.search).get('project') ?? '');
   const [tasks, setTasks] = useState<Task[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
@@ -143,9 +145,18 @@ export default function App() {
     setProjectStatusMessage('Proje oluşturuldu.');
   };
 
+  if (page === 'providers') {
+    return (
+      <main className="shell">
+        <header className="topbar"><div><p className="eyebrow">ww / ORCHESTRATION</p><h1>API sağlayıcıları</h1></div><div className="topbar-actions"><button type="button" onClick={() => setPage('workspace')}>← Çalışma alanı</button></div></header>
+        <ProvidersPage />
+      </main>
+    );
+  }
+
   return (
     <main className="shell">
-      <header className="topbar"><div><p className="eyebrow">ww / ORCHESTRATION</p><h1>Agent çalışma alanı</h1></div><div className="topbar-actions"><button type="button" onClick={() => void enableNotifications()}>Bildirimleri aç</button><input aria-label="Proje kimliği" placeholder="Proje UUID" value={projectId} onChange={(event) => setProjectId(event.target.value)} /></div></header>
+      <header className="topbar"><div><p className="eyebrow">ww / ORCHESTRATION</p><h1>Agent çalışma alanı</h1></div><div className="topbar-actions"><button type="button" onClick={() => setPage('providers')}>API'ler</button><button type="button" onClick={() => void enableNotifications()}>Bildirimleri aç</button><input aria-label="Proje kimliği" placeholder="Proje UUID" value={projectId} onChange={(event) => setProjectId(event.target.value)} /></div></header>
 
       <section className={`status-card status-card--${state}`} aria-live="polite">
         <div>
