@@ -1,6 +1,7 @@
 export * from './client.js';
 export * from './latest.js';
 export * from './migrate.js';
+export * from './testutil.js';
 export * from './redis.js';
 export * from './redis-leases.js';
 export * from './redis-wakeup.js';
