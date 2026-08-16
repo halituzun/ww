@@ -1,4 +1,5 @@
 import { useProviders } from '../viewmodels/useProviders.js';
+import { RoleModelTable } from './RoleModelTable.js';
 
 // API sağlayıcı yönetimi — docs/08-panel.md'de tanımlı bağımsız "API'ler" sayfası.
 // Proje seçiminden bağımsızdır: sağlayıcılar proje-bağımsızdır (api_providers'ta
@@ -62,6 +63,8 @@ export function ProvidersPage() {
           </li>
         ))}
       </ul>
+
+      <RoleModelTable providers={vm.providers} />
 
       <form
         className="provider-create"
