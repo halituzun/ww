@@ -40,6 +40,8 @@ body {
 .provider-card { display: grid; gap: .55rem; padding: .8rem; border: 1px solid #344054; border-radius: 10px; }
 .provider-card > div:first-child { display: grid; gap: .2rem; }
 .provider-card small { color: #98a2b3; }
+.project-create { display: grid; grid-template-columns: 1fr 9rem 7rem auto; gap: .5rem; margin: 1rem 0; }
+.project-create input, .project-create select { min-width: 0; padding: .7rem .8rem; border: 1px solid #475467; border-radius: .6rem; color: #f8fafc; background: #1d2939; }
 .narrator-card { margin-top: 1rem; padding: 1rem; border: 1px solid #344054; border-radius: .75rem; background: #101828; }
 .project-controls { display: flex; align-items: center; gap: .5rem; margin-bottom: 1rem; }
 .topbar input, .command-row input { min-width: 16rem; padding: .75rem 1rem; border: 1px solid #475467; border-radius: .65rem; color: #f8fafc; background: #1d2939; }
@@ -154,6 +156,7 @@ dl {
 
 @media (max-width: 700px) { .topbar { align-items: stretch; flex-direction: column; } .topbar input { min-width: 0; } .command-row { flex-direction: column; } .metrics { overflow-x: auto; } }
 @media (max-width: 900px) { .provider-create { grid-template-columns: 1fr 1fr; } }
+@media (max-width: 700px) { .project-create { grid-template-columns: 1fr; } }
 
 dl div {
   padding: 0.9rem 1rem;
