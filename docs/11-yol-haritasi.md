@@ -125,11 +125,12 @@ agent/task'i kuyruğa alıp ikinci restart'ta duplicate üretmediğini doğrular
 
 ## Faz 3 — Panel Temeli {#faz-3}
 
-**İlerleme (2026-08-15):** Proje listesi REST ucu, görev/mesaj REST akışları,
+**İlerleme (2026-08-16):** Proje listesi REST ucu, görev/mesaj REST akışları,
   `/events` WebSocket gateway'i ve project-scoped cursor replay'i çalışır. Panel
   canlı görev/zaman çizelgesi, proje seçici, proje duraklatma/devam/arşivleme ve
   altyapı sağlık görünümünü sunar. Sağlık, maliyet ve API artifact uçları panelde
-  kullanılabilir.
+  kullanılabilir. Sağlayıcı kartları maskeli anahtar kaydı ve güvenli REST
+  yönetimiyle tamamlandı; gerçek ClickHouse/Redis REST testi bunu doğrular.
 
 **Kapsam:**
 
@@ -178,7 +179,7 @@ ReplanningService eklendi; Phase4 policy rotaları fail-closed olarak genişleti
 
 ## Faz 5 — Tuval ve Dosya Gezgini {#faz-5}
 
-**İlerleme (2026-08-15):** Panelde canlı event timeline yanında React Flow görev
+**İlerleme (2026-08-16):** Panelde canlı event timeline yanında React Flow görev
 tuvali, salt-okunur Monaco fihrist editörü, API test/maliyet konsolu ve sandbox
 önizleme yüzeyi eklendi. Narrator kanıt çekirdeği `packages/memory` içinde.
 
@@ -199,12 +200,14 @@ tuvali, salt-okunur Monaco fihrist editörü, API test/maliyet konsolu ve sandbo
 
 ## Faz 6 — Test Ortamları ve Cila {#faz-6}
 
-**İlerleme (2026-08-15):** Docker sandbox executor, starter paketleme kapıları,
+**İlerleme (2026-08-16):** Docker sandbox executor, starter paketleme kapıları,
 kurulum dokümanı ve API/mobile starter şablonları hazırlandı. Web/API/mobile
 örnek kapıları executor'ın izole pipeline'ında çalıştırılır. API artifact listesi
 ve panel test konsolu endpoint metadata'sını kullanır. Android AVD için
 güvenli injected `MobilePreviewPort`/frame/tap sözleşmesi ve preview iframe
-yüzeyi hazırdır; makineye özgü gerçek AVD adapter'ı deployment konfigürasyonudur.
+  yüzeyi hazırdır; makineye özgü gerçek AVD adapter'ı deployment konfigürasyonudur.
+  Birleşik kapıda 9 paket build/lint ve 646 seri test; canlı Docker sandbox
+  izolasyonu, starter gate zinciri ve temiz Git commit'i doğrulandı.
 
 **Kapsam:**
 

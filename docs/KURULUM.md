@@ -17,6 +17,11 @@ ortam değişkenleri ile bağlantılar ve yerel oturum belirlenir. Üretim execu
 komutları Docker sandbox içinde çalışır; host çalışma alanı container'a canlı
 olarak bağlanmaz.
 
+Sağlayıcı anahtar yönetimi için `WW_MASTER_KEY` 64 karakterlik hex (32 bayt)
+olarak verilebilir; anahtarlar `WW_KEYSTORE_FILE` ile belirtilen şifreli dosyada
+AES-256-GCM olarak tutulur. Panel sağlayıcı anahtarını yalnız yetkili yerel
+oturumla gönderir ve yalnız maskeli değer döner.
+
 ## Küçük uçtan uca denemeler
 
 - Web: `packages/executor/templates/web` ile panelde proje oluşturup görev

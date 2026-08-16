@@ -1,5 +1,6 @@
 import 'reflect-metadata';
 import { randomUUID } from 'node:crypto';
+import { unlink } from 'node:fs/promises';
 import type { INestApplication } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import request from 'supertest';
@@ -25,12 +26,15 @@ describe.skipIf(probeCh === undefined || probeRedis === undefined)('REST gerçek
   let ch: ClickHouseClient;
   let redis: WwRedis;
   const db = `ww_test_server_rest_${Date.now()}_${process.pid}`;
+  const keyFile = `/tmp/ww-rest-provider-${Date.now()}-${process.pid}.json`;
 
   beforeAll(async () => {
     await runMigrations({ database: db });
     ch = createCh({ database: db });
     redis = await createRedis();
     process.env['WW_LOCAL_SESSION_TOKEN'] = token;
+    process.env['WW_MASTER_KEY'] = '11'.repeat(32);
+    process.env['WW_KEYSTORE_FILE'] = keyFile;
     const moduleRef = await Test.createTestingModule({ imports: [AppModule] })
       .overrideProvider(SERVER_DATABASE)
       .useValue({ ch, redis })
@@ -46,6 +50,7 @@ describe.skipIf(probeCh === undefined || probeRedis === undefined)('REST gerçek
     const admin = createCh({ database: 'default' });
     await admin.command({ query: `DROP DATABASE IF EXISTS ${db}` });
     await admin.close();
+    await unlink(keyFile).catch(() => undefined);
     probeRedis?.destroy();
     await probeCh?.close();
   });
@@ -101,6 +106,18 @@ describe.skipIf(probeCh === undefined || probeRedis === undefined)('REST gerçek
       expect(response.body.answer).toContain('message');
       expect(response.body.evidenceRefs.length).toBeGreaterThan(0);
       expect(response.body.traceHash).toMatch(/^[a-f0-9]{64}$/);
+    });
+    await request(app.getHttpServer()).patch('/providers/mock').set('Authorization', `Bearer ${token}`).send({ displayName: 'Mock Provider', baseUrl: '', models: ['mock:default'], enabled: true, isDefault: true, fallbackOrder: 0 }).expect(200).then((response) => {
+      expect(response.body.provider_id).toBe('mock');
+      expect(response.body.key_ref).toBe('mock');
+    });
+    await request(app.getHttpServer()).post('/providers/mock/key').set('Authorization', `Bearer ${token}`).send({ apiKey: 'sk-test-provider-key' }).expect(201).then((response) => {
+      expect(response.body).toEqual({ providerId: 'mock', configured: true, maskedKey: 'sk-…-key' });
+    });
+    await request(app.getHttpServer()).get('/providers').expect(200).then((response) => {
+      expect(response.body).toHaveLength(1);
+      expect(response.body[0]).toMatchObject({ provider_id: 'mock', keyConfigured: true, maskedKey: 'sk-…-key' });
+      expect(response.body[0].apiKey).toBeUndefined();
     });
   });
 });

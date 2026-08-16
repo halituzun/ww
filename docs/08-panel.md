@@ -95,6 +95,10 @@ React Flow tabanlı canlı organizasyon şeması:
   (sürükle-bırak).
 - **Anahtar ekleme**: modal → anahtar girilir → sunucu şifreli depoya yazar →
   test çağrısı → sonuç rozeti.
+- Uygulamadaki sağlayıcı yönetimi REST yüzeyi `GET /providers`,
+  `PATCH /providers/:providerId` ve `POST /providers/:providerId/key` uçlarını
+  kullanır. Panel yalnız maskeli anahtarı gösterir; ham anahtar tarayıcı
+  durumuna veya ClickHouse'a yazılmaz.
 - **Rol→model eşleme**: tablo — rol, birincil model, yedekler; açılır listeler
   `api_providers.models`'tan. "Model başarı raporu" bağlantısı
   ([Şema → örnek sorgular](02-clickhouse-semasi.md#örnek-sorgular)) karar desteği verir.

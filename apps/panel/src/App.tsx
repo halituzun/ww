@@ -9,6 +9,7 @@ type Project = { project_id: string; name: string; status: string; type: string 
 type Usage = { costUsd: number; promptTokens: number; completionTokens: number; calls: number };
 type FileIndex = { file_path: string; summary: string; layer: string; exports: string[]; related_task_ids: string[]; last_commit_hash: string; change_count: number; updated_at: string };
 type ProviderHealth = { provider_id: string; health_status: string; last_health_check: string };
+type Provider = { provider_id: string; display_name: string; base_url: string; models: string[]; enabled: boolean; is_default: boolean; fallback_order: number; keyConfigured: boolean; maskedKey: string };
 type ApiArtifact = { artifact_id: string; name: string; path: string; summary: string; commit_hash: string };
 
 const apiBase = import.meta.env.VITE_API_URL ?? 'http://localhost:4000';
@@ -22,6 +23,9 @@ export default function App() {
   const [usage, setUsage] = useState<Usage | null>(null);
   const [files, setFiles] = useState<FileIndex[]>([]);
   const [providerHealth, setProviderHealth] = useState<ProviderHealth[]>([]);
+  const [providers, setProviders] = useState<Provider[]>([]);
+  const [providerKeys, setProviderKeys] = useState<Record<string, string>>({});
+  const [providerStatus, setProviderStatus] = useState('');
   const [apiArtifacts, setApiArtifacts] = useState<ApiArtifact[]>([]);
   const [selectedFile, setSelectedFile] = useState<string | undefined>();
   const [events, setEvents] = useState<EventItem[]>([]);
@@ -37,6 +41,10 @@ export default function App() {
     if (projectId) return;
     void fetch(`${apiBase}/projects`).then((response) => response.ok ? response.json() as Promise<Project[]> : []).then(setProjects).catch(() => setProjects([]));
   }, [projectId]);
+
+  useEffect(() => {
+    void fetch(`${apiBase}/providers`).then((response) => response.ok ? response.json() as Promise<Provider[]> : []).then(setProviders).catch(() => setProviders([]));
+  }, []);
 
   useEffect(() => {
     if (!projectId) return;
@@ -105,6 +113,13 @@ export default function App() {
     const response = await fetch(`${apiBase}/projects/${projectId}/status`, { method: 'PATCH', headers: { 'content-type': 'application/json', authorization: `Bearer ${import.meta.env.VITE_SESSION_TOKEN ?? ''}` }, body: JSON.stringify({ status }) });
     if (response.ok) setProjectStatus(status);
   };
+  const saveProviderKey = async (providerId: string) => {
+    const apiKey = providerKeys[providerId]?.trim();
+    if (!apiKey) return;
+    const response = await fetch(`${apiBase}/providers/${providerId}/key`, { method: 'POST', headers: { 'content-type': 'application/json', authorization: `Bearer ${import.meta.env.VITE_SESSION_TOKEN ?? ''}` }, body: JSON.stringify({ apiKey }) });
+    setProviderStatus(response.ok ? `${providerId} anahtarı güncellendi` : `${providerId} anahtarı güncellenemedi`);
+    if (response.ok) { const result = await response.json() as { maskedKey: string }; setProviderKeys((current) => ({ ...current, [providerId]: '' })); setProviders((current) => current.map((provider) => provider.provider_id === providerId ? { ...provider, keyConfigured: true, maskedKey: result.maskedKey } : provider)); }
+  };
 
   return (
     <main className="shell">
@@ -139,6 +154,7 @@ export default function App() {
         <div className="project-controls"><span className={`pill pill--${projectStatus}`}>{projectStatus || 'yükleniyor'}</span><button type="button" onClick={() => void updateProjectStatus(projectStatus === 'paused' ? 'running' : 'paused')}>{projectStatus === 'paused' ? 'Devam et' : 'Duraklat'}</button><button type="button" onClick={() => void updateProjectStatus('archived')}>Arşivle</button></div>
         {usage ? <div className="metrics usage-metrics"><div><strong>${usage.costUsd.toFixed(4)}</strong><span>Maliyet</span></div><div><strong>{usage.calls}</strong><span>Çağrı</span></div><div><strong>{usage.promptTokens + usage.completionTokens}</strong><span>Token</span></div></div> : null}
         {providerHealth.length > 0 ? <div className="provider-health" aria-label="Sağlayıcı sağlığı">{providerHealth.map((provider) => <span key={provider.provider_id} className={`provider-badge provider-badge--${provider.health_status}`}><i aria-hidden="true" />{provider.provider_id}: {provider.health_status}</span>)}</div> : null}
+        {providers.length > 0 ? <section className="provider-management" aria-label="Sağlayıcı yönetimi"><div className="section-heading"><h3>API sağlayıcıları</h3><small>Anahtarlar yalnızca güvenli depoda tutulur.</small></div><div className="provider-grid">{providers.map((provider) => <article className="provider-card" key={provider.provider_id}><div><strong>{provider.display_name}</strong><small>{provider.provider_id} · {provider.models.join(', ') || 'model yok'}</small></div><span className={`pill pill--${provider.keyConfigured ? 'running' : 'paused'}`}>{provider.keyConfigured ? provider.maskedKey : 'anahtar yok'}</span><div className="command-row"><input aria-label={`${provider.provider_id} API anahtarı`} type="password" placeholder={provider.keyConfigured ? 'Yeni anahtar' : 'API anahtarı'} value={providerKeys[provider.provider_id] ?? ''} onChange={(event) => setProviderKeys((current) => ({ ...current, [provider.provider_id]: event.target.value }))} /><button type="button" onClick={() => void saveProviderKey(provider.provider_id)}>Kaydet</button></div></article>)}</div>{providerStatus ? <small>{providerStatus}</small> : null}</section> : null}
         <nav className="tabs"><button className={tab === 'tasks' ? 'active' : ''} onClick={() => setTab('tasks')}>Görevler <span>{tasks.length}</span></button><button className={tab === 'canvas' ? 'active' : ''} onClick={() => setTab('canvas')}>Tuval</button><button className={tab === 'files' ? 'active' : ''} onClick={() => setTab('files')}>Dosyalar</button><button className={tab === 'timeline' ? 'active' : ''} onClick={() => setTab('timeline')}>Zaman çizelgesi <span>{events.length}</span></button><button className={tab === 'api' ? 'active' : ''} onClick={() => setTab('api')}>API</button><button className={tab === 'preview' ? 'active' : ''} onClick={() => setTab('preview')}>Önizleme</button></nav>
         {tab === 'tasks' ? <><div className="metrics">{Object.entries(statusCounts).map(([key, count]) => <div key={key}><strong>{count}</strong><span>{key}</span></div>)}</div><ul className="task-list">{tasks.map((task) => <li key={task.task_id}><div><strong>{task.title}</strong><small>{task.task_id}</small></div><span className={`pill pill--${task.status}`}>{task.status}</span></li>)}</ul></> : tab === 'timeline' ? <ol className="timeline">{events.slice().reverse().map((item) => <li key={`${item.seq}-${item.event}`}><time>{new Date(item.ts).toLocaleTimeString()}</time><strong>{item.event}</strong><code>#{item.seq}</code></li>)}</ol> : tab === 'canvas' ? <TaskCanvas tasks={tasks} /> : tab === 'files' ? <div className="file-browser"><ul className="file-list">{files.map((file) => <li key={file.file_path} className={selectedFile === file.file_path ? 'active' : ''} onClick={() => setSelectedFile(file.file_path)}><code>{file.file_path}</code><small>{file.layer} · {file.change_count} değişiklik</small></li>)}</ul><FileEditor filePath={selectedFile} summary={files.find((file) => file.file_path === selectedFile)?.summary} /><div className="narrator-card"><h3>Nasıl yapıldı?</h3><div className="command-row"><input aria-label="Narrator sorusu" value={narratorQuestion} onChange={(event) => setNarratorQuestion(event.target.value)} /><button type="button" onClick={() => void askNarrator()}>Sor</button></div>{narratorResult ? <><p>{narratorResult.answer}</p><small>{narratorResult.evidenceRefs.length} kanıt kaynağı</small></> : null}</div></div> : tab === 'api' ? <div className="api-console"><h3>API test konsolu</h3>{apiArtifacts.length > 0 ? <label>Uç seçin<select aria-label="API artifact" onChange={(event) => setApiPath(event.target.value)}><option value="/health">/health</option>{apiArtifacts.map((artifact) => <option key={artifact.artifact_id} value={artifact.path}>{artifact.name} · {artifact.path}</option>)}</select></label> : null}<div className="command-row"><input aria-label="API yolu" value={apiPath} onChange={(event) => setApiPath(event.target.value)} /><button type="button" onClick={() => void runApiRequest()}>Çalıştır</button></div><code>GET {apiPath}</code><pre>{apiResponse}</pre></div> : <div className="preview-frame"><div className="device-bar">Web önizleme · sandbox çıktısı</div><iframe title="Proje önizleme" src={import.meta.env.VITE_PREVIEW_URL ?? 'about:blank'} sandbox="allow-scripts" /></div>}
       </section> : <section className="workspace-card project-picker"><h2>Projeler</h2><p className="hint">Bir proje seçin veya UUID ile doğrudan açın.</p><ul className="task-list">{projects.map((project) => <li key={project.project_id} onClick={() => setProjectId(project.project_id)}><div><strong>{project.name}</strong><small>{project.type} · {project.project_id}</small></div><span className={`pill pill--${project.status}`}>{project.status}</span></li>)}</ul></section>}
