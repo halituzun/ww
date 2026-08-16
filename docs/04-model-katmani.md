@@ -127,9 +127,13 @@ Normalizasyon kuralları:
 
 - Anahtarlar **asla** ClickHouse'a yazılmaz; `api_providers.key_ref` yalnızca
   referanstır.
-- Depo: `secrets/keys.enc.json` — `node:crypto` AES-256-GCM ile şifreli; ana anahtar
-  ilk kurulumda üretilir ve macOS Keychain'e konur (`security add-generic-password`),
-  container kipinde `WW_MASTER_KEY` ortam değişkeni.
+- Depo: `WW_KEYSTORE_FILE` ile belirlenen şifreli dosya; varsayılan
+  `<cwd>/.ww/keys.json` — `node:crypto` AES-256-GCM (nonce + authTag), dosya izni
+  `0600`. Ana anahtar `WW_MASTER_KEY` (64 karakter hex) ortam değişkeninden gelir;
+  verilmezse macOS Keychain'den okunur, orada da yoksa üretilip
+  `security add-generic-password` ile `ww-master` servisine yazılır.
+- Anahtar dosyasının ve `.env`'in **gitignore'da olması zorunludur** (`.ww/`, `.env`,
+  `.env.*`). Depo public upstream'e bağlıdır; bu kural gevşetilemez.
 - Panelden anahtar girişi: HTTPS-localhost üzerinden POST → server bellekte çözer,
   şifreli dosyaya yazar; API yanıtlarında anahtar asla geri dönmez (yalnız
   `sk-...son4` maskesi).

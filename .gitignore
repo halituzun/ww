@@ -4,5 +4,9 @@ dist/
 coverage/
 workspace/
 secrets/
+.ww/
+.env
+.env.*
+!.env.example
 *.log
 .DS_Store
