@@ -1,6 +1,10 @@
 // Sağlayıcı yönetimi IO katmanı (MVVM: Model/Service).
 // Ham API anahtarı yalnızca istek gövdesinde gider; yanıtlarda ve panel durumunda
 // yalnız maskeli değer taşınır (docs/04 → Anahtar Güvenliği).
+import { getJson, requestJson, type RequestOptions } from './http.js';
+
+export { DEFAULT_API_BASE } from './http.js';
+export type { RequestOptions as ProviderRequestOptions } from './http.js';
 
 export interface Provider {
   provider_id: string;
@@ -13,13 +17,6 @@ export interface Provider {
   keyConfigured: boolean;
   maskedKey: string;
   health_status?: string;
-}
-
-export interface ProviderRequestOptions {
-  baseUrl?: string;
-  fetchImpl?: typeof fetch;
-  sessionToken?: string;
-  signal?: AbortSignal;
 }
 
 export interface SaveKeyResult {
@@ -38,50 +35,8 @@ export interface ProviderConfigInput {
   fallbackOrder: number;
 }
 
-// Vite dev sunucusu yalnız /health'i proxy'ler. Göreli yol üretilirse istek panele
-// gider ve index.html döner; bu yüzden varsayılan API kökü açıkça verilir
-// (App.tsx ile aynı gelenek).
-export const DEFAULT_API_BASE = 'http://localhost:4000';
-
-function apiUrl(baseUrl: string | undefined, path: string): string {
-  const configured = baseUrl ?? import.meta.env['VITE_API_URL'] ?? DEFAULT_API_BASE;
-  return `${configured.trim().replace(/\/+$/, '')}${path}`;
-}
-
-// Yanlış hedefe giden istek HTML döndürür; ham JSON.parse hatası yerine
-// nedenini söyleyen bir hata verilir.
-async function parseJson(response: Response, what: string): Promise<unknown> {
-  const text = await response.text();
-  try {
-    return JSON.parse(text) as unknown;
-  } catch {
-    const contentType = response.headers.get('content-type') ?? 'bilinmiyor';
-    throw new Error(`${what}: JSON beklendi ama '${contentType}' geldi — API adresi (VITE_API_URL) yanlış olabilir`);
-  }
-}
-
-function sessionToken(options: ProviderRequestOptions): string {
-  return options.sessionToken ?? import.meta.env['VITE_SESSION_TOKEN'] ?? '';
-}
-
-function authHeaders(options: ProviderRequestOptions): Record<string, string> {
-  return { 'content-type': 'application/json', authorization: `Bearer ${sessionToken(options)}` };
-}
-
-async function ensureOk(response: Response, what: string): Promise<void> {
-  if (response.ok) return;
-  if (response.status === 401) {
-    throw new Error(`${what}: yetkisiz — panel oturum tokenı (VITE_SESSION_TOKEN) server'ın WW_LOCAL_SESSION_TOKEN değeriyle aynı olmalı`);
-  }
-  throw new Error(`${what}: ${response.status}`);
-}
-
-export async function fetchProviders(options: ProviderRequestOptions = {}): Promise<Provider[]> {
-  const fetchImpl = options.fetchImpl ?? fetch;
-  const init: RequestInit = options.signal ? { signal: options.signal } : {};
-  const response = await fetchImpl(apiUrl(options.baseUrl, '/providers'), init);
-  await ensureOk(response, 'Sağlayıcılar okunamadı');
-  const body = await parseJson(response, 'Sağlayıcılar okunamadı');
+export async function fetchProviders(options: RequestOptions = {}): Promise<Provider[]> {
+  const body = await getJson<unknown>('/providers', options, 'Sağlayıcılar okunamadı');
   if (!Array.isArray(body)) throw new Error('Sağlayıcı yanıtı geçersiz');
   return body as Provider[];
 }
@@ -89,41 +44,40 @@ export async function fetchProviders(options: ProviderRequestOptions = {}): Prom
 export async function saveProviderKey(
   providerId: string,
   apiKey: string,
-  options: ProviderRequestOptions = {},
+  options: RequestOptions = {},
 ): Promise<SaveKeyResult> {
   const key = apiKey.trim();
   if (key.length === 0) throw new Error('API anahtarı boş olamaz');
 
-  const fetchImpl = options.fetchImpl ?? fetch;
-  const response = await fetchImpl(
-    apiUrl(options.baseUrl, `/providers/${encodeURIComponent(providerId)}/key`),
-    { method: 'POST', headers: authHeaders(options), body: JSON.stringify({ apiKey: key }) },
+  return requestJson<SaveKeyResult>(
+    `/providers/${encodeURIComponent(providerId)}/key`,
+    { ...options, method: 'POST', body: { apiKey: key } },
+    'Anahtar kaydedilemedi',
   );
-  await ensureOk(response, 'Anahtar kaydedilemedi');
-  return (await parseJson(response, 'Anahtar kaydedilemedi')) as SaveKeyResult;
 }
 
 export async function upsertProvider(
   input: ProviderConfigInput,
-  options: ProviderRequestOptions = {},
+  options: RequestOptions = {},
 ): Promise<Provider> {
   const id = input.providerId.trim();
   if (id.length === 0) throw new Error('Sağlayıcı kimliği zorunludur');
 
-  const fetchImpl = options.fetchImpl ?? fetch;
-  const response = await fetchImpl(apiUrl(options.baseUrl, `/providers/${encodeURIComponent(id)}`), {
-    method: 'PATCH',
-    headers: authHeaders(options),
-    body: JSON.stringify({
-      displayName: input.displayName.trim(),
-      baseUrl: input.baseUrl.trim(),
-      models: input.models,
-      enabled: input.enabled,
-      isDefault: input.isDefault,
-      fallbackOrder: input.fallbackOrder,
-    }),
-  });
-  await ensureOk(response, 'Sağlayıcı kaydedilemedi');
-  const saved = (await parseJson(response, 'Sağlayıcı kaydedilemedi')) as Omit<Provider, 'keyConfigured' | 'maskedKey'>;
+  const saved = await requestJson<Omit<Provider, 'keyConfigured' | 'maskedKey'>>(
+    `/providers/${encodeURIComponent(id)}`,
+    {
+      ...options,
+      method: 'PATCH',
+      body: {
+        displayName: input.displayName.trim(),
+        baseUrl: input.baseUrl.trim(),
+        models: input.models,
+        enabled: input.enabled,
+        isDefault: input.isDefault,
+        fallbackOrder: input.fallbackOrder,
+      },
+    },
+    'Sağlayıcı kaydedilemedi',
+  );
   return { ...saved, keyConfigured: false, maskedKey: '' };
 }
