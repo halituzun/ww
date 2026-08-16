@@ -1,5 +1,6 @@
 export * from './types.js';
 export * from './pricing.js';
+export * from './health.js';
 export * from './usage.js';
 export * from './router.js';
 export * from './mock.js';
