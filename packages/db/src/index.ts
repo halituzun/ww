@@ -12,6 +12,7 @@ export * from './repositories/agents.js';
 export * from './repositories/api-usage.js';
 export * from './repositories/providers.js';
 export * from './repositories/role-models.js';
+export * from './repositories/usage-report.js';
 export * from './repositories/messages.js';
 export * from './repositories/receipts.js';
 export * from './repositories/receipt-quarantine.js';
