@@ -1,4 +1,5 @@
 import { EntityIdSchema, type AssignmentAttemptV1, type EntityId, type StructuredVerdictV1, type TaskBriefV1, type TaskStatus } from '@ww/shared';
+import { BrakeError } from './safety-brakes.js';
 
 /** Narrow bridge owned by server composition; scheduler does not import agents. */
 export interface Phase1RuntimePort {
@@ -18,7 +19,17 @@ export interface Phase1SchedulerPort {
   commit(input: Readonly<{ taskId: EntityId; attempt: AssignmentAttemptV1 }>): Promise<Readonly<{ commitHash: string }>>;
 }
 
-export interface Phase1OrchestratorInput { readonly taskId: EntityId; readonly brief: TaskBriefV1; readonly scheduler: Phase1SchedulerPort; readonly runtime: Phase1RuntimePort; readonly maxAttempts?: number; }
+export interface Phase1OrchestratorInput { readonly brakes?: Phase1BrakeCheck | undefined; readonly taskId: EntityId; readonly brief: TaskBriefV1; readonly scheduler: Phase1SchedulerPort; readonly runtime: Phase1RuntimePort; readonly maxAttempts?: number; }
+/**
+ * Denemeye başlamadan önce çalışan güvenlik freni (docs/07 → Frenler).
+ * Fren tetiklenirse BrakeError fırlatır; orkestratör işi başlatmadan tırmandırır.
+ */
+export type Phase1BrakeCheck = (context: Readonly<{
+  taskId: EntityId;
+  attempt: AssignmentAttemptV1;
+  attemptNumber: number;
+}>) => Promise<void>;
+
 export interface Phase1OrchestratorResult { readonly status: TaskStatus; readonly attempts: number; readonly commitHash?: string; }
 export interface Phase1ResumeInput extends Omit<Phase1OrchestratorInput, 'taskId'> { readonly taskId: EntityId; readonly replyMessageId: EntityId; readonly answer: string; readonly questionMessageId: EntityId; readonly previousAttemptId: EntityId; }
 export class Phase1OrchestratorError extends Error { constructor(message: string) { super(message); this.name = 'Phase1OrchestratorError'; } }
@@ -32,6 +43,18 @@ function boundedAttempts(value: number | undefined): number {
 async function runAssignedLifecycle(input: Phase1OrchestratorInput, initialAttempt: AssignmentAttemptV1, maxAttempts: number, initialCount: number, alreadyWorking = false): Promise<Phase1OrchestratorResult> {
   let attempt = initialAttempt;
   for (let attempts = initialCount; attempts <= maxAttempts; attempts += 1) {
+    // Fren, iş BAŞLAMADAN kontrol edilir: tetiklenmişse token/para harcanmaz.
+    if (input.brakes !== undefined) {
+      try {
+        await input.brakes({ taskId: input.taskId, attempt, attemptNumber: attempts });
+      } catch (error) {
+        if (!(error instanceof BrakeError)) throw error; // gerçek hata yutulmaz
+        await input.scheduler.escalate({
+          taskId: input.taskId, attempt, reason: `brake:${error.kind}: ${error.message}`,
+        });
+        return { status: 'escalated', attempts };
+      }
+    }
     if (!(alreadyWorking && attempts === initialCount)) {
       await input.scheduler.transition({ taskId: input.taskId, attempt, action: 'start_work' });
     }

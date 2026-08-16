@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { resumePhase1Orchestrator, runPhase1Orchestrator, type Phase1SchedulerPort, type Phase1RuntimePort } from './phase1-orchestrator.js';
+import { BrakeError } from './safety-brakes.js';
 
 const id = (n: number): string => `00000000-0000-4000-8000-${n.toString().padStart(12, '0')}`;
 const attempt = (n: number) => ({ assignmentAttemptId: id(n), projectId: id(1), taskId: id(2), taskBriefId: id(3), attemptNumber: n, workerAgentId: id(10 + n), verifierAgentId: id(20 + n), leaseOwner: `worker-${n}`, leaseFence: n, leaseExpiresAt: '2030-01-01T00:00:00.000Z', startReason: n === 1 ? 'initial' : 'retry_after_rejection', ...(n === 1 ? {} : { previousAttemptId: id(n - 1) }), assignedAt: '2029-01-01T00:00:00.000Z' } as never);
@@ -82,5 +83,66 @@ describe('Phase 1 orchestrator', () => {
     const result = await runPhase1Orchestrator({ taskId: id(2), brief, scheduler: s, runtime });
     expect(result.status).toBe('failed');
     expect(s.calls).toContain('report_result');
+  });
+});
+
+describe('güvenlik frenleri', () => {
+  const runtime: Phase1RuntimePort = {
+    work: async () => ({ kind: 'report', summary: 'ok' }),
+    verify: async () => ({ verdict: verdict('approve'), diff: '' } as never),
+  };
+
+  // docs/07: her fren tetiklenişi tırmandırmaya gider. Fren bağlı değilse
+  // kaçak döngü ve bütçe aşımı hiçbir şey tarafından durdurulmaz.
+  it('fren tetiklenirse iş başlamadan tırmandırır', async () => {
+    const s = scheduler();
+    const result = await runPhase1Orchestrator({
+      taskId: id(2), brief, scheduler: s, runtime,
+      brakes: async () => { throw new BrakeError('cost_budget', 'maliyet butcesi asildi'); },
+    });
+
+    expect(result.status).toBe('escalated');
+    // Fren iş BAŞLAMADAN devreye girmeli; para/token harcanmamalı.
+    expect(s.calls).not.toContain('start_work');
+    expect(s.calls).toContain('escalated');
+  });
+
+  it('tırmandırma gerekçesi fren türünü taşır', async () => {
+    let reason = '';
+    const s = scheduler({ escalate: async ({ reason: r }) => { reason = r; } });
+    await runPhase1Orchestrator({
+      taskId: id(2), brief, scheduler: s, runtime,
+      brakes: async () => { throw new BrakeError('loop_similarity', 'kacak dongu'); },
+    });
+    expect(reason).toMatch(/loop_similarity/);
+  });
+
+  it('fren her denemede yeniden kontrol edilir', async () => {
+    const seen: number[] = [];
+    const s = scheduler();
+    let run = 0;
+    await runPhase1Orchestrator({
+      taskId: id(2), brief, scheduler: s,
+      runtime: { work: async () => ({ kind: 'report', summary: 'x' }), verify: async () => ({ verdict: verdict(++run === 1 ? 'reject' : 'approve'), diff: '' } as never) },
+      brakes: async ({ attemptNumber }) => { seen.push(attemptNumber); },
+    });
+    expect(seen).toEqual([1, 2]);
+  });
+
+  it('fren yoksa davranış değişmez', async () => {
+    const s = scheduler();
+    const result = await runPhase1Orchestrator({ taskId: id(2), brief, scheduler: s, runtime });
+    expect(result.status).toBe('done');
+  });
+
+  // Fren dışı hata yutulmamalı; normal hata yoluna gitmeli.
+  it('fren kontrolündeki beklenmedik hata BrakeError gibi davranmaz', async () => {
+    const s = scheduler();
+    const result = await runPhase1Orchestrator({
+      taskId: id(2), brief, scheduler: s, runtime,
+      brakes: async () => { throw new Error('veritabanı düştü'); },
+    });
+    expect(s.calls).toContain('error');
+    expect(result.status).toBe('escalated');
   });
 });

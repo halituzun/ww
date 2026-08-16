@@ -11,5 +11,6 @@ export * from './service-backed-orchestration.js';
 export * from './delegation-service.js';
 export * from './agent-clone-service.js';
 export * from './safety-brakes.js';
+export * from './brake-guard.js';
 export * from './replanning-service.js';
 export * from './plan-approval-service.js';
