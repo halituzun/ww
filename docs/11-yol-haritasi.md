@@ -7,13 +7,14 @@
 ## İçindekiler
 
 1. [İlkeler](#ilkeler)
-2. [Faz 0 — Temel Altyapı](#faz-0)
-3. [Faz 1 — Çekirdek Orkestrasyon](#faz-1)
-4. [Faz 2 — Hafıza ve Dayanıklılık](#faz-2)
-5. [Faz 3 — Panel Temeli](#faz-3)
-6. [Faz 4 — Tam Agent Sistemi](#faz-4)
-7. [Faz 5 — Tuval ve Dosya Gezgini](#faz-5)
-8. [Faz 6 — Test Ortamları ve Cila](#faz-6)
+2. [Durum Özeti](#durum-özeti-2026-08-16-doğrulaması)
+3. [Faz 0 — Temel Altyapı](#faz-0)
+4. [Faz 1 — Çekirdek Orkestrasyon](#faz-1)
+5. [Faz 2 — Hafıza ve Dayanıklılık](#faz-2)
+6. [Faz 3 — Panel Temeli](#faz-3)
+7. [Faz 4 — Tam Agent Sistemi](#faz-4)
+8. [Faz 5 — Tuval ve Dosya Gezgini](#faz-5)
+9. [Faz 6 — Test Ortamları ve Cila](#faz-6)
 
 ---
 
@@ -26,6 +27,40 @@
   Faz 3'ten itibaren (kontör paneliyle birlikte) devreye girer.
 - Her fazın sonunda ilgili dokümanlar gerçeklikle senkronlanır (doküman ↔ kod
   sapması bırakılmaz).
+- Bir faz, **belgelenmiş kabul senaryosu geçmeden** "tamamlandı" işaretlenmez.
+  Atlanan entegrasyon testi kapı sayılmaz.
+
+## Durum Özeti (2026-08-16 doğrulaması)
+
+| Faz | Durum | Dayanak |
+|---|---|---|
+| 0 — Temel Altyapı | **Tamamlandı ✅** | Migration/latest/router/kontör testleri |
+| 1 — Çekirdek Orkestrasyon | **Tamamlandı ✅** | Kabul senaryoları deterministik mock testlerle karşılanıyor |
+| 2 — Hafıza ve Dayanıklılık | **Tamamlandı ✅** | Recovery, bağlam bütçesi, frenler testli |
+| 3 — Panel Temeli | **Kod tamam ⏳** | Kabul senaryosu **gerçek API** ister; hiç çalıştırılmadı |
+| 4 — Tam Agent Sistemi | **Kod tamam ⏳** | Kabul senaryosu Faz 3'ün gerçek koşusuna bağlı |
+| 5 — Tuval ve Dosya Gezgini | **Kod tamam ⏳** | Kabul senaryosu Faz 4'ün canlı koşusuna bağlı |
+| 6 — Test Ortamları ve Cila | **Kod tamam ⏳** | Canlı sandbox kapısı geçti; üç gerçek proje koşusu eksik |
+
+**Bu özeti okuyan ajan için tek kritik gerçek:** Platform bugüne kadar **hiç gerçek
+LLM API'sine bağlanmadı.** `secrets/` dizini yok, `api_providers`'ta kayıtlı tek
+sağlayıcı `mock`, `api_usage` tablosunda sıfır gerçek çağrı var. Tüm doğrulama
+`MockProvider` üzerinden yapıldı. Faz 0-2 zaten mock ile tanımlı olduğu için
+tamamdır; Faz 3-6'nın kabul senaryoları ise açıkça gerçek API ve insanlı panel
+koşusu istediğinden **kod bitmiş olsa da faz kapanmamıştır**.
+
+**Doğrulama komutları:**
+
+```bash
+docker compose up -d
+WW_REQUIRE_INTEGRATION=1 pnpm test          # 709 test, 9 paket
+pnpm --filter @ww/executor test:live        # +4 canlı Docker sandbox testi (opt-in)
+pnpm build && pnpm lint
+```
+
+Varsayılan `pnpm test` koşusunda executor'ın 4 canlı Docker testi atlanır
+(`WW_DOCKER_LIVE=1` ister). Depo kuralı gereği atlanan test kapı sayılmadığından
+faz kapatırken `test:live` ayrıca koşulmalıdır. Toplam kapı: **713 test**.
 
 ## Faz 0 — Temel Altyapı {#faz-0}
 
@@ -53,6 +88,20 @@
 - `pnpm test` yeşil; CI betiği (lokal) tek komut.
 
 ## Faz 1 — Çekirdek Orkestrasyon {#faz-1}
+
+**Durum:** Tamamlandı ✅ (2026-08-16 doğrulandı)
+
+Faz 1'in kabul senaryosu tanımı gereği tamamen deterministik ve gerçek API'sizdir;
+dolayısıyla otomatik kapı bu fazı kapatmaya yeter. Kanıt eşlemesi:
+
+| Kabul kriteri | Kanıt |
+|---|---|
+| Senaryo: proje → görev → kuyruk → worker → verifier → kapı → commit | `apps/server/src/phase9.runtime.integration.test.ts`, `apps/server/src/rest.integration.test.ts` |
+| Ping-pong freni (3. denemede `escalated`) | `packages/scheduler/src/phase1-orchestrator.test.ts` — "üçüncü kalıcı ret sonrası escalated olur" |
+| Ret → düzeltme → temiz terminal; gate hatası → yeni attempt | `packages/scheduler/src/phase1-orchestrator.test.ts` (8 test) |
+| İletişim: exact `replyToMessageId`, yinelenen teslim, Redis'siz inbox replay, sahte principal fail-closed | `packages/agents/src/communication.integration.test.ts` (28 test) |
+| Restart: durable provider effect'i tekrar çağrılmaz | `communication.integration.test.ts` — "non-replay-safe effect ... tek callback calistirir"; `phase9.runtime.integration.test.ts` |
+| Zaman: brief mühürleme, stale brief/attempt reddi, causal high-water | `communication.integration.test.ts`, `packages/shared/src/task-contracts.test.ts` |
 
 **Kapsam:**
 
@@ -98,6 +147,16 @@
 
 ## Faz 2 — Hafıza ve Dayanıklılık {#faz-2}
 
+**Durum:** Tamamlandı ✅ (2026-08-16 doğrulandı)
+
+Faz 2'nin kabul senaryosu da mock tabanlı tanımlıdır; otomatik kapı bu fazı kapatır.
+
+| Kabul kriteri | Kanıt |
+|---|---|
+| Kurtarma: restart sonrası proje kaldığı yerden, çift üretim yok | `packages/memory/src/recovery.integration.test.ts` — "stale worker/task leaseini queued + idle yapar ve ikinci restart duplicate üretmez" |
+| Hafıza: bütün-chunk bütçe, dedupe, deterministik sıra, as-of cutoff | `packages/memory/src/memory-service.test.ts`, `packages/memory/src/task-context-snapshot-builder.test.ts`, `packages/memory/src/narrator-service.test.ts` |
+| Frenler: token / maliyet / kaçak döngü / duvar-saati | `packages/scheduler/src/safety-brakes.test.ts` |
+
 **İlerleme (2026-08-15):** ContextPack/`memory_query`, bütün-chunk token
 bütçesi, özet/embedding/file-index yazma portları, startup `RecoveryService` ve scheduler
 token/maliyet/döngü/duvar-saati frenleri uygulandı. Server açılışında migration
@@ -124,6 +183,18 @@ agent/task'i kuyruğa alıp ikinci restart'ta duplicate üretmediğini doğrular
 - Fren testleri: token tavanı ve kaçak döngü tırmandırması.
 
 ## Faz 3 — Panel Temeli {#faz-3}
+
+**Durum:** Kod tamam ⏳ — kabul senaryosu bekliyor (2026-08-16)
+
+**Faz kapanmasını engelleyen tek şey:** Bu fazın kabul senaryosu *"Gerçek API'ler bu
+fazda ilk kez uçtan uca kullanılır"* ve *"kontör panosu gerçek maliyeti gösterir"*
+diyor. Bugüne kadar hiç gerçek sağlayıcı bağlanmadı: `secrets/` dizini yok,
+`api_providers`'ta yalnız `mock` kayıtlı, `api_usage`'da sıfır gerçek çağrı var.
+
+**Kapatmak için gereken:** Panelden en az bir gerçek sağlayıcı anahtarı gir → küçük
+bir gerçek senaryo koştur → kontör panosunun gerçek maliyeti gösterdiğini gör →
+bilerek bozuk anahtarlı ikinci sağlayıcı ekle → sağlık kırmızıya düşsün, fallback
+devreye girsin, panel rozeti görünsün. Bu koşu yapılana dek faz açık kalır.
 
 **İlerleme (2026-08-16):** Proje listesi REST ucu, görev/mesaj REST akışları,
   `/events` WebSocket gateway'i ve project-scoped cursor replay'i çalışır. Panel
@@ -152,6 +223,19 @@ agent/task'i kuyruğa alıp ikinci restart'ta duplicate üretmediğini doğrular
 
 ## Faz 4 — Tam Agent Sistemi {#faz-4}
 
+**Durum:** Kod tamam ⏳ — kabul senaryosu bekliyor (2026-08-16)
+
+Deterministik dilim geçiyor: `packages/agents/src/phase4-acceptance.test.ts`
+("interview → council → audit produces one approved deterministic result") ve
+`packages/scheduler/src/phase4.integration.test.ts` (76 testin çoğu; konsey turu,
+delegasyon derinliği, klon limiti, tırmandırma). Ancak belgelenmiş kabul senaryosu
+**gerçek** bir uçtan uca koşu istiyor: "küçük bir web uygulaması sihirbazdan girilir
+→ konsey planlar → kullanıcı onaylar → çoklu worker/verifier üretir → denetçiler en
+az bir bulgu üretip düzelttirir → uygulama kapıdan geçer."
+
+**Kapatmak için gereken:** Faz 3'ün gerçek API koşusu önce yapılmalı; bu faz ona
+bağlıdır. Konsey en az 3 farklı sağlayıcı istediğinden en az üç anahtar gerekir.
+
 **İlerleme (2026-08-15):** CouncilService (3–4 üye, bounded tur/sentez),
 delegation depth/budget guard, clone limit/idle kapatma, StandardsAuditor ve
 ReplanningService eklendi; Phase4 policy rotaları fail-closed olarak genişletildi.
@@ -179,6 +263,14 @@ ReplanningService eklendi; Phase4 policy rotaları fail-closed olarak genişleti
 
 ## Faz 5 — Tuval ve Dosya Gezgini {#faz-5}
 
+**Durum:** Kod tamam ⏳ — kabul senaryosu bekliyor (2026-08-16)
+
+Yüzeyler yerinde (React Flow tuval, salt-okunur Monaco fihrist editörü, narrator
+bağlantısı), ancak kabul senaryosu bunların **Faz 4'ün canlı koşusu sırasında**
+izlenmesini şart koşuyor: "Faz 4 senaryosu koşarken tuvalde atamalar/oklar canlı
+izlenir; geçmişe kaydırıcıyla dönülür; bir dosyanın fihristinden ilgili göreve ve
+narrator anlatısına gidilir." Faz 4 gerçek koşusu yapılmadan bu doğrulanamaz.
+
 **İlerleme (2026-08-16):** Panelde canlı event timeline yanında React Flow görev
 tuvali, salt-okunur Monaco fihrist editörü, API test/maliyet konsolu ve sandbox
 önizleme yüzeyi eklendi. Narrator kanıt çekirdeği `packages/memory` içinde.
@@ -200,14 +292,31 @@ tuvali, salt-okunur Monaco fihrist editörü, API test/maliyet konsolu ve sandbo
 
 ## Faz 6 — Test Ortamları ve Cila {#faz-6}
 
+**Durum:** Kod tamam ⏳ — kabul senaryosu bekliyor (2026-08-16)
+
+**Bugün doğrulanan:** Canlı Docker sandbox kapısı yeniden koşuldu ve geçti —
+`pnpm --filter @ww/executor test:live` → 4/4 (non-root, env-clean, cap-drop,
+network-none, tmpfs izolasyonu; çıktı/disk/timeout/abort sınırları ve temizlik;
+starter'ın atomik materialize edilip donmuş kapı zincirinden geçip temiz Git
+commit'i kurması). Bu testler varsayılan `pnpm test` koşusunda atlanır.
+
+**Kapatmak için gereken:** Kabul senaryosu üç gerçek proje koşusu istiyor —
+web projesinin panelde canlı önizlenmesi ve sohbetten verilen emrin sonucunun
+önizlemede görülmesi, API projesinin konsoldan test edilmesi, Flutter projesinin
+emülatörde açılıp ekran akışının panelde görünmesi, ve "bunu nasıl yaptın?"
+sorusunun üçünde de referanslı anlatı döndürmesi. Bunlar gerçek API'ye ve
+makineye özgü gerçek AVD adapter'ına bağlıdır (şu an güvenli injected
+`MobilePreviewPort` sözleşmesi var, gerçek adapter deployment konfigürasyonudur).
+
 **İlerleme (2026-08-16):** Docker sandbox executor, starter paketleme kapıları,
 kurulum dokümanı ve API/mobile starter şablonları hazırlandı. Web/API/mobile
 örnek kapıları executor'ın izole pipeline'ında çalıştırılır. API artifact listesi
 ve panel test konsolu endpoint metadata'sını kullanır. Android AVD için
 güvenli injected `MobilePreviewPort`/frame/tap sözleşmesi ve preview iframe
   yüzeyi hazırdır; makineye özgü gerçek AVD adapter'ı deployment konfigürasyonudur.
-  Birleşik kapıda 9 paket build/lint ve 646 seri test; canlı Docker sandbox
-  izolasyonu, starter gate zinciri ve temiz Git commit'i doğrulandı.
+  Birleşik kapıda 9 paket build/lint ve seri test seti (2026-08-16 ölçümü: 709
+  test + 4 opt-in canlı sandbox testi); canlı Docker sandbox izolasyonu, starter
+  gate zinciri ve temiz Git commit'i doğrulandı.
 
 **Kapsam:**
 

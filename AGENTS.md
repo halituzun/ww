@@ -2,7 +2,7 @@
 
 ## Proje Yapısı ve Modül Düzeni
 
-Bu depo, pnpm ve Turborepo kullanan bir TypeScript monorepo'sudur. Çalıştırılabilir uygulamalar `apps/` altında bulunur; mevcut NestJS API'sinin kaynakları `apps/server/src` dizinindedir. Yeniden kullanılabilir çalışma alanları `packages/` altındadır: `shared` ortak tip ve sabitleri, `db` ClickHouse/Redis erişimi ile sıralı SQL migration'larını, `providers` ise LLM adaptörlerini, yönlendirmeyi, fiyatlandırmayı ve anahtar saklamayı içerir. Testleri kaynak dosyanın yanında `*.test.ts` adıyla tutun. Mimari kararlar ve yol haritası `docs/` altındadır; önce `docs/00-genel-bakis.md` ve `docs/01-mimari.md` dosyalarını okuyun.
+Bu depo, pnpm ve Turborepo kullanan bir TypeScript monorepo'sudur. Çalıştırılabilir uygulamalar `apps/` altında bulunur; mevcut NestJS API'sinin kaynakları `apps/server/src` dizinindedir. Panel `apps/panel` altındadır. Yeniden kullanılabilir çalışma alanları `packages/` altındadır: `shared` ortak tip ve sabitleri, `db` ClickHouse/Redis erişimi ile sıralı SQL migration'larını, `providers` LLM adaptörlerini/yönlendirmeyi/fiyatlandırmayı ve anahtar saklamayı, `agents` agent döngüleri ile iletişim servisini, `scheduler` görev durum makinesi ve güvenlik frenlerini, `memory` bağlam/özet/narrator katmanını, `executor` ise sandbox'lı tool çalıştırmayı ve kapı koşucusunu içerir. Testleri kaynak dosyanın yanında `*.test.ts` adıyla tutun. Mimari kararlar ve yol haritası `docs/` altındadır; önce `docs/00-genel-bakis.md` ve `docs/01-mimari.md` dosyalarını okuyun.
 
 ## Derleme, Test ve Geliştirme Komutları
 
@@ -21,7 +21,7 @@ TypeScript yapılandırması strict mod, unchecked-index ve exact-optional kontr
 
 ## Test İlkeleri
 
-Vitest'in `describe`, `it` ve `expect` API'lerini kullanın; test adları gözlemlenebilir davranışı açıklamalıdır. Her davranış değişikliğine colocated bir `*.test.ts` ekleyin veya mevcut testi güncelleyin. Test açıklamaları mevcut pratikle uyumlu biçimde Türkçe olabilir. ClickHouse veya Redis kapalıyken entegrasyon testleri `describe.skipIf` ile atlanabilir; entegrasyon yollarını doğrularken Docker servislerini başlatın. Yapılandırılmış bir coverage eşiği yoktur; başarı, hata, fallback ve idempotency senaryolarına öncelik verin.
+Vitest'in `describe`, `it` ve `expect` API'lerini kullanın; test adları gözlemlenebilir davranışı açıklamalıdır. Her davranış değişikliğine colocated bir `*.test.ts` ekleyin veya mevcut testi güncelleyin. Test açıklamaları mevcut pratikle uyumlu biçimde Türkçe olabilir. ClickHouse veya Redis kapalıyken entegrasyon testleri `describe.skipIf` ile atlanabilir; entegrasyon yollarını doğrularken Docker servislerini başlatın ve kapıyı `WW_REQUIRE_INTEGRATION=1 pnpm test` ile koşun (bu bayrak atlamayı hataya çevirir). Executor'ın canlı Docker sandbox testleri ayrıca `WW_DOCKER_LIVE=1` ister ve varsayılan koşuda sessizce atlanır; faz kapatırken `pnpm --filter @ww/executor runtime:build && pnpm --filter @ww/executor test:live` de koşulmalıdır. Yapılandırılmış bir coverage eşiği yoktur; başarı, hata, fallback ve idempotency senaryolarına öncelik verin.
 
 ## Commit ve Pull Request Kuralları
 

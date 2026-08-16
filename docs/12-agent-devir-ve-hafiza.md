@@ -46,10 +46,32 @@ checkpoint oluştur ve push edilmemiş commit bırakma nedenini açıkça yaz.
 
 ## Mevcut Devir Noktası
 
-- Faz 0, 2026-08-14 tarihinde canlı ClickHouse/Redis koşusunda tamamlandı.
-- Tam kapı 87/87 test ile, sıfır skip olarak geçti; build ve lint tüm workspace'lerde yeşil.
+> Bu bölüm her oturum sonunda güncellenmelidir. Güncellenmezse sonraki ajan yanlış
+> yerden başlar — 2026-08-12 → 2026-08-16 arasında tam olarak bu oldu: Codex 72
+> commit ekledi, bu bölüm "sıradaki iş Faz 1" demeye devam etti.
+
+**Son doğrulama: 2026-08-16, dal `agent/agent-communication-contract`
+(main'in 72 commit önünde, remote ile senkron).**
+
+- **Kapı durumu:** `WW_REQUIRE_INTEGRATION=1 pnpm test` → 709 test, 9 paket, hata yok.
+  `pnpm --filter @ww/executor test:live` → 4/4 (opt-in canlı Docker sandbox; varsayılan
+  koşuda atlanır, faz kapatırken ayrıca koşulmalı). `pnpm build` ve `pnpm lint` yeşil.
+  Çalışma ağacı temiz.
+- **Faz durumu:** Faz 0, 1 ve 2 tamamlandı ✅. Faz 3-6'nın kodu yazıldı ve testleri
+  yeşil, ancak kabul senaryoları **açık** — ayrıntı ve kanıt eşlemesi için
+  `docs/11-yol-haritasi.md` içindeki "Durum Özeti" tablosu.
+- **En kritik gerçek:** Platform bugüne dek **hiç gerçek LLM API'sine bağlanmadı.**
+  `secrets/` yok, `api_providers`'ta yalnız `mock` kayıtlı, `api_usage`'da sıfır
+  gerçek çağrı. Her doğrulama `MockProvider` üzerinden yapıldı. Yani ww henüz bir kez
+  bile asıl işini (gerçek modellerle uygulama üretmek) yapmadı.
+- **Sıradaki iş:** Faz 3'ün kabul senaryosu — panelden gerçek sağlayıcı anahtarı
+  girip küçük bir gerçek senaryo koşturmak, kontör panosunda gerçek maliyeti görmek,
+  bozuk anahtarla fallback/sağlık rozetini doğrulamak. Faz 4, 5 ve 6 bu koşuya
+  zincirleme bağlıdır; sırayı atlamak faz kapatmaz.
+- **Terminoloji uyarısı:** "Faz" ile "Phase" aynı şey değildir. Yol haritasında
+  **Faz 0-6** (ürün kilometre taşları) vardır; `docs/superpowers/plans/2026-08-14-faz-1-*`
+  planının kendi içinde **Phase 0-9** (uygulama adımları) vardır. Koddaki
+  `phase9.runtime.integration.test.ts` gibi adlar bu ikinci numaralandırmadandır.
 - Redis istemcisi `5.12.1`; health ve pub/sub istemcileri timeout sonrası koşulsuz
   `destroy()` ile kapanır. Bu cleanup davranışını geriye götürme.
-- Sıradaki iş Faz 1'dir: executor, temel agent döngüleri, scheduler çekirdeği ve minimal REST.
-- Faz 1 planlanırken `docs/05-executor.md`, `docs/03-agent-sistemi.md` ve
-  `docs/07-zamanlayici.md` kaynak alınmalıdır.
+- Yerel servis portları: ClickHouse `8124`, Redis `6380`, API `4000`, panel `5173`.

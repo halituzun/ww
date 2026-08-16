@@ -8,12 +8,30 @@ Product-agent work must also read the normative communication contract in
 
 ## Current State
 
-- Phase 0 is complete and verified as of 2026-08-14.
+Verified 2026-08-16 on branch `agent/agent-communication-contract` (72 commits
+ahead of `main`, in sync with its remote). Keep this section current: when it goes
+stale, the next session starts from the wrong place.
+
+- **Faz 0, 1 and 2 are complete ✅.** Faz 3-6 are code-complete with green tests,
+  but their acceptance scenarios are still open. The authoritative per-phase status
+  and evidence mapping live in the "Durum Özeti" table of `docs/11-yol-haritasi.md`.
+- **The platform has never called a real LLM API.** There is no `secrets/`
+  directory, the only registered provider is `mock`, and `api_usage` holds zero
+  real calls. Everything has been verified through `MockProvider`, which is exactly
+  what Faz 0-2 specify — but Faz 3-6 cannot close without real runs.
+- **Next milestone: Faz 3's acceptance scenario** — add a real provider key through
+  the panel, run a small real scenario, confirm the kontör panel shows real cost,
+  then add a deliberately broken key and confirm health goes red and fallback
+  engages. Faz 4, 5 and 6 chain onto that run; do not skip ahead.
+- Gate as of that date: 709 tests across 9 packages, plus 4 opt-in live Docker
+  sandbox tests via `pnpm --filter @ww/executor test:live` (these are skipped by a
+  plain `pnpm test`). Build and lint green.
+- "Faz" and "Phase" are different scales: the roadmap has **Faz 0-6** (product
+  milestones), while `docs/superpowers/plans/2026-08-14-faz-1-*` has its own
+  internal **Phase 0-9** (implementation steps). Code names like
+  `phase9.runtime.integration.test.ts` refer to the latter.
 - The public upstream is `https://github.com/halituzun/ww`; `main` must remain
   buildable and reviewable.
-- The next product milestone is Phase 1, “Çekirdek Orkestrasyon,” exactly as
-  scoped in `docs/11-yol-haritasi.md`. Its first vertical slice is the versioned
-  communication contract and immutable task brief. Do not silently pull work from later phases.
 - Local services use ClickHouse `8124`, Redis `6380`, API `4000`, and panel `5173`.
 
 ## Start Every Session
