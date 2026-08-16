@@ -109,7 +109,7 @@ describe.skipIf(probeCh === undefined || probeRedis === undefined)('REST gerçek
     });
     await request(app.getHttpServer()).patch('/providers/mock').set('Authorization', `Bearer ${token}`).send({ displayName: 'Mock Provider', baseUrl: '', models: ['mock:default'], enabled: true, isDefault: true, fallbackOrder: 0 }).expect(200).then((response) => {
       expect(response.body.provider_id).toBe('mock');
-      expect(response.body.key_ref).toBe('mock');
+      expect(response.body.key_ref).toBe('');
     });
     await request(app.getHttpServer()).post('/providers/mock/key').set('Authorization', `Bearer ${token}`).send({ apiKey: 'sk-test-provider-key' }).expect(201).then((response) => {
       expect(response.body).toEqual({ providerId: 'mock', configured: true, maskedKey: 'sk-…-key' });

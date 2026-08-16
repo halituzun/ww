@@ -12,6 +12,7 @@ import {
 import { randomUUID } from 'node:crypto';
 import {
   appendProjectVersion,
+  createAgent,
   createCh,
   createProject,
   createTask,
@@ -60,7 +61,7 @@ export const TASK_APPLICATION = Symbol('TASK_APPLICATION');
 export const MESSAGE_APPLICATION = Symbol('MESSAGE_APPLICATION');
 export const SERVER_DATABASE = Symbol('SERVER_DATABASE');
 
-const ProjectInput = z.strictObject({ name: z.string().trim().min(1), slug: z.string().trim().min(1).optional(), type: z.enum(PROJECT_TYPES).optional(), description: z.string().default(''), budgetUsdLimit: z.number().finite().nonnegative().default(0) });
+const ProjectInput = z.strictObject({ name: z.string().trim().min(1), slug: z.string().trim().min(1).optional(), type: z.enum(PROJECT_TYPES).optional(), description: z.string().default(''), budgetUsdLimit: z.number().finite().nonnegative().default(0), bootstrapAgents: z.boolean().default(false) });
 const ProjectStatusInput = z.strictObject({ status: z.enum(PROJECT_STATUSES) });
 const TaskInput = z.strictObject({ title: z.string().trim().min(1), description: z.string().default(''), acceptanceCriteria: z.array(z.string().trim().min(1)).default([]), dependencies: z.array(EntityIdSchema).default([]), files: z.array(z.string().trim().min(1)).default([]), budget: z.number().int().nonnegative().default(0), maxAttempts: z.number().int().min(1).max(3).default(3), planId: EntityIdSchema.optional() });
 export const parseProjectInput = (value: unknown) => ProjectInput.parse(value);
@@ -87,7 +88,17 @@ export class ProjectApplicationService implements ProjectApplication {
   async create(input: ReturnType<typeof parseProjectInput>): Promise<ProjectRow> {
     const projectId = randomUUID() as EntityId;
     const now = new Date().toISOString();
-    return createProject(this.database.ch, { project_id: projectId, name: input.name, slug: input.slug ?? input.name.toLowerCase().replace(/[^a-z0-9]+/g, '-'), type: input.type ?? 'web', status: 'draft', description: input.description, workspace_path: `workspace/${projectId}`, budget_usd_limit: input.budgetUsdLimit, settings: {}, active_plan_id: NIL_UUID, created_at: now, updated_at: now });
+    const project = await createProject(this.database.ch, { project_id: projectId, name: input.name, slug: input.slug ?? input.name.toLowerCase().replace(/[^a-z0-9]+/g, '-'), type: input.type ?? 'web', status: 'draft', description: input.description, workspace_path: `workspace/${projectId}`, budget_usd_limit: input.budgetUsdLimit, settings: {}, active_plan_id: NIL_UUID, created_at: now, updated_at: now });
+    if (input.bootstrapAgents) {
+      for (const agent of [
+        { role: 'pm' as const, group: 'management' as const, name: 'PM', model: 'mock:pm' },
+        { role: 'worker' as const, group: 'coding' as const, name: 'Worker', model: 'mock:worker' },
+        { role: 'verifier' as const, group: 'coding' as const, name: 'Verifier', model: 'mock:verifier' },
+      ]) {
+        await createAgent(this.database.ch, { agent_id: randomUUID(), project_id: projectId, role: agent.role, group: agent.group, name: agent.name, model_ref: agent.model, parent_agent_id: NIL_UUID, clone_of: NIL_UUID, status: 'idle', current_task_id: NIL_UUID, prompt_name: `bootstrap.${projectId}.${agent.role}`, prompt_version: 1, tasks_done: 0, tasks_rejected: 0, created_at: now, updated_at: now });
+      }
+    }
+    return project;
   }
   get(projectId: string): Promise<ProjectRow | null> { return getLatestProject(this.database.ch, projectId); }
   list(): Promise<ProjectRow[]> { return listLatestProjects(this.database.ch); }

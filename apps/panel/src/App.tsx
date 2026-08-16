@@ -135,7 +135,7 @@ export default function App() {
   };
   const createProject = async () => {
     if (!projectDraft.name.trim()) return;
-    const response = await fetch(`${apiBase}/projects`, { method: 'POST', headers: { 'content-type': 'application/json', authorization: `Bearer ${import.meta.env.VITE_SESSION_TOKEN ?? ''}` }, body: JSON.stringify({ name: projectDraft.name.trim(), type: projectDraft.type, budgetUsdLimit: Number(projectDraft.budget) || 0 }) });
+    const response = await fetch(`${apiBase}/projects`, { method: 'POST', headers: { 'content-type': 'application/json', authorization: `Bearer ${import.meta.env.VITE_SESSION_TOKEN ?? ''}` }, body: JSON.stringify({ name: projectDraft.name.trim(), type: projectDraft.type, budgetUsdLimit: Number(projectDraft.budget) || 0, bootstrapAgents: true }) });
     if (!response.ok) { setProjectStatusMessage('Proje oluşturulamadı; oturum tokenını kontrol et.'); return; }
     const project = await response.json() as Project;
     setProjects((current) => [...current, project]);
