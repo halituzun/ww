@@ -26,6 +26,13 @@ Varsayılan bağlantılar `WW_CH_URL` ve `WW_REDIS_URL` ile değiştirilebilir; 
 Container kipinde anahtar deposu için 32 baytlık hex anahtarı `WW_MASTER_KEY` olarak
 verin. API portunu `WW_PORT`, panel proxy hedefini `VITE_API_PROXY_TARGET` belirler.
 
+Panelin yazma uçlarını kullanabilmesi için `VITE_SESSION_TOKEN` ile server'ın
+`WW_LOCAL_SESSION_TOKEN` değeri **aynı** olmalıdır; ayrıca executor'ın canlı Docker
+sandbox testleri varsayılan koşuda atlanır. Token üretimi, sağlayıcı anahtarı girişi
+ve tam kapı dahil adım adım kurulum: **[docs/KURULUM.md](docs/KURULUM.md)**.
+
+Güncel faz durumu ve kanıt eşlemesi: [docs/11 — Durum Özeti](docs/11-yol-haritasi.md).
+
 ## Belgeler
 
 Tüm mimari ve tasarım dokümanları `docs/` altındadır:
