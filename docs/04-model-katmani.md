@@ -111,7 +111,7 @@ Normalizasyon kuralları:
 
 ## Kontör: Maliyet Ölçümü ve Frenler
 
-- Fiyat tablosu `packages/providers/pricing.ts` — model başına $/1M girdi-çıktı token;
+- Fiyat tablosu `packages/providers/src/pricing.ts` — model başına $/1M girdi-çıktı token;
   sürüm kontrollü, elle güncellenir.
 - Her çağrı → `api_usage` satırı (maliyet burada hesaplanır) → `mv_usage_daily`
   panoyu besler.

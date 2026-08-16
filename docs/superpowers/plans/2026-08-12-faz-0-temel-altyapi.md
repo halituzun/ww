@@ -1,5 +1,11 @@
 # Faz 0 — Temel Altyapı Implementation Plan
 
+**Durum: Teslim edildi ✅ (2026-08-14 doğrulandı).** Tüm adımlar uygulandı; güncel
+faz durumu ve kanıt eşlemesi için `docs/11-yol-haritasi.md` "Durum Özeti" tablosuna
+bakın. Bu dosya tarihsel plan kaydıdır — uygulama sırasında bazı kararlar bilinçli
+olarak değişti (ör. servis portları `8124`/`6380`, keystore yolu `.ww/keys.json`);
+çelişki halinde kod ve yol haritası geçerlidir.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** ww monoreposunun iskeleti + Docker (ClickHouse+Redis) + tam DB şeması ve migration çalıştırıcı + Redis yardımcıları + provider katmanı (Mock + OpenAI/Anthropic/DeepSeek adaptörleri, router+fallback, fiyat/kontör, anahtar deposu) + prompt seed — hepsi test edilmiş, `pnpm test` yeşil.
@@ -17,13 +23,13 @@
 **Files:**
 - Create: `.gitignore`, `package.json`, `pnpm-workspace.yaml`, `turbo.json`, `tsconfig.base.json`, `.nvmrc`, `vitest.workspace.ts`, `eslint.config.mjs`
 
-- [ ] **Step 1: git init + mevcut docs'u commit'le**
+- [x] **Step 1: git init + mevcut docs'u commit'le**
 
 ```bash
 cd /Users/halituzun/Projects/ww && git init -b main && git add README.md docs && git commit -m "docs: mimari doküman seti (00-11)"
 ```
 
-- [ ] **Step 2: Kök dosyaları yaz**
+- [x] **Step 2: Kök dosyaları yaz**
 
 `.gitignore`:
 ```
@@ -115,7 +121,7 @@ export default tseslint.config(
 );
 ```
 
-- [ ] **Step 3: pnpm install + commit**
+- [x] **Step 3: pnpm install + commit**
 
 ```bash
 pnpm install
@@ -127,7 +133,7 @@ git add -A && git commit -m "chore: monorepo kök iskeleti (pnpm+turbo+ts+vitest
 **Files:**
 - Create: `docker-compose.yml`
 
-- [ ] **Step 1: Dosyayı yaz**
+- [x] **Step 1: Dosyayı yaz**
 
 ```yaml
 services:
@@ -152,7 +158,7 @@ volumes:
   redis-data:
 ```
 
-- [ ] **Step 2: Ayağa kaldır ve doğrula**
+- [x] **Step 2: Ayağa kaldır ve doğrula**
 
 ```bash
 docker compose up -d
@@ -160,7 +166,7 @@ docker compose ps                       # ikisi de healthy/running
 curl -s 'http://localhost:8123/?query=SELECT%201'   # → 1
 ```
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add docker-compose.yml && git commit -m "feat: docker-compose (clickhouse 24.8 + redis 7)"
@@ -172,7 +178,7 @@ git add docker-compose.yml && git commit -m "feat: docker-compose (clickhouse 24
 - Create: `packages/shared/package.json`, `tsconfig.json`, `vitest.config.ts`, `src/index.ts`, `src/constants.ts`, `src/types.ts`
 - Test: `packages/shared/src/constants.test.ts`
 
-- [ ] **Step 1: Paket iskeleti**
+- [x] **Step 1: Paket iskeleti**
 
 `packages/shared/package.json`:
 ```json
@@ -191,7 +197,7 @@ git add docker-compose.yml && git commit -m "feat: docker-compose (clickhouse 24
 `vitest.config.ts`: `export default {};`
 (Bu üçlü kalıp diğer tüm paketlerde aynen tekrarlanır; sonraki task'larda "standart paket iskeleti" diye anılır.)
 
-- [ ] **Step 2: Sabitler — docs/02 ve docs/03 ile birebir**
+- [x] **Step 2: Sabitler — docs/02 ve docs/03 ile birebir**
 
 `src/constants.ts`:
 ```ts
@@ -226,7 +232,7 @@ export interface ApiUsageRow {
 
 `src/index.ts`: `export * from './constants.js'; export * from './types.js';`
 
-- [ ] **Step 3: Test yaz, koştur, commit**
+- [x] **Step 3: Test yaz, koştur, commit**
 
 `src/constants.test.ts`:
 ```ts
@@ -251,7 +257,7 @@ git add packages/shared && git commit -m "feat(shared): durum/rol sabitleri ve o
 
 Bağımlılıklar: `@clickhouse/client@^1`, `@ww/shared` (workspace).
 
-- [ ] **Step 1: Client**
+- [x] **Step 1: Client**
 
 `src/client.ts`:
 ```ts
@@ -266,7 +272,7 @@ export function createCh(cfg: ChConfig = {}): ClickHouseClient {
 }
 ```
 
-- [ ] **Step 2: Başarısız test — migration idempotency**
+- [x] **Step 2: Başarısız test — migration idempotency**
 
 `src/migrate.test.ts` (entegrasyon; CH yoksa atla):
 ```ts
@@ -296,7 +302,7 @@ describe.skipIf(!up)('migrations', () => {
 
 Koştur: `pnpm --filter @ww/db test` → FAIL (`runMigrations` yok).
 
-- [ ] **Step 3: Migration çalıştırıcı**
+- [x] **Step 3: Migration çalıştırıcı**
 
 `src/migrate.ts`:
 ```ts
@@ -340,7 +346,7 @@ export async function runMigrations(opts: { url?: string; database?: string; fil
 }
 ```
 
-- [ ] **Step 4: `migrations/0001_init.sql` — docs/02'deki 15 tablo + 2 MV**
+- [x] **Step 4: `migrations/0001_init.sql` — docs/02'deki 15 tablo + 2 MV**
 
 Tam DDL (özet biçim — her tablo docs/02'deki kolonlarla birebir; ReplacingMergeTree
 tabloları `version UInt64`, append tabloları partition'lı):
@@ -382,7 +388,7 @@ AS SELECT provider_id, toStartOfMinute(created_at) AS minute,
 FROM api_usage GROUP BY provider_id, minute;
 ```
 
-- [ ] **Step 5: Test koştur (PASS) + commit**
+- [x] **Step 5: Test koştur (PASS) + commit**
 
 ```bash
 pnpm --filter @ww/db test   # migrations describe PASS
@@ -395,7 +401,7 @@ git add packages/db && git commit -m "feat(db): clickhouse client + migration ca
 - Create: `packages/db/src/latest.ts`
 - Test: `packages/db/src/latest.test.ts`
 
-- [ ] **Step 1: Başarısız test**
+- [x] **Step 1: Başarısız test**
 
 ```ts
 // latest.test.ts (entegrasyon, aynı skipIf kalıbı; kendi test DB'sinde migration koşar)
@@ -408,7 +414,7 @@ it('iki sürümden yenisini döndürür', async () => {
 });
 ```
 
-- [ ] **Step 2: Implementasyon**
+- [x] **Step 2: Implementasyon**
 
 ```ts
 // latest.ts
@@ -425,7 +431,7 @@ export async function latest<T>(ch: ClickHouseClient, table: string, idCol: stri
 }
 ```
 
-- [ ] **Step 3: PASS + commit** (`feat(db): latest() son-durum sorgu yardimcisi`)
+- [x] **Step 3: PASS + commit** (`feat(db): latest() son-durum sorgu yardimcisi`)
 
 ### Task 5: packages/db — Redis yardımcıları (stream, kilit, pub/sub)
 
@@ -435,7 +441,7 @@ export async function latest<T>(ch: ClickHouseClient, table: string, idCol: stri
 
 Bağımlılık: `redis@^4`.
 
-- [ ] **Step 1: Başarısız testler** (entegrasyon; Redis yoksa atla)
+- [x] **Step 1: Başarısız testler** (entegrasyon; Redis yoksa atla)
 
 ```ts
 it('kuyruk: xadd + grup okuma + ack', async () => {
@@ -454,7 +460,7 @@ it('kilit: NX alma, sahibi olmayan bırakamaz', async () => {
 it('pub/sub: yayınlanan zarf aboneye ulaşır', async () => { /* subscribeEvents + publishEvent roundtrip */ });
 ```
 
-- [ ] **Step 2: Implementasyon**
+- [x] **Step 2: Implementasyon**
 
 ```ts
 // redis.ts — createRedis(url?), ensureGroup (BUSYGROUP yut), enqueueTask (XADD {task_id}),
@@ -466,7 +472,7 @@ it('pub/sub: yayınlanan zarf aboneye ulaşır', async () => { /* subscribeEvent
 (Tam kod implementasyonda; Lua compare-and-del şablonu:
 `if redis.call('get',KEYS[1])==ARGV[1] then return redis.call('del',KEYS[1]) else return 0 end`)
 
-- [ ] **Step 3: PASS + commit** (`feat(db): redis stream/kilit/pubsub yardimcilari`)
+- [x] **Step 3: PASS + commit** (`feat(db): redis stream/kilit/pubsub yardimcilari`)
 
 ### Task 6: packages/providers — tipler, fiyat tablosu, MockProvider
 
@@ -474,7 +480,7 @@ it('pub/sub: yayınlanan zarf aboneye ulaşır', async () => { /* subscribeEvent
 - Create: `packages/providers/package.json` (+standart iskelet), `src/types.ts`, `src/pricing.ts`, `src/mock.ts`, `src/index.ts`
 - Test: `src/pricing.test.ts`, `src/mock.test.ts`
 
-- [ ] **Step 1: Tipler — docs/04 arayüzü birebir**
+- [x] **Step 1: Tipler — docs/04 arayüzü birebir**
 
 ```ts
 // types.ts
@@ -503,7 +509,7 @@ export class ProviderError extends Error {
 }
 ```
 
-- [ ] **Step 2: Fiyat tablosu + test (TDD)**
+- [x] **Step 2: Fiyat tablosu + test (TDD)**
 
 Test: bilinen model doğru maliyet, bilinmeyen model 0 + `known:false`.
 ```ts
@@ -525,14 +531,14 @@ export function costUsd(modelRef: string, u: { promptTokens: number; completionT
 ```
 (Fiyatlar implementasyon günü güncel listeyle doğrulanır; tablo elle bakımlıdır — docs/04.)
 
-- [ ] **Step 3: MockProvider + test (TDD)**
+- [x] **Step 3: MockProvider + test (TDD)**
 
 Davranış: kurucuya verilen senaryo sırayla döner (`respond` fonksiyonu veya sabit
 liste); `failFirst: n` ilk n çağrıda ProviderError fırlatır (fallback testi için);
 `calls` dizisi istekleri kaydeder; `embed` deterministik sahte vektör (metin
 hash'inden) döner.
 
-- [ ] **Step 4: PASS + commit** (`feat(providers): tipler, fiyat tablosu, MockProvider`)
+- [x] **Step 4: PASS + commit** (`feat(providers): tipler, fiyat tablosu, MockProvider`)
 
 ### Task 7: packages/providers — usage kaydı + ModelRouter (fallback)
 
@@ -540,7 +546,7 @@ hash'inden) döner.
 - Create: `src/usage.ts`, `src/router.ts`
 - Test: `src/router.test.ts`
 
-- [ ] **Step 1: Başarısız testler**
+- [x] **Step 1: Başarısız testler**
 
 ```ts
 it('birincil başarılıysa fallback denenmez, usage ok yazılır', ...);
@@ -550,7 +556,7 @@ it('tüm zincir düşerse ProviderError fırlar, her deneme usage’a yazılır'
 it('maliyet costUsd ile hesaplanıp satıra konur', ...);
 ```
 
-- [ ] **Step 2: Implementasyon**
+- [x] **Step 2: Implementasyon**
 
 ```ts
 // usage.ts
@@ -587,7 +593,7 @@ export class ModelRouter {
 ```
 (`record` costUsd + meta alanlarıyla `ApiUsageRow` kurar; testlerde `usageSink` bellek dizisidir.)
 
-- [ ] **Step 3: PASS + commit** (`feat(providers): ModelRouter fallback zinciri + api_usage kaydi`)
+- [x] **Step 3: PASS + commit** (`feat(providers): ModelRouter fallback zinciri + api_usage kaydi`)
 
 ### Task 8: packages/providers — OpenAI / Anthropic / DeepSeek adaptörleri
 
@@ -597,16 +603,16 @@ export class ModelRouter {
 
 Bağımlılıklar: `openai@^4`, `@anthropic-ai/sdk@^0.39`.
 
-- [ ] **Step 1: Normalizasyon birim testleri** (SDK'ya değil saf çevirici fonksiyonlara):
+- [x] **Step 1: Normalizasyon birim testleri** (SDK'ya değil saf çevirici fonksiyonlara):
   iç `ChatMessage[]`→OpenAI/Anthropic biçimi; yanıtın `tool_calls`/`tool_use`→`NormalizedToolCall[]`;
   Anthropic'te system mesajının ayrılması; `tool` rolü→`tool_result` bloğu.
 
-- [ ] **Step 2: Adaptörler** — her biri `LlmProvider` uygular; anahtar kurucudan gelir
+- [x] **Step 2: Adaptörler** — her biri `LlmProvider` uygular; anahtar kurucudan gelir
   (keystore Task 9); hata eşlemesi: 401→`auth`, 429→`rate_limited`, 5xx→`server`,
   ağ→`connection`, `AbortError`→`timeout`. DeepSeek = OpenAI adaptörü + `baseURL`.
   `healthCheck` = 1 token'lık `complete` (`purpose:'health_check'`).
 
-- [ ] **Step 3: PASS + commit** (`feat(providers): openai/anthropic/deepseek adaptorleri`)
+- [x] **Step 3: PASS + commit** (`feat(providers): openai/anthropic/deepseek adaptorleri`)
 
 ### Task 9: packages/providers — anahtar deposu (şifreli dosya)
 
@@ -614,10 +620,10 @@ Bağımlılıklar: `openai@^4`, `@anthropic-ai/sdk@^0.39`.
 - Create: `src/keystore.ts`
 - Test: `src/keystore.test.ts`
 
-- [ ] **Step 1: Başarısız testler**: set→get roundtrip; dosya içeriği düz metin anahtar
+- [x] **Step 1: Başarısız testler**: set→get roundtrip; dosya içeriği düz metin anahtar
   içermez; yanlış master key ile açma hatası; `maskKey('sk-abcdef1234')==='sk-…1234'`.
 
-- [ ] **Step 2: Implementasyon** — `node:crypto` AES-256-GCM:
+- [x] **Step 2: Implementasyon** — `node:crypto` AES-256-GCM:
 
 ```ts
 // keystore.ts — dosya biçimi: { v:1, nonce: b64, data: b64(cipher+tag) }; içerik: JSON Record<providerId, apiKey>
@@ -635,7 +641,7 @@ Testler masterKey'i doğrudan enjekte eder (Keychain'e dokunmaz).
 Not: docs/04 "libsodium" der; Node yerleşik AES-256-GCM ile bağımlılıksız eşdeğer —
 doküman Task 11'de güncellenir.
 
-- [ ] **Step 3: PASS + commit** (`feat(providers): AES-256-GCM sifreli anahtar deposu`)
+- [x] **Step 3: PASS + commit** (`feat(providers): AES-256-GCM sifreli anahtar deposu`)
 
 ### Task 10: Prompt seed migration + apps kabukları
 
@@ -643,32 +649,32 @@ doküman Task 11'de güncellenir.
 - Create: `packages/db/migrations/0002_prompt_seed.sql`
 - Create: `apps/server/*` (NestJS minimal), `apps/panel/*` (Vite kabuk)
 
-- [ ] **Step 1: `0002_prompt_seed.sql`** — docs/03'teki çekirdek şablonlar:
+- [x] **Step 1: `0002_prompt_seed.sql`** — docs/03'teki çekirdek şablonlar:
   `role.pm`, `role.worker.coding`, `role.verifier`, `role.summarizer`, `role.narrator`
   için `INSERT INTO prompts (prompt_name, prompt_version, content, variables, changelog, is_active, created_at, version) VALUES …`
   (içerikler docs/03'teki metinlerin tam halleri; `{{task_description}}`, `{{context_pack}}` vb. değişkenlerle).
   Migration testinin idempotency'si bozulmasın diye INSERT'ler
   `SELECT … WHERE NOT EXISTS` kalıbıyla korunmaz — dosya bir kez uygulanır, `_migrations` zaten tekrar koşmaz.
 
-- [ ] **Step 2: `apps/server`** — NestJS minimal:
+- [x] **Step 2: `apps/server`** — NestJS minimal:
   `main.ts` açılışta `runMigrations()` çağırır; `GET /health` → `{ ok, clickhouse, redis }`
   (CH `SELECT 1`, Redis `PING`); port 4000. Test: health endpoint e2e (supertest,
   servisler ayaktayken).
 
-- [ ] **Step 3: `apps/panel`** — Vite React TS şablonu; tek sayfa: "ww paneli — Faz 3'te
+- [x] **Step 3: `apps/panel`** — Vite React TS şablonu; tek sayfa: "ww paneli — Faz 3'te
   gelecek" + sağlık durumunu `GET /health`ten gösteren kutu. Test yok (kabuk).
 
-- [ ] **Step 4: Commit** (`feat(apps): server kabugu (migration+health) ve panel kabugu`)
+- [x] **Step 4: Commit** (`feat(apps): server kabugu (migration+health) ve panel kabugu`)
 
 ### Task 11: Kapanış — tam koşu ve doküman senkronu
 
-- [ ] **Step 1:** `docker compose up -d && pnpm build && pnpm test && pnpm lint` — hepsi yeşil.
-- [ ] **Step 2:** `docs/04-model-katmani.md` anahtar deposu satırını gerçekle senkronla
+- [x] **Step 1:** `docker compose up -d && pnpm build && pnpm test && pnpm lint` — hepsi yeşil.
+- [x] **Step 2:** `docs/04-model-katmani.md` anahtar deposu satırını gerçekle senkronla
   (libsodium → node:crypto AES-256-GGM ifadesi) ve `docs/11-yol-haritasi.md` Faz 0'ı
   "tamamlandı ✅ (tarih)" işaretle.
-- [ ] **Step 3:** `README.md`'ye "Geliştirme" bölümü: gereksinimler (Node 22, pnpm, Docker),
+- [x] **Step 3:** `README.md`'ye "Geliştirme" bölümü: gereksinimler (Node 22, pnpm, Docker),
   `docker compose up -d`, `pnpm install`, `pnpm test`, `pnpm dev`.
-- [ ] **Step 4:** Commit (`docs: faz 0 kapanisi — kurulum bolumu + dokuman senkronu`).
+- [x] **Step 4:** Commit (`docs: faz 0 kapanisi — kurulum bolumu + dokuman senkronu`).
 
 ---
 
