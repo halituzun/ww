@@ -1,12 +1,17 @@
 [
   "apps/server/src/runtime-composition.ts:createPhase8RuntimeComposition",
   "apps/server/src/runtime-composition.ts:phase8RuntimeFromEnvironment",
-  "packages/agents/src/phase4-acceptance.ts:runPhase4Acceptance",
+  {
+    "symbol": "packages/agents/src/phase4-acceptance.ts:runPhase4Acceptance",
+    "reason": "Faz 4 kabul senaryosu koşucusu; kabul turunda elle çalıştırılır"
+  },
   "packages/agents/src/prompt-input-service.ts:PromptInputService",
+  {
+    "symbol": "packages/db/src/redis-cleanup.ts:dropLeakedRedisKeys",
+    "reason": "pnpm db:clean-tests betiğinden çağrılır (TS dışı giriş)"
+  },
   "packages/db/src/redis.ts:checkHeartbeat",
   "packages/db/src/redis.ts:publishEvent",
-  "packages/db/src/redis.ts:readQueue",
-  "packages/db/src/redis.ts:setHeartbeat",
   "packages/db/src/redis.ts:subscribeEvents",
   "packages/db/src/redis.ts:transferFileLocks",
   "packages/db/src/repositories/artifacts.ts:getArtifact",
@@ -19,110 +24,38 @@
   "packages/db/src/repositories/messages.ts:listMessagesBySession",
   "packages/db/src/repositories/messages.ts:listPendingInboxMessages",
   "packages/db/src/repositories/messages.ts:listProtocolV1AnswerRepliesToMessage",
-  "packages/db/src/repositories/plans.ts:createPlan",
-  "packages/db/src/repositories/projects.ts:listLatestProjectsByStatus",
   "packages/db/src/repositories/prompts.ts:activatePromptVersion",
-  "packages/db/src/repositories/prompts.ts:appendPromptVersion",
-  "packages/db/src/repositories/prompts.ts:getActivePrompt",
   "packages/db/src/repositories/prompts.ts:getActivePromptAsOf",
-  "packages/db/src/testutil.ts:clickhouseUp",
-  "packages/db/src/testutil.ts:redisUp",
-  "packages/executor/src/command-runner.ts:CommandRunner",
-  "packages/executor/src/durable-access.ts:dbRedisExecutorAccess",
-  "packages/executor/src/durable-audit.ts:DurableExecutorAudit",
-  "packages/executor/src/durable-audit.ts:DurableExecutorIntent",
-  "packages/executor/src/durable-audit.ts:DurableGateCommitAudit",
-  "packages/executor/src/durable-audit.ts:clickHouseExecutorEventStore",
-  "packages/executor/src/mobile-preview.ts:AdbMobilePreviewPort",
-  "packages/executor/src/mobile-preview.ts:MobilePreviewService",
-  "packages/executor/src/sandbox.ts:DockerSandboxAdapter",
-  "packages/providers/src/mock.ts:MockProvider",
-  "packages/providers/src/usage.ts:chUsageSink",
-  "packages/scheduler/src/delegation-service.ts:DelegationService",
-  "packages/scheduler/src/plan-approval-service.ts:PlanApprovalService",
-  "packages/scheduler/src/replanning-service.ts:ReplanningService",
   {
-    "symbol": "packages/scheduler/src/scheduler-worker.ts:SchedulerWorker",
-    "reason": "TaskPumpService kuyruğu readQueue/reclaimQueue ilkelleriyle doğrudan tüketiyor; SchedulerWorker yalnızca atama yapıyordu ve tam yaşam döngüsünü koşturmuyordu. Ya pompaya devredilmeli ya da kaldırılmalı."
+    "symbol": "packages/db/src/testutil.ts:clickhouseUp",
+    "reason": "test altyapısı; üretimden çağrılmaması doğrudur"
   },
   {
-    "symbol": "apps/server/src/runtime-context.ts:resolveRuntimeModels",
-    "reason": "orkestrasyon bootstrap temeli; cagiran sonraki turda gelecek"
+    "symbol": "packages/db/src/testutil.ts:redisUp",
+    "reason": "test altyapısı; üretimden çağrılmaması doğrudur"
   },
   {
-    "symbol": "apps/server/src/runtime-context.ts:resolveWorkspaceRoot",
-    "reason": "orkestrasyon bootstrap temeli; cagiran sonraki turda gelecek"
+    "symbol": "packages/executor/src/mobile-preview.ts:AdbMobilePreviewPort",
+    "reason": "docs/10 emülatör önizleme: yazıldı, panele bağlanmadı — açık iş"
   },
   {
-    "symbol": "packages/scheduler/src/escalation-recorder.ts:createEscalationRecorder",
-    "reason": "schedulerOperations.escalate uretim karsiligi; bootstrap sonraki turda baglayacak"
+    "symbol": "packages/executor/src/mobile-preview.ts:MobilePreviewService",
+    "reason": "docs/10 emülatör önizleme: yazıldı, panele bağlanmadı — açık iş"
   },
   {
-    "symbol": "packages/scheduler/src/transition-operation.ts:createTransitionOperation",
-    "reason": "schedulerOperations.transition uretim karsiligi; bootstrap baglayacak"
+    "symbol": "packages/providers/src/mock.ts:MockProvider",
+    "reason": "deterministik testler için; üretimde gerçek sağlayıcı kullanılır"
   },
   {
-    "symbol": "packages/db/src/test-cleanup.ts:dropLeakedTestDatabases",
-    "reason": "operasyonel arac; pnpm db:clean-tests scriptinden calisir"
+    "symbol": "packages/scheduler/src/delegation-service.ts:DelegationService",
+    "reason": "docs/03 delegasyon: yazıldı, orkestrasyona bağlanmadı — açık iş"
   },
   {
-    "symbol": "packages/scheduler/src/assignment-operations.ts:createReassignOperation",
-    "reason": "schedulerOperations uretim karsiligi; bootstrap baglayacak"
+    "symbol": "packages/scheduler/src/plan-approval-service.ts:PlanApprovalService",
+    "reason": "docs/03 konsey/plan onayı: yazıldı, bağlanmadı — açık iş"
   },
   {
-    "symbol": "packages/scheduler/src/assignment-operations.ts:createAwaitUserAnswerOperation",
-    "reason": "schedulerOperations uretim karsiligi; bootstrap baglayacak"
-  },
-  {
-    "symbol": "apps/server/src/gate-operations.ts:createGateOperations",
-    "reason": "schedulerOperations gate/commit uretim karsiligi; bootstrap baglayacak"
-  },
-  {
-    "symbol": "packages/db/src/redis-cleanup.ts:dropLeakedRedisKeys",
-    "reason": "operasyonel arac; pnpm db:clean-tests scriptinden calisir"
-  },
-  {
-    "symbol": "apps/server/src/prompt-assembly.ts:assemblePromptMessages",
-    "reason": "runtimeContext prompt kurulumu; bootstrap baglayacak"
-  },
-  {
-    "symbol": "apps/server/src/prompt-assembly.ts:renderPromptTemplate",
-    "reason": "runtimeContext prompt kurulumu; bootstrap baglayacak"
-  },
-  {
-    "symbol": "apps/server/src/tool-factory.ts:createToolPortFactory",
-    "reason": "runtimeContext toolFactory; bootstrap baglayacak"
-  },
-  {
-    "symbol": "apps/server/src/executor-composition.ts:createExecutorComposition",
-    "reason": "bootstrap parcasi; nihai birlestirme baglayacak"
-  },
-  {
-    "symbol": "apps/server/src/executor-composition.ts:createResumeUserAnswerOperation",
-    "reason": "bootstrap parcasi; nihai birlestirme baglayacak"
-  },
-  {
-    "symbol": "apps/server/src/orchestration-bootstrap.ts:bootstrapOrchestrationRuntime",
-    "reason": "motor bootstrapi; main.ts baglantisi bir sonraki adimda"
-  },
-  {
-    "symbol": "apps/server/src/orchestration-assembly.ts:createOrchestrationComposition",
-    "reason": "motor bootstrapi; main.ts baglantisi bir sonraki adimda"
-  },
-  {
-    "symbol": "apps/server/src/late-binding.ts:createLateBoundPort",
-    "reason": "motor bootstrapi; main.ts baglantisi bir sonraki adimda"
-  },
-  {
-    "symbol": "apps/server/src/runtime-starter.ts:startOrchestrationRuntime",
-    "reason": "motor baslatici; main.ts cagiriyor"
-  },
-  {
-    "symbol": "apps/server/src/runtime-starter.ts:selectRuntimeProject",
-    "reason": "motor baslatici; main.ts cagiriyor"
-  },
-  {
-    "symbol": "apps/server/src/runtime-context-service.ts:createRuntimeContextService",
-    "reason": "motor baslatici; main.ts cagiriyor"
+    "symbol": "packages/scheduler/src/replanning-service.ts:ReplanningService",
+    "reason": "docs/03 yeniden planlama: yazıldı, bağlanmadı — açık iş"
   }
 ]
