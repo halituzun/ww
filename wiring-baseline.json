@@ -85,5 +85,9 @@
   {
     "symbol": "apps/server/src/prompt-assembly.ts:renderPromptTemplate",
     "reason": "runtimeContext prompt kurulumu; bootstrap baglayacak"
+  },
+  {
+    "symbol": "apps/server/src/tool-factory.ts:createToolPortFactory",
+    "reason": "runtimeContext toolFactory; bootstrap baglayacak"
   }
 ]

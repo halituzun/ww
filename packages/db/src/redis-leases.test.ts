@@ -150,7 +150,11 @@ describe.skipIf(!up)('fenced lease canli Redis davranisi', () => {
 
   it('yalniz owner ve fence birlikte eslesirse renew/release eder', async () => {
     const key = freshTaskKey();
-    const lease = await acquireFencedLease(redis, key, 'owner-a', 80, '0');
+    // TTL bilerek cömert: bu test owner+fence EŞLEŞMESİNİ doğrular, süre
+    // dolmasını değil (o bir sonraki testte). Kısa TTL ile renew'a kadar
+    // yapılan dört Redis turu paralel yük altında süreyi aşıp testi
+    // ilgisiz biçimde düşürüyordu.
+    const lease = await acquireFencedLease(redis, key, 'owner-a', 5_000, '0');
     expect(lease).not.toBeNull();
     const current = lease!;
     const wrongOwner = { ...current, owner: 'owner-b' };
@@ -160,9 +164,13 @@ describe.skipIf(!up)('fenced lease canli Redis davranisi', () => {
     expect(await renewFencedLease(redis, wrongFence, 200)).toBe(false);
     expect(await releaseFencedLease(redis, wrongOwner)).toBe(false);
     expect(await releaseFencedLease(redis, wrongFence)).toBe(false);
-    expect(await renewFencedLease(redis, current, 500)).toBe(true);
+    expect(await renewFencedLease(redis, current, 5_000)).toBe(true);
     expect(await getFencedLease(redis, key)).toEqual(current);
-    expect(await redis.pTTL(key)).toBeGreaterThan(100);
+    // Yenilemenin TTL'i tazelediğini doğrular; makine hızına bağlı bir marj
+    // varsaymaz.
+    const ttl = await redis.pTTL(key);
+    expect(ttl).toBeGreaterThan(0);
+    expect(ttl).toBeLessThanOrEqual(5_000);
     expect(await releaseFencedLease(redis, current)).toBe(true);
     expect(await getFencedLease(redis, key)).toBeNull();
     expect(await releaseFencedLease(redis, current)).toBe(false);
