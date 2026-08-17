@@ -13,6 +13,7 @@ import { TaskPumpService } from './task-pump.service.js';
 import { RecoverySweeperService } from './recovery-sweeper.service.js';
 import { PlanApplicationService, PlansController } from './plans.controller.js';
 import { DelegationApplicationService, DelegationController } from './delegation.controller.js';
+import { MobilePreviewController } from './mobile-preview.controller.js';
 import { RoleModelsController } from './role-models.controller.js';
 import { BudgetController } from './budget.controller.js';
 import { AuditController } from './audit.controller.js';
@@ -47,6 +48,7 @@ import {
 @Module({
   imports: [OrchestrationModule],
   controllers: [
+    MobilePreviewController,
     DelegationController,
     PlansController,HealthController, ProjectsController, TasksController, MessagesController, OperationsController, FilesController, NarratorController, ProvidersController, RoleModelsController, BudgetController, AuditController, RuntimeController],
   providers: [

@@ -35,14 +35,6 @@
     "reason": "test altyapısı; üretimden çağrılmaması doğrudur"
   },
   {
-    "symbol": "packages/executor/src/mobile-preview.ts:AdbMobilePreviewPort",
-    "reason": "docs/10 emülatör önizleme: yazıldı, panele bağlanmadı — açık iş"
-  },
-  {
-    "symbol": "packages/executor/src/mobile-preview.ts:MobilePreviewService",
-    "reason": "docs/10 emülatör önizleme: yazıldı, panele bağlanmadı — açık iş"
-  },
-  {
     "symbol": "packages/providers/src/mock.ts:MockProvider",
     "reason": "deterministik testler için; üretimde gerçek sağlayıcı kullanılır"
   }
