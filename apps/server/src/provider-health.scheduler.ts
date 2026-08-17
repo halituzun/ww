@@ -1,6 +1,6 @@
 import { Inject, Injectable, Logger, type OnModuleDestroy, type OnModuleInit } from '@nestjs/common';
-import { listLatestApiProviders, upsertApiProvider } from '@ww/db';
-import { Keystore } from '@ww/providers';
+import { getLatestApiProvider, listLatestApiProviders, upsertApiProvider } from '@ww/db';
+import { Keystore, buildProviderRegistry } from '@ww/providers';
 import { SERVER_DATABASE, type ServerDatabase } from './orchestration.module.js';
 import {
   HEALTH_SWEEP_INTERVAL_MS,
@@ -11,9 +11,9 @@ import {
 } from './provider-health.service.js';
 
 // docs/04 → Sağlık Kontrolü: 60 sn'de bir hafif ping + son 5 dk hata oranı.
-// Ping'in kendisi henüz gerçek LLM çağrısı yapmaz; anahtarın varlığı ve
-// mv_provider_errors sinyali kullanılır. Gerçek ping, sağlayıcı adaptörleri
-// runtime'a bağlandığında `pingProvider` içinden yapılacaktır.
+// Ping artık gerçek adaptör üzerinden yapılır (LlmProvider.healthCheck, 1 token).
+// Anahtarı olmayan sağlayıcı kalıcı yapılandırma eksikliğidir: fatal sayılıp
+// doğrudan 'down' yazılır, art arda hata yumuşatmasına tabi tutulmaz.
 @Injectable()
 export class ProviderHealthScheduler implements OnModuleInit, OnModuleDestroy {
   readonly #logger = new Logger(ProviderHealthScheduler.name);
@@ -59,17 +59,34 @@ export class ProviderHealthScheduler implements OnModuleInit, OnModuleDestroy {
     };
   }
 
-  // Anahtar deposunda karşılığı olmayan sağlayıcı "down" sayılır: yapılandırma
-  // eksikliği de bir sağlık sorunudur ve panelde görünmelidir.
+  // Anahtarı/yapılandırması olmayan sağlayıcı "down" sayılır: eksik kurulum da
+  // bir sağlık sorunudur ve panelde görünmelidir.
   async #pingProvider(providerId: string): Promise<PingResult> {
     const started = Date.now();
+    const record = await getLatestApiProvider(this.#database.ch, providerId);
+    if (record === null) {
+      return { ok: false, latencyMs: Date.now() - started, error: 'kayıt yok', fatal: true };
+    }
+
     const store = await Keystore.open(
       process.env['WW_KEYSTORE_FILE'] ?? `${process.cwd()}/.ww/keys.json`,
     );
-    const key = await store.get(providerId);
-    return key === undefined || key.length === 0
-      ? { ok: false, latencyMs: Date.now() - started, error: 'anahtar yok', fatal: true }
-      : { ok: true, latencyMs: Date.now() - started };
+    const registry = await buildProviderRegistry([record], store);
+    const provider = registry.providers.get(providerId);
+    if (provider === undefined) {
+      const skipped = registry.skipped.find((entry) => entry.providerId === providerId);
+      return {
+        ok: false, latencyMs: Date.now() - started,
+        error: skipped?.reason ?? 'adaptör kurulamadı', fatal: true,
+      };
+    }
+
+    // Gerçek 1 token'lık ping (docs/04). Ağ hatası fatal DEĞİLDİR: geçici
+    // olabilir, art arda üç hatadan sonra 'down' olur.
+    const health = await provider.healthCheck();
+    return health.ok
+      ? { ok: true, latencyMs: health.latencyMs }
+      : { ok: false, latencyMs: health.latencyMs, error: health.error ?? 'ping başarısız' };
   }
 
   async #recentErrorRate(providerId: string): Promise<number | undefined> {
