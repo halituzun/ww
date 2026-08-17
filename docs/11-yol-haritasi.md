@@ -30,15 +30,15 @@
 - Bir faz, **belgelenmiş kabul senaryosu geçmeden** "tamamlandı" işaretlenmez.
   Atlanan entegrasyon testi kapı sayılmaz.
 
-## Durum Özeti (2026-08-16 doğrulaması)
+## Durum Özeti (2026-08-17 akşamı doğrulaması)
 
 | Faz | Durum | Dayanak |
 |---|---|---|
 | 0 — Temel Altyapı | **Tamamlandı ✅** | Migration/latest/router/kontör testleri |
 | 1 — Çekirdek Orkestrasyon | **Tamamlandı ✅** | Kabul senaryoları deterministik mock testlerle karşılanıyor |
 | 2 — Hafıza ve Dayanıklılık | **Tamamlandı ✅** | Recovery, bağlam bütçesi, frenler testli |
-| 3 — Panel Temeli | **Kod tamam ⏳** | Kabul senaryosu **gerçek API** ister; hiç çalıştırılmadı |
-| 4 — Tam Agent Sistemi | **Kod tamam ⏳** | Kabul senaryosu Faz 3'ün gerçek koşusuna bağlı |
+| 3 — Panel Temeli | **Tamamlandı ✅** | Kabul senaryosu 2026-08-17 akşamı gerçek API ile koşuldu (kanıt tablosu aşağıda) |
+| 4 — Tam Agent Sistemi | **Kod tamam ⏳** | Faz 3 koşusu tamam; bu fazın kendi kabul senaryosu (konsey + ≥3 sağlayıcı) açık |
 | 5 — Tuval ve Dosya Gezgini | **Kod tamam ⏳** | Kabul senaryosu Faz 4'ün canlı koşusuna bağlı |
 | 6 — Test Ortamları ve Cila | **Kod tamam ⏳** | Canlı sandbox kapısı geçti; üç gerçek proje koşusu eksik |
 
@@ -241,17 +241,25 @@ agent/task'i kuyruğa alıp ikinci restart'ta duplicate üretmediğini doğrular
 
 ## Faz 3 — Panel Temeli {#faz-3}
 
-**Durum:** Kod tamam ⏳ — kabul senaryosu bekliyor (2026-08-16)
+**Durum:** Tamamlandı ✅ (2026-08-17 akşamı) — kabul senaryosu gerçek API ile koşuldu.
 
-**Faz kapanmasını engelleyen tek şey:** Bu fazın kabul senaryosu *"Gerçek API'ler bu
-fazda ilk kez uçtan uca kullanılır"* ve *"kontör panosu gerçek maliyeti gösterir"*
-diyor. Bugüne kadar hiç gerçek sağlayıcı bağlanmadı: `secrets/` dizini yok,
-`api_providers`'ta yalnız `mock` kayıtlı, `api_usage`'da sıfır gerçek çağrı var.
+**Kabul senaryosunun kanıtları (hepsi canlı koşudan):**
 
-**Kapatmak için gereken:** Panelden en az bir gerçek sağlayıcı anahtarı gir → küçük
-bir gerçek senaryo koştur → kontör panosunun gerçek maliyeti gösterdiğini gör →
-bilerek bozuk anahtarlı ikinci sağlayıcı ekle → sağlık kırmızıya düşsün, fallback
-devreye girsin, panel rozeti görünsün. Bu koşu yapılana dek faz açık kalır.
+| Adım | Kanıt |
+|---|---|
+| Panelden gerçek sağlayıcı anahtarı | `POST /providers/deepseek/key`; `api_providers.key_ref=deepseek`, maskeli `sk-…3708` |
+| Küçük gerçek senaryo | görev `c8a8f3e6` → `done`, gerçek commit `b849854`, `src/colors.ts` diske yazıldı |
+| Kontör panosu gerçek maliyet | `GET /projects/:id/budget` → 31 çağrı, **$0.019051**, model `deepseek-chat` |
+| Bilerek bozuk anahtarlı ikinci sağlayıcı | `deepseek-bozuk` panelden eklendi, anahtar `sk-…0000` |
+| Sağlık kırmızıya düştü | periyodik sağlık kontrolü: `deepseek-bozuk` → `degraded` → **`down`**, `deepseek` → `ok` |
+| Fallback devreye girdi | görev `1ec967b9`: `fallback_attempt=0 deepseek-bozuk error/auth` → `fallback_attempt=1 deepseek fallback_used`; görev `done`, commit `b96431f3` |
+
+**Bu koşunun ortaya çıkardığı ve düzeltilen kusur:** yönlendirici "aynı sağlayıcıyı
+tekrar deneme" ile "başka sağlayıcıyı deneme"yi aynı sayıyordu; kimlik hatasında
+yedek HİÇ denenmiyor, görev düşüyordu. 1746 gerçek çağrının hiçbirinde fallback
+devreye girmemişti. `ProviderError.advancesFallbackChain` ile ayrıldı.
+
+**Not:** `deepseek-bozuk` kaydı kanıt olarak bırakıldı ama **kapalı** (`enabled=false`).
 
 **İlerleme (2026-08-16):** Proje listesi REST ucu, görev/mesaj REST akışları,
   `/events` WebSocket gateway'i ve project-scoped cursor replay'i çalışır. Panel

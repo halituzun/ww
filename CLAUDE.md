@@ -12,14 +12,19 @@ Verified 2026-08-17 (evening) on branch `agent/agent-communication-contract`
 (155 commits ahead of `main`, in sync with its remote). Keep this section current:
 when it goes stale, the next session starts from the wrong place.
 
-- **Faz 0, 1 and 2 are complete ✅.** Faz 3-6 are code-complete with green tests,
-  but their acceptance scenarios are still open. The authoritative per-phase status
+- **Faz 0, 1, 2 and 3 are complete ✅.** Faz 3's acceptance scenario was run
+  against the real DeepSeek API on 2026-08-17 (real key → real task → real cost
+  in the kontör panel → broken second key → health red → fallback engaged; the
+  evidence table is in `docs/11-yol-haritasi.md`). Faz 4-6 are code-complete with
+  green tests, but their acceptance scenarios are still open. The authoritative per-phase status
   and evidence mapping live in the "Durum Özeti" table of `docs/11-yol-haritasi.md`.
-- **Real LLM calls now happen.** `deepseek` is registered with a real key,
-  `api_usage` holds 180+ non-health calls, periodic health checks write real
-  statuses (`deepseek=ok`, `mock=down`), and one task has reached a real commit
-  (`affa20b`). What is still NOT verified end-to-end: a task reaching commit and
-  writing `artifacts` + `file_index` in one uninterrupted run.
+- **Real LLM calls now happen, and the full task loop closes.** `deepseek` is
+  registered with a real key, periodic health checks write real statuses, and
+  tasks now run uninterrupted from queue to commit: `c8a8f3e6` → `done`, commit
+  `b849854`, `src/colors.ts` on disk, `artifacts` and `file_index` both written.
+- **Always pass `files` (target files) when creating a task.** The executor
+  treats an empty target list as "no file may be written" and rejects
+  `write_file`; a task without targets can produce nothing.
 - **Run the live loop this way**: `WW_PHASE8_RUNTIME_ENABLED=1
   WW_RUNTIME_PROJECT_ID=<uuid> node apps/server/dist/main.js`. Without those the
   task pump logs "görev pompası açılmadı" and nothing is consumed.
