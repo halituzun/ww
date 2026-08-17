@@ -18,12 +18,24 @@ describe('planBootstrapPrompts', () => {
 
   // ASIL KUSUR: agent'lar var olmayan prompta işaret ediyordu; brief mühürleme
   // 'as-of prompt bulunamadi' ile düşüyor ve HİÇBİR görev koşamıyordu.
-  it('her bootstrap agent’ı için bir prompt satırı planlar', () => {
+  it('her ROL için bir prompt satırı planlar', () => {
     const prompts = planBootstrapPrompts(projectId, canonical as never);
-    expect(prompts).toHaveLength(BOOTSTRAP_AGENTS.length);
-    expect(prompts.map((prompt) => prompt.prompt_name)).toEqual(
-      BOOTSTRAP_AGENTS.map((agent) => bootstrapPromptName(projectId, agent.role)),
-    );
+    const roles = new Set(BOOTSTRAP_AGENTS.map((agent) => agent.role));
+    expect(prompts).toHaveLength(roles.size);
+  });
+
+  // Aynı rolden iki agent aynı promptu paylaşır; iki satır yazmak mükerrer
+  // kayıt olurdu.
+  it('aynı rol için promptu tekrarlamaz', () => {
+    const names = planBootstrapPrompts(projectId, canonical as never).map((p) => p.prompt_name);
+    expect(new Set(names).size).toBe(names.length);
+  });
+
+  // Verifier reddettiğinde yeniden atama FARKLI worker ister; tek worker'lı
+  // proje ilk rette kalıcı olarak kilitleniyordu.
+  it('retry için birden çok worker ve verifier kurar', () => {
+    expect(BOOTSTRAP_AGENTS.filter((a) => a.role === 'worker').length).toBeGreaterThan(1);
+    expect(BOOTSTRAP_AGENTS.filter((a) => a.role === 'verifier').length).toBeGreaterThan(1);
   });
 
   it('içeriği kanonik rol promptundan kopyalar', () => {

@@ -124,13 +124,22 @@ export function createGateOperations(input: GateOperationsInput) {
         workerName: details.workerName,
         verifierName: details.verifierName,
         targetFiles: details.targetFiles,
-        // Erişim kapsamı olmadan yazma reddedilir; attempt bağlamı taşınmalı.
-        targetAccess: [{
+        // Sözleşme: HER hedef dosya için tam erişim kaydı. Tek bir kısmi kayıt
+        // "Her commit hedefi için exact access fence gerekir" / "file lock
+        // doğrulaması zorunludur" ile commit'i düşürüyordu — iş kapıyı geçse
+        // bile tarihe yazılamıyordu.
+        targetAccess: details.targetFiles.map((relativePath) => ({
           projectId: attempt.projectId,
           taskId,
           taskBriefId: attempt.taskBriefId,
           assignmentAttemptId: attempt.assignmentAttemptId,
-        }],
+          agentId: (attempt as unknown as { workerAgentId: EntityId }).workerAgentId,
+          taskStatus: 'approved' as const,
+          leaseOwner: (attempt as unknown as { leaseOwner: string }).leaseOwner,
+          leaseFence: (attempt as unknown as { leaseFence: number }).leaseFence,
+          relativePath,
+          requireFileLock: true,
+        })),
       });
       return { commitHash: result.commitHash };
     },

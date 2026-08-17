@@ -69,3 +69,42 @@ describe('runVerifierLoop araç çağırmayan model', () => {
     await expect(run(router([], []))).rejects.toThrow(/submit_verdict/);
   });
 });
+
+// Verdikt şemayı tutturamazsa (ör. reasons boş) EKSİK UYDURULMAZ: modele
+// neyin yanlış olduğu söylenip bir kez daha istenir.
+describe('runVerifierLoop şema hatası', () => {
+  const rule = { ruleId: POLICY_RULE_IDS[0], ruleVersion: 1 };
+  const good = {
+    verdict: {
+      decision: 'approve',
+      reasons: [{ message: 'kabul', evidenceRefs: ['file:a.ts'] }],
+      evidenceRefs: ['file:a.ts'],
+      ruleRefs: [rule],
+    },
+  };
+  const bad = { verdict: { decision: 'approve', reasons: [], evidenceRefs: ['file:a.ts'], ruleRefs: [rule] } };
+
+  const run = (first: unknown, second: unknown) => {
+    let call = 0;
+    return runVerifierLoop({
+      brief: { projectId: id(1), taskId: id(2), taskBriefId: id(3) } as never,
+      attempt: { assignmentAttemptId: id(4), verifierAgentId: id(6) } as never,
+      snapshot: { invocationId: id(7), promptInputSnapshotId: id(8) } as never,
+      modelRef: 'm', prompt: [],
+      router: {
+        complete: async () => {
+          call += 1;
+          return { result: { toolCalls: [{ name: 'submit_verdict', args: call === 1 ? first : second }] } };
+        },
+      } as never,
+    } as never);
+  };
+
+  it('şema hatasında düzeltilmiş verdikti kabul eder', async () => {
+    expect((await run(bad, good)).verdict.decision).toBe('approve');
+  });
+
+  it('ikinci kez de tutturamazsa hata açık kalır', async () => {
+    await expect(run(bad, bad)).rejects.toThrow();
+  });
+});

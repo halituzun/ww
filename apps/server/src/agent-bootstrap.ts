@@ -16,10 +16,18 @@ export interface BootstrapAgentSpec {
   readonly canonicalPrompt: string;
 }
 
+/**
+ * Kadro İKİŞER worker/verifier içerir. Sebep: verifier reddettiğinde yeniden
+ * atama FARKLI bir worker ister (aynı agent aynı hatayı tekrarlamasın diye);
+ * tek worker'lı projede retry "idle worker bulunamadi" ile kilitleniyordu —
+ * yani ilk ret görevi kalıcı olarak durduruyordu.
+ */
 export const BOOTSTRAP_AGENTS: readonly BootstrapAgentSpec[] = [
   { role: 'pm', group: 'management', name: 'PM', model: 'mock:pm', canonicalPrompt: 'role.pm' },
-  { role: 'worker', group: 'coding', name: 'Worker', model: 'mock:worker', canonicalPrompt: 'role.worker.coding' },
-  { role: 'verifier', group: 'coding', name: 'Verifier', model: 'mock:verifier', canonicalPrompt: 'role.verifier' },
+  { role: 'worker', group: 'coding', name: 'Worker 1', model: 'mock:worker', canonicalPrompt: 'role.worker.coding' },
+  { role: 'worker', group: 'coding', name: 'Worker 2', model: 'mock:worker', canonicalPrompt: 'role.worker.coding' },
+  { role: 'verifier', group: 'coding', name: 'Verifier 1', model: 'mock:verifier', canonicalPrompt: 'role.verifier' },
+  { role: 'verifier', group: 'coding', name: 'Verifier 2', model: 'mock:verifier', canonicalPrompt: 'role.verifier' },
 ];
 
 export function bootstrapPromptName(projectId: string, role: string): string {
@@ -45,7 +53,15 @@ export function planBootstrapPrompts(
   projectId: string,
   canonical: ReadonlyMap<string, CanonicalPrompt>,
 ): readonly BootstrapPromptRow[] {
-  return BOOTSTRAP_AGENTS.map((agent) => {
+  // Aynı rolden birden çok agent AYNI promptu paylaşır; her agent için satır
+  // üretmek mükerrer prompt yazımı olurdu.
+  const seen = new Set<string>();
+  return BOOTSTRAP_AGENTS.filter((agent) => {
+    const name = bootstrapPromptName(projectId, agent.role);
+    if (seen.has(name)) return false;
+    seen.add(name);
+    return true;
+  }).map((agent) => {
     const source = canonical.get(agent.canonicalPrompt);
     // Boş içerikli prompt üretmek, modeli talimatsız çalıştırmaktır.
     if (source === undefined) {

@@ -52,7 +52,30 @@ export async function runVerifierLoop(input: VerifierInput): Promise<VerifierRes
     calls = retry.result.toolCalls as never;
   }
 
-  const tool = selectVerdictCall(calls);
-  const verdict = parseStrictVerdictArguments(tool.args);
+  let tool = selectVerdictCall(calls);
+  let verdict: StructuredVerdictV1;
+  try {
+    verdict = parseStrictVerdictArguments(tool.args);
+  } catch (schemaError) {
+    // Verdikt şemayı tutturamadıysa (ör. `reasons` boş) EKSİĞİ UYDURMAYIZ:
+    // gerekçe verifier'ın işidir. Modele tam olarak neyin yanlış olduğunu
+    // söyleyip BİR kez daha isteriz; yine tutturamazsa hata açık kalır.
+    const detail = schemaError instanceof Error ? schemaError.message : String(schemaError);
+    const retry = await input.router.complete(input.modelRef, {
+      messages: [
+        ...input.prompt,
+        {
+          role: 'user',
+          content: `Önceki verdiktin şemayı sağlamadı: ${detail}\n`
+            + 'Aynı kararı, eksik alanları doldurarak submit_verdict ile yeniden gönder. '
+            + 'reasons en az bir gerekçe içermelidir.',
+        },
+      ],
+      tools: [{ name: 'submit_verdict', description: 'Submit strict verifier verdict', parameters: VERDICT_TOOL_PARAMETERS }],
+      meta: { projectId: input.brief.projectId, agentId: input.attempt.verifierAgentId, taskId: input.brief.taskId, purpose: 'completion', invocationId: input.snapshot.invocationId, taskBriefId: input.brief.taskBriefId, assignmentAttemptId: input.attempt.assignmentAttemptId, promptInputSnapshotId: input.snapshot.promptInputSnapshotId },
+    } as never);
+    tool = selectVerdictCall(retry.result.toolCalls as never);
+    verdict = parseStrictVerdictArguments(tool.args);
+  }
   return { verdict, invocationId: input.snapshot.invocationId };
 }

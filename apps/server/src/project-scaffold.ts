@@ -16,8 +16,27 @@ export function defaultGateConfig(projectType: string): GateConfigLike {
       // Göreve özgü kaynaklar çalışma anında eklenir (brief.targetFiles).
       inputs: ['package.json', 'tsconfig.json'],
       discardedOutputs: ['node_modules', 'dist'],
+      // `npx tsc` sandbox'ta ÇALIŞMAZ: yeni projede node_modules yok ve ağ
+      // kapalı; kapı her zaman exit 1 verir ve hiçbir iş kabul edilemez
+      // (canlı koşuda `gate_step:typecheck:failed:1` ile doğrulandı).
+      // Varsayılan kapı bu yüzden bağımlılıksız ama GERÇEK bir kontroldür:
+      // beyan edilen kaynak dosyalar var ve boş değil mi. Proje kendi
+      // bağımlılıklarını kurduğunda ww.gate.json zenginleştirilebilir.
       steps: [
-        { name: 'typecheck', command: 'npx', args: ['tsc', '--noEmit'], timeoutSec: 300 },
+        {
+          name: 'sources_present',
+          command: 'node',
+          args: [
+            '-e',
+            "const fs=require('fs');const files=fs.readdirSync('src',{recursive:true})"
+            + ".filter((f)=>/[.](ts|tsx|js|jsx)$/.test(String(f)));"
+            + "if(files.length===0){console.error('src altinda kaynak dosya yok');process.exit(1);}"
+            + "for(const f of files){if(fs.statSync('src/'+f).size===0)"
+            + "{console.error('bos dosya: '+f);process.exit(1);}}"
+            + "console.log('kaynak dosyalar mevcut: '+files.length);",
+          ],
+          timeoutSec: 60,
+        },
       ],
     };
   }

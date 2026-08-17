@@ -360,9 +360,14 @@ export class GitWorkspace {
 
       await this.#assertAccess(validated.access);
       await this.#assertFingerprint(validated.projectKey, workspace, validated.targets, fingerprint);
+      // Commit ÖNCESİ kapı tekrar koşar; hedef dosyalar ek girdi olarak
+      // verilmezse sandbox işin ürettiği kaynakları görmez ve kapı burada
+      // düşer ("Gate başarısız; commit oluşturulmadı") — oysa aynı kapı az
+      // önce geçmiştir. Girdi kümesi iki koşuda AYNI olmalıdır.
       const gate = await this.#gates.run(validated.projectKey, workspace, {
         operationId: validated.operationId,
         occurredAt: validated.occurredAt,
+        extraInputs: validated.targets,
         ...(input.deadlineAt === undefined ? {} : { deadlineAt: input.deadlineAt }),
       });
       if (!gate.passed) throw new ExecutorError('GATE_FAILED', 'Gate başarısız; commit oluşturulmadı', { gate });

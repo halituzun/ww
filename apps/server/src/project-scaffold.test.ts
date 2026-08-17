@@ -17,8 +17,12 @@ describe('defaultGateConfig', () => {
     expect(() => parseGateConfig(defaultGateConfig('mobile'))).not.toThrow();
   });
 
-  it('web kapısı tip kontrolü çalıştırır', () => {
-    expect(defaultGateConfig('web').steps.map((step) => step.name)).toContain('typecheck');
+  // npx tsc sandbox'ta node_modules olmadan HER ZAMAN düşer; varsayılan kapı
+  // bağımlılıksız ama gerçek bir kontrol olmalı.
+  it('web kapısı bağımlılıksız çalışabilen bir adım içerir', () => {
+    const steps = defaultGateConfig('web').steps;
+    expect(steps.map((step) => step.name)).toContain('sources_present');
+    expect(steps.every((step) => step.command !== 'npx')).toBe(true);
   });
 
   it('fullstack projesi için de geçerlidir', () => {

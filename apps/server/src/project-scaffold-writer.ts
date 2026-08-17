@@ -3,9 +3,13 @@
 // Ayrı dosya: `defaultGateConfig` saf ve test edilebilir kalsın; disk yazımı
 // burada. Var olan yapılandırmanın ÜZERİNE YAZILMAZ — kullanıcı kapıyı
 // düzenlemişse onu ezmek sessiz bir gerileme olur.
-import { mkdir, writeFile } from 'node:fs/promises';
+import { execFile } from 'node:child_process';
+import { mkdir, stat, writeFile } from 'node:fs/promises';
+import { promisify } from 'node:util';
 import path from 'node:path';
 import { defaultGateConfig, starterFiles } from './project-scaffold.js';
+
+const run = promisify(execFile);
 
 export async function writeProjectScaffold(
   workspaceRoot: string,
@@ -23,6 +27,17 @@ export async function writeProjectScaffold(
     // Zaten varsa dokunma; başka hata yutulmaz.
     if (error.code !== 'EEXIST') throw error;
   });
+
+  // docs/00: her proje KENDİ git deposudur. Depo yoksa commit adımı
+  // "commit edilecek değişiklik yok" der (üst depo workspace'i yok sayar) ve
+  // iş kapıyı geçse bile tarihe hiç yazılamaz.
+  try {
+    await stat(path.join(workspaceRoot, '.git'));
+  } catch {
+    await run('git', ['init', '--quiet'], { cwd: workspaceRoot });
+    await run('git', ['config', 'user.email', 'ww@local'], { cwd: workspaceRoot });
+    await run('git', ['config', 'user.name', 'ww'], { cwd: workspaceRoot });
+  }
 
   // Kapı girdileri var olmayan dosyaya işaret ederse iş kabul edilemez.
   for (const [name, content] of starterFiles(projectType, projectName)) {

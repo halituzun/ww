@@ -22,7 +22,7 @@ import { createToolPortFactory } from './tool-factory.js';
 import { createRuntimeContextService } from './runtime-context-service.js';
 import { createExecutionErrorRecorder } from './execution-error-recorder.js';
 import { buildAgentCapabilities } from './agent-capabilities.js';
-import { appendEvent, getActivePrompt, getAssignmentAttempt, listLatestAgents } from '@ww/db';
+import { appendEvent, getActivePrompt, getAssignmentAttempt, getLatestTask, listLatestAgents } from '@ww/db';
 import type { RuntimeModels } from './runtime-context.js';
 import type { Phase9RuntimeCompositionInput } from './runtime-composition.js';
 import { createLateBoundPort, type LateBoundPort } from './late-binding.js';
@@ -86,13 +86,27 @@ export async function createOrchestrationComposition(
   const gateOps = createGateOperations({
     workspaceRoot: input.projectRoot,
     requireGatePass: true,
-    taskDetails: async (taskId) => ({
-      title: `görev ${String(taskId).slice(0, 8)}`,
-      summary: 'ww orkestrasyonu tarafından üretildi',
-      targetFiles: [],
-      workerName: 'ww worker',
-      verifierName: 'ww verifier',
-    }),
+    // Commit ayrıntıları GERÇEK görevden okunur. Sabit metinler ve BOŞ hedef
+    // dosya listesi commit'i "en az bir hedef dosya gerektirir" ile
+    // düşürüyordu: iş kapıyı geçse bile tarihe hiç yazılamıyordu. Ayrıca
+    // uydurma başlık, commit mesajını denetim izi olmaktan çıkarır.
+    taskDetails: async (taskId) => {
+      const task = await getLatestTask(input.ch, input.projectId, taskId);
+      if (task === null) throw new Error(`commit için görev bulunamadı: ${taskId}`);
+      const [worker, verifier] = [
+        agents.find((agent) => agent.agent_id === task.worker_agent_id),
+        agents.find((agent) => agent.agent_id === task.verifier_agent_id),
+      ];
+      return {
+        title: task.title,
+        summary: task.result_summary.trim() === ''
+          ? task.description.trim() || task.title
+          : task.result_summary,
+        targetFiles: [...task.target_files],
+        workerName: worker?.name ?? 'ww worker',
+        verifierName: verifier?.name ?? 'ww verifier',
+      };
+    },
   });
 
   const escalate = createEscalationRecorder(input.ch);
