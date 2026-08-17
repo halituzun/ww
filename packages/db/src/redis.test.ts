@@ -1086,13 +1086,24 @@ describe.skipIf(!up)('redis yardımcıları', () => {
     const agentId = randomUUID();
     cleanupKeys.add(heartbeatKey(agentId));
     expect(await checkHeartbeat(r, agentId)).toBe(false);
-    await setHeartbeat(r, agentId, 60);
+    // TTL'ler bilerek cömert: test YENİLEMENİN TAZELEDİĞİNİ kanıtlar, makine
+    // hızını değil. Dar marjlar paralel yük altında ilgisiz biçimde düşüyordu.
+    await setHeartbeat(r, agentId, 2_000);
     expect(await checkHeartbeat(r, agentId)).toBe(true);
-    await new Promise<void>((resolve) => setTimeout(resolve, 35));
-    await setHeartbeat(r, agentId, 80);
-    expect(await r.pTTL(heartbeatKey(agentId))).toBeGreaterThan(50);
-    await new Promise<void>((resolve) => setTimeout(resolve, 35));
+
+    await new Promise<void>((resolve) => setTimeout(resolve, 50));
+    const beforeRenew = await r.pTTL(heartbeatKey(agentId));
+    await setHeartbeat(r, agentId, 3_000);
+    const afterRenew = await r.pTTL(heartbeatKey(agentId));
+    // Mutlak eşik yok: yenileme kalan süreyi ARTIRMALI.
+    expect(afterRenew).toBeGreaterThan(beforeRenew);
+    expect(afterRenew).toBeLessThanOrEqual(3_000);
+
+    await new Promise<void>((resolve) => setTimeout(resolve, 50));
     expect(await checkHeartbeat(r, agentId)).toBe(true);
+
+    // Süre dolması ayrı ve kısa bir TTL ile kanıtlanır.
+    await setHeartbeat(r, agentId, 50);
     await vi.waitFor(async () => {
       expect(await checkHeartbeat(r, agentId)).toBe(false);
     }, { timeout: 1_000, interval: 10 });

@@ -1,10 +1,12 @@
 import { CommunicationWakeupPublisher, getFencedLease, taskLockKey } from '@ww/db';
+import type { EntityId } from '@ww/shared';
 import { randomUUID } from 'node:crypto';
 import type { ClickHouseClient, WwRedis } from '@ww/db';
 import type { LlmProvider, ModelRouter, RouterOptions } from '@ww/providers';
 import {
   CommunicationEscalationDelivery,
   CommunicationService,
+  createRuntimeCommunicationDelivery,
   createAgentRuntime,
   createDurableModelRouter,
   type AgentRuntime,
@@ -195,6 +197,12 @@ export interface Phase9RuntimeCompositionInput extends Omit<Phase8RuntimeComposi
   readonly runtimeContext?: Phase1RuntimeContextPort;
   readonly toolFactory?: Phase1ToolPortFactory;
   readonly runtimeCommunication?: Phase1RuntimeCommunicationPort;
+  /**
+   * Verilirse `runtimeCommunication` composition'ın KENDİ CommunicationService'i
+   * üzerinden kurulur. Çağıranın sahte bir port uydurmasına gerek kalmaz —
+   * sahte port worker'a "soru iletildi" yalanı söylerdi.
+   */
+  readonly runtimeSession?: Readonly<{ sessionId: EntityId; owningPmId: EntityId }>;
   readonly localSessionToken: string;
   /** Explicit agent credentials for server-owned worker/verifier communication. */
   readonly agentCapabilities?: ReadonlyMap<string, AgentCapabilityBinding>;
@@ -376,14 +384,24 @@ export function createPhase9RuntimeComposition(
     drainPort: inboxWorkerDrainPort(inboxWorker),
   });
   const runtime = createAgentRuntime({});
+  // Sahte port yerine gerçek mesaj kanalı: soru/rapor ClickHouse'a yazılır.
+  const runtimeCommunication = input.runtimeCommunication ?? (
+    input.runtimeSession === undefined ? undefined : createRuntimeCommunicationDelivery({
+      communication,
+      authentication: input.internalAuthentication,
+      sessionId: input.runtimeSession.sessionId,
+      owningPmId: input.runtimeSession.owningPmId,
+      now: () => new Date().toISOString(),
+    })
+  );
   const orchestrationRuntime = input.runtimeContext !== undefined &&
-    input.toolFactory !== undefined && input.runtimeCommunication !== undefined
+    input.toolFactory !== undefined && runtimeCommunication !== undefined
     ? createPhase1RuntimeBridge({
       runtime,
       router: durable.router,
       context: input.runtimeContext,
       tools: input.toolFactory,
-      communication: input.runtimeCommunication,
+      communication: runtimeCommunication,
     })
     : input.orchestrationRuntime;
   if (orchestrationRuntime === undefined) {

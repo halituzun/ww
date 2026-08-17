@@ -3,7 +3,7 @@ import type { ModelRouter, NormalizedToolCall, ToolDef } from '@ww/providers';
 
 export type WorkerStopReason = 'question' | 'report' | 'deadline' | 'budget' | 'failure';
 export interface WorkerToolPort { definitions(): readonly ToolDef[]; validate(name: string, args: unknown): unknown; execute(call: Readonly<{ callId: EntityId; name: string; args: unknown; occurredAt: string }>): Promise<JsonValue>; }
-export interface WorkerCommunicationPort { question(input: Readonly<{ projectId: EntityId; taskId: EntityId; taskBriefId: EntityId; assignmentAttemptId: EntityId; callId: EntityId; text: string }>): Promise<Readonly<{ messageId: EntityId }>>; report(summary: string, evidenceRefs: readonly string[], provenance: Readonly<{ invocationId: EntityId; promptInputSnapshotId: EntityId }>): Promise<void>; }
+export interface WorkerCommunicationPort { question(input: Readonly<{ projectId: EntityId; taskId: EntityId; taskBriefId: EntityId; assignmentAttemptId: EntityId; callId: EntityId; text: string }>): Promise<Readonly<{ messageId: EntityId }>>; report(summary: string, evidenceRefs: readonly string[], provenance: Readonly<{ projectId: EntityId; taskId: EntityId; taskBriefId: EntityId; assignmentAttemptId: EntityId; invocationId: EntityId; promptInputSnapshotId: EntityId }>): Promise<void>; }
 export interface WorkerLoopInput { readonly brief: TaskBriefV1; readonly attempt: AssignmentAttemptV1; readonly snapshot: PromptInputSnapshotV1; readonly modelRef: string; readonly router: ModelRouter; readonly tools: WorkerToolPort; readonly communication?: WorkerCommunicationPort; readonly prompt: readonly PromptMessageV1[]; readonly maxTurns?: number; readonly now?: () => string; }
 export interface WorkerLoopResult { readonly reason: WorkerStopReason; readonly turns: number; readonly summary?: string; readonly questionMessageId?: EntityId; readonly question?: string; }
 
@@ -24,7 +24,7 @@ export async function runWorkerLoop(input: WorkerLoopInput): Promise<WorkerLoopR
       const summary = result.result.content?.trim();
       if (!summary) return { reason: 'failure', turns: turn + 1 };
       if (input.communication === undefined) return { reason: 'failure', turns: turn + 1 };
-      await input.communication.report(summary, [], { invocationId: input.snapshot.invocationId, promptInputSnapshotId: input.snapshot.promptInputSnapshotId });
+      await input.communication.report(summary, [], { projectId: input.brief.projectId, taskId: input.brief.taskId, taskBriefId: input.brief.taskBriefId, assignmentAttemptId: input.attempt.assignmentAttemptId, invocationId: input.snapshot.invocationId, promptInputSnapshotId: input.snapshot.promptInputSnapshotId });
       return { reason: 'report', turns: turn + 1, summary };
     }
     const registeredTools = new Set(allowedDefinitions().map((definition) => definition.name));

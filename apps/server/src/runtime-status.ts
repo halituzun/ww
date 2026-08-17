@@ -22,6 +22,17 @@ export interface RuntimeStatus {
 
 export const RUNTIME_FLAG = 'WW_PHASE8_RUNTIME_ENABLED';
 
+let lastBootstrapReason: string | undefined;
+
+/**
+ * Başlatma denemesinin gerçek sebebini saklar. Bayrak, başarısız kayıttan
+ * sonra düşürülür (sözleşme: bayrak=1 ⟺ kayıtlı); sebep düşmezse kullanıcı
+ * yalnız 'bayrak ayarlı değil' görür ve asıl nedeni öğrenemez.
+ */
+export function recordBootstrapReason(reason: string | undefined): void {
+  lastBootstrapReason = reason;
+}
+
 export function runtimeStatus(readConfig: () => unknown): RuntimeStatus {
   const enabled = process.env[RUNTIME_FLAG] === '1';
 
@@ -29,7 +40,7 @@ export function runtimeStatus(readConfig: () => unknown): RuntimeStatus {
     return {
       orchestration: 'disabled',
       tasksProcessed: false,
-      reason: `${RUNTIME_FLAG}=1 ayarlı değil — görev kuyruğunu tüketen orkestrasyon runtime'ı başlatılmıyor, görevler 'queued' durumunda bekler.`,
+      reason: lastBootstrapReason ?? `${RUNTIME_FLAG}=1 ayarlı değil — görev kuyruğunu tüketen orkestrasyon runtime'ı başlatılmıyor, görevler 'queued' durumunda bekler.`,
     };
   }
 

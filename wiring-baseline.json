@@ -109,5 +109,17 @@
   {
     "symbol": "apps/server/src/late-binding.ts:createLateBoundPort",
     "reason": "motor bootstrapi; main.ts baglantisi bir sonraki adimda"
+  },
+  {
+    "symbol": "apps/server/src/runtime-starter.ts:startOrchestrationRuntime",
+    "reason": "motor baslatici; main.ts cagiriyor"
+  },
+  {
+    "symbol": "apps/server/src/runtime-starter.ts:selectRuntimeProject",
+    "reason": "motor baslatici; main.ts cagiriyor"
+  },
+  {
+    "symbol": "apps/server/src/runtime-context-service.ts:createRuntimeContextService",
+    "reason": "motor baslatici; main.ts cagiriyor"
   }
 ]

@@ -18,7 +18,10 @@ import type { EntityId } from '@ww/shared';
 import { createExecutorComposition, createResumeUserAnswerOperation } from './executor-composition.js';
 import { createGateOperations } from './gate-operations.js';
 import { createToolPortFactory } from './tool-factory.js';
+import { createRuntimeContextService } from './runtime-context-service.js';
+import { getActivePrompt } from '@ww/db';
 import type { RuntimeModels } from './runtime-context.js';
+import type { Phase9RuntimeCompositionInput } from './runtime-composition.js';
 import { createLateBoundPort, type LateBoundPort } from './late-binding.js';
 
 export interface AssemblyInput {
@@ -34,7 +37,8 @@ export interface AssemblyInput {
 }
 
 export interface AssemblyResult {
-  composition: Record<string, unknown>;
+  /** Gerçek girdi tipi: derleyici composition'ın TAM olduğunu doğrular. */
+  composition: Phase9RuntimeCompositionInput;
   /** Composition kurulduktan SONRA çağrılmalı; yoksa portlar açık hata verir. */
   bindLate(services: Readonly<{
     taskTransitionService: object;
@@ -107,7 +111,7 @@ export async function createOrchestrationComposition(
     providers: input.providers,
     fallbacks: (modelRef: string) => input.routing.fallbacks(modelRef),
     internalAuthentication: {
-      type: 'internal_service',
+      type: 'internal_service' as const,
       credential: input.localSessionToken,
       issuedAt: new Date().toISOString(),
     },
@@ -119,15 +123,17 @@ export async function createOrchestrationComposition(
       executor: toolExecutorPort.proxy as never,
       effectEscalation: { sessionId, owningPmId },
     }),
-    runtimeContext: {
-      // Model referansları rol eşlemesinden gelir; workspace kökü proje
-      // klasörüne hapsedilmiştir.
-      load: async () => ({
-        workspaceRoot: input.projectRoot,
-        workerModelRef: input.models.workerModelRef,
-        verifierModelRef: input.models.verifierModelRef,
-      }),
-    },
+    // Köprü kendi kanalını composition içindeki gerçek CommunicationService'ten kurar.
+    runtimeSession: { sessionId, owningPmId },
+    runtimeContext: createRuntimeContextService({
+      prompts: {
+        load: async (name) => (await getActivePrompt(input.ch, name))?.content ?? null,
+      },
+      workspaceRoot: input.projectRoot,
+      models: input.models,
+      // Context Builder bağlantısı ayrı bir adım; şimdilik boş bağlam.
+      loadContextPack: async () => '',
+    }),
     schedulerOperations: {
       transition: createTransitionOperation({
         port: transitionPort.proxy as never,

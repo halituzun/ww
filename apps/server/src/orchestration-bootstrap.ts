@@ -26,7 +26,7 @@ export interface BootstrapDeps {
     skipped: readonly SkippedProvider[];
   }>;
   loadRouting: () => Promise<RoutingIndex>;
-  register: (config: { composition: Record<string, unknown> }) => void;
+  register: (config: { composition: AssemblyResult['composition'] }) => void;
 }
 
 export interface BootstrapResult {

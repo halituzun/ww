@@ -5,6 +5,9 @@
 // raporlar, verifier karar verir). Uygulanmamış portlar SESSİZCE başarılı
 // dönmez: worker çalışmayan bir yeteneği çalışmış sanarsa hata görünmez olur.
 import { DurableExecutorAudit, DurableExecutorIntent, DurableGateCommitAudit } from '@ww/executor';
+import type {
+  ExecutorAccessPort, ExecutorHostCommandPort, SandboxPort,
+} from '@ww/executor';
 import type { AssignmentAttemptV1, EntityId, JsonValue } from '@ww/shared';
 
 export interface ExecutorCommunicationLike {
@@ -14,9 +17,9 @@ export interface ExecutorCommunicationLike {
 }
 
 export interface ExecutorCompositionDeps {
-  sandbox: unknown;
-  hostCommand: unknown;
-  access: unknown;
+  sandbox: SandboxPort;
+  hostCommand: ExecutorHostCommandPort;
+  access: ExecutorAccessPort;
   /** clickHouseExecutorEventStore(ch) çıktısı. */
   auditStore: { append(event: unknown): Promise<unknown> };
   communication: ExecutorCommunicationLike;
