@@ -15,6 +15,11 @@ Bu depo, pnpm ve Turborepo kullanan bir TypeScript monorepo'sudur. Çalıştır�
 
 İnceleme istemeden önce derleme, test ve lint kontrollerini çalıştırın.
 
+- `pnpm wiring:check`: "yazılmış ama hiç bağlanmamış kod" kapısı. Testte
+  kullanılan ama hiçbir üretim kodundan çağrılmayan sembolleri bulur. Mevcut
+  durum `wiring-baseline.json` içinde dondurulmuştur; kapı yalnız YENİ
+  ihlallerde düşer. Bir sembolü bağladığınızda temel listeden düşürün.
+
 ## Kod Stili ve Adlandırma
 
 TypeScript yapılandırması strict mod, unchecked-index ve exact-optional kontrollerini etkinleştirir. Mevcut biçimi izleyin: iki boşluk girinti, tek tırnak, noktalı virgül ve çok satırlı yapılarda son virgül. Depo NodeNext ESM kullanır; göreli TypeScript import'larında `.js` uzantısı yazın. Sınıf ve tiplerde `PascalCase`, fonksiyon, değişken ve yardımcı dosyalarda `camelCase`, sabitlerde `SCREAMING_SNAKE_CASE` kullanın. Controller'ları ince tutun, iş mantığını servislerde, veri erişimini `packages/db` içinde konumlandırın. Paketlerin herkese açık API'lerini `src/index.ts` üzerinden dışa aktarın. Kod sembolleri ve API adları İngilizce olmalıdır.

@@ -26,6 +26,9 @@ Hafıza bir hızlandırıcıdır; kod veya Git geçmişinin yerine geçmez.
   commit oluşturma.
 - Scoped Conventional Commit kullan: `feat(agents): ...`, `fix(db): ...`,
   `test(scheduler): ...`, `docs: ...`.
+- `pnpm wiring:check` koş: bu depoda tekrar eden en pahalı hata deseni
+  "yazılmış, testli, ama hiçbir üretim kodu çağırmıyor"dur (bir gecede beş
+  ayrı yerde bulundu). Kapı yeni ihlalleri engeller.
 - Her doğrulanmış mantıksal parçayı ayrı commit et. Faz sonunda tam canlı kapıyı
   `WW_REQUIRE_INTEGRATION=1 pnpm test` ile çalıştır; skip varsa faz kapanmaz.
 - Tamamlanan ve yeşil kilometre taşını push et. `main` üzerinde force-push, geçmiş
