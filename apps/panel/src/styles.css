@@ -213,3 +213,58 @@ dd {
   clip: rect(0 0 0 0); white-space: nowrap; }
 .role-warning { margin: 0; padding: 0.45rem 0.7rem; border-radius: 6px; font-size: 0.85rem;
   background: rgba(240, 180, 80, 0.14); border-left: 3px solid rgba(240, 180, 80, 0.7); }
+
+/* Kontör panosu (docs/08 → Kontör Panosu). Kategorik renkler bileşende;
+   burada yalnız yapı ve durum tonları. */
+.budget-panel { display: grid; gap: 1rem; }
+.budget-tiles { display: grid; gap: 0.6rem;
+  grid-template-columns: repeat(auto-fit, minmax(8rem, 1fr)); }
+.budget-tile { background: rgba(29, 41, 57, 0.5); border-radius: 8px; padding: 0.7rem 0.85rem;
+  display: grid; gap: 0.15rem; }
+.budget-tile strong { font-size: 1.15rem; font-variant-numeric: tabular-nums; }
+.budget-tile span { font-size: 0.75rem; color: #98a2b3; }
+.budget-tile--hero strong { font-size: 1.75rem; }
+.budget-tile--attention strong { color: #c98500; }
+
+.budget-meter { display: grid; gap: 0.4rem; }
+.budget-meter__label { display: flex; justify-content: space-between; font-size: 0.85rem;
+  font-variant-numeric: tabular-nums; }
+.budget-meter__track { position: relative; height: 8px; border-radius: 999px;
+  background: rgba(152, 162, 179, 0.18); overflow: hidden; }
+.budget-meter__fill { position: absolute; inset-block: 0; left: 0; border-radius: 999px;
+  background: #199e70; }
+.budget-meter--warning .budget-meter__fill { background: #c98500; }
+.budget-meter--critical .budget-meter__fill { background: #d95926; }
+.budget-meter__threshold { position: absolute; inset-block: -2px; width: 2px;
+  background: rgba(248, 250, 252, 0.55); }
+
+.budget-block { display: grid; gap: 0.45rem; }
+.budget-block h4 { margin: 0; font-size: 0.8rem; text-transform: uppercase;
+  letter-spacing: 0.04em; color: #98a2b3; font-weight: 600; }
+
+.budget-bars--time { list-style: none; margin: 0; padding: 0; display: flex; gap: 2px;
+  align-items: flex-end; height: 72px; }
+.budget-bars--time li { flex: 1 1 0; display: flex; flex-direction: column;
+  align-items: center; justify-content: flex-end; height: 100%; gap: 0.25rem; }
+.budget-bars__mark { width: 100%; min-height: 2px; background: #3987e5;
+  border-radius: 4px 4px 0 0; }
+.budget-bars__caption { font-size: 0.65rem; color: #667085; }
+
+.budget-breakdown, .budget-tasks { list-style: none; margin: 0; padding: 0;
+  display: grid; gap: 0.35rem; }
+.budget-breakdown li { display: grid; grid-template-columns: minmax(7rem, 12rem) 1fr auto;
+  gap: 0.6rem; align-items: center; font-size: 0.82rem; }
+.budget-breakdown__key { display: flex; align-items: center; gap: 0.4rem;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.budget-breakdown__swatch { width: 10px; height: 10px; border-radius: 3px; flex: none; }
+.budget-breakdown__swatch--other { background: #667085; }
+.budget-breakdown__track { background: rgba(152, 162, 179, 0.14); border-radius: 999px;
+  height: 8px; overflow: hidden; }
+.budget-breakdown__fill { display: block; height: 100%; border-radius: 4px; }
+.budget-breakdown__fill--other { background: #667085; }
+.budget-breakdown__value { font-variant-numeric: tabular-nums; color: #d0d5dd; }
+
+.budget-tasks li { display: grid; grid-template-columns: auto 1fr auto; gap: 0.6rem;
+  align-items: baseline; font-size: 0.82rem; }
+.budget-tasks code { color: #98a2b3; }
+.budget-tasks small { color: #667085; }
