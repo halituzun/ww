@@ -9,6 +9,7 @@ import { FilesController } from './files.controller.js';
 import { NarratorController } from './narrator.controller.js';
 import { ProvidersController } from './providers.controller.js';
 import { ProviderHealthScheduler } from './provider-health.scheduler.js';
+import { TaskPumpService } from './task-pump.service.js';
 import { RoleModelsController } from './role-models.controller.js';
 import { BudgetController } from './budget.controller.js';
 import { AuditController } from './audit.controller.js';
@@ -46,6 +47,7 @@ import {
   providers: [
     EVENTS_GATEWAY_PROVIDER,
     ProviderHealthScheduler,
+    TaskPumpService,
     { provide: HEALTH_DEPENDENCIES, useValue: DEFAULT_HEALTH_DEPENDENCIES },
     HealthService,
     { provide: PROJECT_APPLICATION, useExisting: ProjectApplicationService },

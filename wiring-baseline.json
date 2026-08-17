@@ -41,7 +41,10 @@
   "packages/scheduler/src/delegation-service.ts:DelegationService",
   "packages/scheduler/src/plan-approval-service.ts:PlanApprovalService",
   "packages/scheduler/src/replanning-service.ts:ReplanningService",
-  "packages/scheduler/src/scheduler-worker.ts:SchedulerWorker",
+  {
+    "symbol": "packages/scheduler/src/scheduler-worker.ts:SchedulerWorker",
+    "reason": "TaskPumpService kuyruğu readQueue/reclaimQueue ilkelleriyle doğrudan tüketiyor; SchedulerWorker yalnızca atama yapıyordu ve tam yaşam döngüsünü koşturmuyordu. Ya pompaya devredilmeli ya da kaldırılmalı."
+  },
   {
     "symbol": "apps/server/src/runtime-context.ts:resolveRuntimeModels",
     "reason": "orkestrasyon bootstrap temeli; cagiran sonraki turda gelecek"

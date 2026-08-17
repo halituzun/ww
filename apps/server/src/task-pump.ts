@@ -1,0 +1,73 @@
+// Görev pompası: kuyruğa düşen işi fiilen çalıştıran halka.
+//
+// NEDEN VAR: motor "ETKİN" raporluyordu ama görevler sonsuza dek 'queued'
+// kalıyordu. Sebep: kuyruğu tüketen `SchedulerWorker` yalnızca ATAMA yapar,
+// tam yaşam döngüsünü ise composition'ın `orchestrate`'i koşturur — ve
+// ikisini birleştiren hiçbir üretim kodu yoktu. Kayıt ≠ tüketim; bu ayrımın
+// görünmez kalması deponun en pahalı hata sınıfıdır.
+import type { EntityId, TaskBriefV1 } from '@ww/shared';
+
+export interface PumpItem {
+  readonly msgId: string;
+  readonly taskId: EntityId;
+}
+
+export interface PumpItemResult {
+  readonly taskId: EntityId;
+  readonly status: string;
+}
+
+export interface PumpResult {
+  readonly processed: number;
+  readonly results: readonly PumpItemResult[];
+}
+
+export interface TaskPumpPorts {
+  /** Kuyruktan teslim alınan mesajlar (grup + reclaim semantiği çağıranda). */
+  claim(): Promise<readonly PumpItem[]>;
+  ack(msgId: string): Promise<void>;
+  seal(taskId: EntityId): Promise<TaskBriefV1>;
+  orchestrate(input: Readonly<{
+    taskId: EntityId;
+    brief: TaskBriefV1;
+    maxAttempts: number;
+  }>): Promise<Readonly<{ status: string }>>;
+  readonly maxAttempts?: number;
+  onResult?(taskId: EntityId, status: string): void;
+  onError?(taskId: EntityId, reason: unknown): void;
+}
+
+export async function pumpOnce(ports: TaskPumpPorts): Promise<PumpResult> {
+  const items = await ports.claim();
+  const results: PumpItemResult[] = [];
+
+  for (const item of items) {
+    try {
+      const brief = await ports.seal(item.taskId);
+      const outcome = await ports.orchestrate({
+        taskId: item.taskId,
+        brief,
+        maxAttempts: ports.maxAttempts ?? 3,
+      });
+      results.push({ taskId: item.taskId, status: outcome.status });
+      ports.onResult?.(item.taskId, outcome.status);
+
+      // İş bitti (terminal ya da kullanıcı cevabı bekliyor): mesaj kapanır.
+      // Soru bekleyen görevi kuyrukta bırakmak onu sürekli yeniden koşturur.
+      try {
+        await ports.ack(item.msgId);
+      } catch (reason) {
+        // Ack düşse bile İŞ YAPILMIŞTIR; pompa durmamalı ama sessiz de
+        // kalmamalı — yoksa mesaj sonsuza dek yeniden teslim edilir.
+        ports.onError?.(item.taskId, reason);
+      }
+    } catch (reason) {
+      // ACK YOK: mesaj pending kalır ve reclaim başka tüketiciye devreder.
+      // Burada ack'lemek işi sessizce kaybetmek olurdu.
+      results.push({ taskId: item.taskId, status: 'error' });
+      ports.onError?.(item.taskId, reason);
+    }
+  }
+
+  return { processed: items.length, results };
+}

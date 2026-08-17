@@ -76,6 +76,11 @@ async function tryStartOrchestration(): Promise<void> {
   const { recordBootstrapReason } = await import('./runtime-status.js');
   const ch = db.createCh();
   const redis = await db.createRedis();
+  // Bu bağlantılar kayıt BAŞARILIYSA composition'a devredilir ve sürecin
+  // ömrü boyunca yaşamalıdır. Burada kapatmak, kayıtlı motoru kapalı
+  // istemcilerle bırakır: her görev "The client is closed" ile düşer ve
+  // hiçbir şey tüketilmediği sürece bu görünmez kalır.
+  let handedOver = false;
   try {
     const result = await startOrchestrationRuntime({
       enabled: process.env['WW_PHASE8_RUNTIME_ENABLED'] === '1',
@@ -115,9 +120,13 @@ async function tryStartOrchestration(): Promise<void> {
       recordBootstrapReason(result.reason);
       delete process.env['WW_PHASE8_RUNTIME_ENABLED'];
     }
+    handedOver = result.started;
   } finally {
-    await redis.quit();
-    await ch.close();
+    // Yalnızca sahipsiz kalan bağlantılar kapatılır.
+    if (!handedOver) {
+      await redis.quit();
+      await ch.close();
+    }
   }
 }
 
