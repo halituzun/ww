@@ -48,8 +48,12 @@ stale, the next session starts from the wrong place.
 
 ## Verification and Git Discipline
 
-- For the full gate run `pnpm build`, `WW_REQUIRE_INTEGRATION=1 pnpm test`, and
-  `pnpm lint`. A skipped integration test is not a completed phase gate.
+- Run the full gate as ONE command: `pnpm gate` (build + integration tests +
+  lint + wiring-check). It exits non-zero on any failure, so always chain the
+  commit behind it: `pnpm gate && git commit ... && git push`. Running the
+  steps separately once let a push happen while a test was red — the shell,
+  not intent, must enforce "never push broken code". A skipped integration
+  test is not a completed phase gate.
 - Add tests for new behavior, including failure and cleanup paths. Keep TypeScript strict.
 - Commit every verified logical unit with scoped Conventional Commits. Keep commits small,
   ordered, and reversible; never bundle unrelated user changes.
