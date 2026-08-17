@@ -100,4 +100,27 @@ describe('pumpOnce', () => {
     expect(onError).toHaveBeenCalledTimes(1);
   });
 
+
+  // ASIL KUSUR: terminal olmayan sonuçta da ack ediliyordu; görev retry
+  // edilebilir bir duruma düşerken kuyruk kaydı kapanıyor, iş asılı kalıyor
+  // ve agent'ları tutuyordu.
+  it('terminal olmayan sonuçta ack ETMEZ', async () => {
+    const ack = vi.fn(async () => undefined);
+    const result = await pumpOnce(ports({ ack, orchestrate: async () => ({ status: 'working' }) }));
+
+    expect(ack).not.toHaveBeenCalled();
+    expect(result.results[0]!.status).toBe('working');
+  });
+
+  it('done sonucunda ack eder', async () => {
+    const ack = vi.fn(async () => undefined);
+    await pumpOnce(ports({ ack, orchestrate: async () => ({ status: 'done' }) }));
+    expect(ack).toHaveBeenCalledWith('1-1');
+  });
+
+  it('escalated sonucunda da ack eder', async () => {
+    const ack = vi.fn(async () => undefined);
+    await pumpOnce(ports({ ack, orchestrate: async () => ({ status: 'escalated' }) }));
+    expect(ack).toHaveBeenCalledWith('1-1');
+  });
 });

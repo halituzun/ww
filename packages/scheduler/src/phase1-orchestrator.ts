@@ -59,9 +59,10 @@ function boundedAttempts(value: number | undefined): number {
   return attempts;
 }
 
-async function runAssignedLifecycle(input: Phase1OrchestratorInput & { brief: TaskBriefV1 }, initialAttempt: AssignmentAttemptV1, maxAttempts: number, initialCount: number, alreadyWorking = false): Promise<Phase1OrchestratorResult> {
+async function runAssignedLifecycle(input: Phase1OrchestratorInput & { brief: TaskBriefV1 }, initialAttempt: AssignmentAttemptV1, maxAttempts: number, initialCount: number, alreadyWorking = false, phase?: { current: 'working' | 'verifying' | 'testing' | 'committing' }): Promise<Phase1OrchestratorResult> {
   let attempt = initialAttempt;
   for (let attempts = initialCount; attempts <= maxAttempts; attempts += 1) {
+    if (phase !== undefined) phase.current = 'working';
     // Fren, iş BAŞLAMADAN kontrol edilir: tetiklenmişse token/para harcanmaz.
     if (input.brakes !== undefined) {
       try {
@@ -96,6 +97,7 @@ async function runAssignedLifecycle(input: Phase1OrchestratorInput & { brief: Ta
     }
     if (work.summary === undefined || work.summary.trim() === '') throw new Phase1OrchestratorError('worker raporu boş olamaz');
     await input.scheduler.transition({ taskId: input.taskId, attempt, action: 'report_result' });
+    if (phase !== undefined) phase.current = 'verifying';
     const checked = await input.runtime.verify({ brief: input.brief, attempt, summary: work.summary });
     if (checked.verdict.decision === 'reject') {
       if (attempts >= maxAttempts) {
@@ -117,6 +119,7 @@ async function runAssignedLifecycle(input: Phase1OrchestratorInput & { brief: Ta
     await input.scheduler.transition({ taskId: input.taskId, attempt, action: 'verifier_approved', evidenceRefs: checked.verdict.evidenceRefs });
     // Kapı görevin hedef dosyalarını görmeli: statik ww.gate.json gelecekteki
     // dosyaları bilemez ve her girdi DOSYA olarak okunur (dizin geçersiz).
+    if (phase !== undefined) phase.current = 'testing';
     const gate = await input.scheduler.gate({
       taskId: input.taskId,
       attempt,
@@ -135,6 +138,7 @@ async function runAssignedLifecycle(input: Phase1OrchestratorInput & { brief: Ta
       continue;
     }
     await input.scheduler.transition({ taskId: input.taskId, attempt, action: 'gate_passed', evidenceRefs: gate.evidenceRefs });
+    if (phase !== undefined) phase.current = 'committing';
     const commit = await input.scheduler.commit({ taskId: input.taskId, attempt });
     await input.scheduler.transition({ taskId: input.taskId, attempt, action: 'commit_completed', evidenceRefs: [commit.commitHash] });
     return { status: 'done', attempts, commitHash: commit.commitHash };
@@ -146,15 +150,18 @@ async function runAssignedLifecycle(input: Phase1OrchestratorInput & { brief: Ta
 export async function runPhase1Orchestrator(input: Phase1OrchestratorInput): Promise<Phase1OrchestratorResult> {
   const maxAttempts = boundedAttempts(input.maxAttempts);
   const attempt = await input.scheduler.assign(input.taskId);
+  // Aşama SABİT 'working' bildiriliyordu; hata kaydedicisi FSM'de geçerli
+  // eylemi aşamaya göre seçtiği için yanlış aşama görevi takılı bırakıyordu.
+  const phase = { current: 'working' as 'working' | 'verifying' | 'testing' | 'committing' };
   try {
     // Brief atamadan sonra çözülür: bağlayıcı olan atamanınkidir.
     const bound = input.loadBrief === undefined ? input.brief : await input.loadBrief(attempt);
     if (bound === undefined) {
       throw new Phase1OrchestratorError('brief yok: loadBrief ya da brief verilmelidir');
     }
-    return await runAssignedLifecycle({ ...input, brief: bound }, attempt, maxAttempts, 1);
+    return await runAssignedLifecycle({ ...input, brief: bound }, attempt, maxAttempts, 1, false, phase);
   } catch (error) {
-    const status = await input.scheduler.handleExecutionError({ taskId: input.taskId, attempt, phase: 'working', error });
+    const status = await input.scheduler.handleExecutionError({ taskId: input.taskId, attempt, phase: phase.current, error });
     return { status, attempts: 1 };
   }
 }

@@ -40,6 +40,16 @@ export interface TaskPumpPorts {
   onError?(taskId: EntityId, reason: unknown): void;
 }
 
+/**
+ * Mesajın kapatılabileceği sonuçlar. Terminal OLMAYAN bir sonuçta ack etmek
+ * işi kaybetmektir: görev retry edilebilir bir duruma (working) düşerken
+ * kuyruk kaydı kapanıyor, kimse onu tekrar almıyor ve görev agent'larını
+ * tutarak asılı kalıyordu — tek yarım iş projeyi kilitliyordu.
+ */
+const CLOSABLE_STATUSES: ReadonlySet<string> = new Set([
+  'done', 'failed', 'cancelled', 'escalated', 'awaiting_user', 'waiting_user',
+]);
+
 export async function pumpOnce(ports: TaskPumpPorts): Promise<PumpResult> {
   const items = await ports.claim();
   const results: PumpItemResult[] = [];
@@ -55,6 +65,8 @@ export async function pumpOnce(ports: TaskPumpPorts): Promise<PumpResult> {
 
       // İş bitti (terminal ya da kullanıcı cevabı bekliyor): mesaj kapanır.
       // Soru bekleyen görevi kuyrukta bırakmak onu sürekli yeniden koşturur.
+      // Terminal olmayan sonuçta mesaj AÇIK kalır ki reclaim işi devralsın.
+      if (!CLOSABLE_STATUSES.has(outcome.status)) continue;
       try {
         await ports.ack(item.msgId);
       } catch (reason) {

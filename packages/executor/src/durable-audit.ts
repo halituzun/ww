@@ -1,3 +1,4 @@
+import { toStrictJsonPayload } from './strict-json-payload.js';
 import {
   appendEvent,
   getEvent,
@@ -110,7 +111,9 @@ function baseEvent(input: Readonly<{
     agent_id: input.agentId,
     event_type: input.eventType,
     tool_name: input.toolName,
-    payload: JsonValueSchema.parse(input.payload),
+    // JSON'da undefined yoktur; araç sonucundaki tek tanımsız alan tüm
+    // denetim kaydını (ve dolayısıyla görevi) düşürüyordu.
+    payload: JsonValueSchema.parse(toStrictJsonPayload(input.payload)),
     duration_ms: input.durationMs,
     created_at: input.occurredAt,
   });
