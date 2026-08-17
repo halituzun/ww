@@ -19,7 +19,8 @@ import { createExecutorComposition, createResumeUserAnswerOperation } from './ex
 import { createGateOperations } from './gate-operations.js';
 import { createToolPortFactory } from './tool-factory.js';
 import { createRuntimeContextService } from './runtime-context-service.js';
-import { getActivePrompt } from '@ww/db';
+import { createExecutionErrorRecorder } from './execution-error-recorder.js';
+import { appendEvent, getActivePrompt } from '@ww/db';
 import type { RuntimeModels } from './runtime-context.js';
 import type { Phase9RuntimeCompositionInput } from './runtime-composition.js';
 import { createLateBoundPort, type LateBoundPort } from './late-binding.js';
@@ -145,7 +146,11 @@ export async function createOrchestrationComposition(
       reassign: createReassignOperation(assignmentPort.proxy as never),
       awaitUserAnswer: createAwaitUserAnswerOperation({ recordQuestion: async () => undefined }),
       resumeUserAnswer: createResumeUserAnswerOperation(assignmentPort.proxy as never),
-      handleExecutionError: async () => 'failed' as const,
+      handleExecutionError: createExecutionErrorRecorder({
+        appendEvent: (row) => appendEvent(input.ch, row as never),
+        log: (message) => console.warn(`[ww] ${message}`),
+        now: () => new Date().toISOString(),
+      }),
     },
   };
 
