@@ -29,7 +29,6 @@
   "packages/db/src/repositories/artifacts.ts:getArtifact",
   "packages/db/src/repositories/briefs.ts:getPromptInputSnapshot",
   "packages/db/src/repositories/causal-entries.ts:getTaskCausalCursor",
-  "packages/db/src/repositories/effects.ts:listLatestEffectsByState",
   "packages/db/src/repositories/messages.ts:listMessagesBySession",
   "packages/db/src/repositories/messages.ts:listPendingInboxMessages",
   "packages/db/src/repositories/messages.ts:listProtocolV1AnswerRepliesToMessage",
