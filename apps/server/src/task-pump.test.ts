@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { pumpOnce, type TaskPumpPorts } from './task-pump.js';
+import { pumpConcurrency } from './task-pump.service.js';
 
 const id = (n: number): string => `00000000-0000-4000-8000-${n.toString().padStart(12, '0')}`;
 
@@ -122,5 +123,113 @@ describe('pumpOnce', () => {
     const ack = vi.fn(async () => undefined);
     await pumpOnce(ports({ ack, orchestrate: async () => ({ status: 'escalated' }) }));
     expect(ack).toHaveBeenCalledWith('1-1');
+  });
+
+  // docs/07: "Proje başına paralel agent 5". Pompa görevleri SERİ işliyordu:
+  // canlı koşuda iki görev aynı worker/verifier çiftini sırayla kullandı ve
+  // kadrodaki ikinci çift hiç devreye girmedi. Belgelenmiş eşzamanlılık
+  // yazılmış ama hiç çalışmıyordu.
+  it('gorevleri sinira kadar es zamanli isler', async () => {
+    let active = 0;
+    let peak = 0;
+    const orchestrate = vi.fn(async () => {
+      active += 1;
+      peak = Math.max(peak, active);
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      active -= 1;
+      return { status: 'done' };
+    });
+
+    const result = await pumpOnce(ports({
+      claim: async () => [item(1), item(2), item(3)],
+      orchestrate,
+      concurrency: 3,
+    }));
+
+    expect(result.processed).toBe(3);
+    expect(peak).toBeGreaterThan(1);
+  });
+
+  // Sınırsız eşzamanlılık sağlayıcı rate limitini ve agent kadrosunu aşar.
+  it('es zamanlilik sinirini asmaz', async () => {
+    let active = 0;
+    let peak = 0;
+    const orchestrate = vi.fn(async () => {
+      active += 1;
+      peak = Math.max(peak, active);
+      await new Promise((resolve) => setTimeout(resolve, 15));
+      active -= 1;
+      return { status: 'done' };
+    });
+
+    await pumpOnce(ports({
+      claim: async () => [item(1), item(2), item(3), item(4), item(5)],
+      orchestrate,
+      concurrency: 2,
+    }));
+
+    expect(peak).toBeLessThanOrEqual(2);
+  });
+
+  it('varsayilan olarak seri calisir', async () => {
+    let active = 0;
+    let peak = 0;
+    const orchestrate = vi.fn(async () => {
+      active += 1;
+      peak = Math.max(peak, active);
+      await new Promise((resolve) => setTimeout(resolve, 10));
+      active -= 1;
+      return { status: 'done' };
+    });
+
+    await pumpOnce(ports({ claim: async () => [item(1), item(2)], orchestrate }));
+    expect(peak).toBe(1);
+  });
+
+  // Eşzamanlı koşuda da her görevin sonucu kendi mesajına ait olmalıdır;
+  // karışırsa yanlış mesaj ack'lenir ve iş kaybolur.
+  it('es zamanli kosuda sonuclari gorevlerle eslestirir', async () => {
+    const ack = vi.fn(async () => undefined);
+    const orchestrate = vi.fn(async ({ taskId }: { taskId: string }) => {
+      await new Promise((resolve) => setTimeout(resolve, taskId === id(1) ? 30 : 5));
+      return { status: taskId === id(1) ? 'done' : 'working' };
+    });
+
+    const result = await pumpOnce(ports({
+      claim: async () => [item(1), item(2)],
+      orchestrate: orchestrate as never,
+      ack,
+      concurrency: 2,
+    }));
+
+    expect(result.results).toEqual([
+      { taskId: id(1), status: 'done' },
+      { taskId: id(2), status: 'working' },
+    ]);
+    expect(ack).toHaveBeenCalledTimes(1);
+    expect(ack).toHaveBeenCalledWith('1-1');
+  });
+});
+
+describe('pumpConcurrency', () => {
+  it('varsayilan olarak iki gorev', () => {
+    expect(pumpConcurrency(undefined)).toBe(2);
+    expect(pumpConcurrency('')).toBe(2);
+  });
+
+  it('ayarlanan degeri kullanir', () => {
+    expect(pumpConcurrency('4')).toBe(4);
+  });
+
+  // Bozuk ayar sessizce sınırsız eşzamanlılığa dönüşürse sağlayıcı rate
+  // limiti ve agent kadrosu aşılır.
+  it('bozuk degerde varsayilana duser', () => {
+    for (const raw of ['abc', '0', '-3', '1.5']) {
+      expect(pumpConcurrency(raw)).toBe(2);
+    }
+  });
+
+  it('ust sinir uygular', () => {
+    expect(pumpConcurrency('999')).toBe(8);
   });
 });

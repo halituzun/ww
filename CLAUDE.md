@@ -35,10 +35,11 @@ when it goes stale, the next session starts from the wrong place.
 - Gate as of 2026-08-17: **1000+ tests across 10 packages**, plus 4 opt-in live
   Docker sandbox tests via `pnpm --filter @ww/executor test:live` (skipped by a
   plain `pnpm test`). Build, lint and `pnpm wiring:check` green.
-- Two tests are known to flake **only under full-gate load** and pass in isolation:
-  `packages/db effects.test.ts` (primary-key pruning) and
+- Three tests are known to flake **only under full-gate load** and pass in
+  isolation: `packages/db effects.test.ts` (primary-key pruning),
+  `packages/db plans.test.ts` (12-way concurrent append race) and
   `packages/agents communication.integration.test.ts`. Re-run the gate before
-  treating either as a real failure — and never push on a red gate.
+  treating any of them as a real failure — and never push on a red gate.
 - `pnpm wiring:check` guards this repo's most expensive recurring defect:
   code that is written and tested but never called by any production path. It
   was found in five separate places in one night. `wiring-baseline.json` freezes

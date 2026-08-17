@@ -53,7 +53,9 @@ export async function startOrchestrationRuntime(deps: StarterDeps): Promise<Star
     if (project === null) {
       const reason = deps.requestedProjectId === undefined
         ? "tek bir 'running' proje bulunamadı — WW_RUNTIME_PROJECT_ID ile açıkça seçin"
-        : `istenen proje bulunamadı: ${deps.requestedProjectId}`;
+        : `istenen proje çalışır durumda değil: ${deps.requestedProjectId} `
+          + '(motor yalnızca status=running projeleri alır; '
+          + 'PATCH /projects/:id/status ile çalıştırın)';
       deps.log(`[ww] orkestrasyon başlatılamadı: ${reason}`);
       return { started: false, reason };
     }

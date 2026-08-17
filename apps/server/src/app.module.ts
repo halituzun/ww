@@ -1,4 +1,6 @@
 import { Module } from '@nestjs/common';
+import { InterviewController } from './interview.controller.js';
+import { InterviewApplicationService } from './interview.service.js';
 import { CouncilController } from './council.controller.js';
 import { StandardsAuditController } from './standards-audit.controller.js';
 import { StandardsAuditApplicationService } from './standards-audit.service.js';
@@ -56,6 +58,7 @@ import {
     KnowledgeController,
     MobilePreviewController,
     DelegationController,
+    InterviewController,
     CouncilController,
     StandardsAuditController,
     PlansController,HealthController, ProjectsController, TasksController, MessagesController, OperationsController, FilesController, NarratorController, ProvidersController, RoleModelsController, BudgetController, AuditController, RuntimeController],
@@ -65,6 +68,7 @@ import {
     TaskPumpService,
     RecoverySweeperService,
     PlanApplicationService,
+    InterviewApplicationService,
     CouncilApplicationService,
     StandardsAuditApplicationService,
     DelegationApplicationService,

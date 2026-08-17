@@ -36,6 +36,12 @@ export interface TaskPumpPorts {
     maxAttempts: number;
   }>): Promise<Readonly<{ status: string }>>;
   readonly maxAttempts?: number;
+  /**
+   * Aynı anda kaç görev işlenir (docs/07 → "Proje başına paralel agent 5").
+   * Varsayılan 1: eşzamanlılık AÇIKÇA istenmelidir, çünkü sağlayıcı rate
+   * limiti ve agent kadrosu buna göre ayarlanır.
+   */
+  readonly concurrency?: number;
   onResult?(taskId: EntityId, status: string): void;
   onError?(taskId: EntityId, reason: unknown): void;
 }
@@ -50,23 +56,37 @@ const CLOSABLE_STATUSES: ReadonlySet<string> = new Set([
   'done', 'failed', 'cancelled', 'escalated', 'awaiting_user', 'waiting_user',
 ]);
 
+function boundedConcurrency(value: number | undefined): number {
+  if (value === undefined) return 1;
+  // Bozuk ayar sessizce sınırsız eşzamanlılığa dönüşmemeli: en güvenli
+  // yorum seri çalışmaktır.
+  if (!Number.isSafeInteger(value) || value < 1) return 1;
+  return Math.min(value, 16);
+}
+
 export async function pumpOnce(ports: TaskPumpPorts): Promise<PumpResult> {
   const items = await ports.claim();
-  const results: PumpItemResult[] = [];
+  // Sonuçlar GÖREV SIRASINDA tutulur: eşzamanlı koşuda bitiş sırası
+  // değişir ve sonuçlar karışırsa yanlış mesaj ack'lenip iş kaybolur.
+  const results: PumpItemResult[] = new Array<PumpItemResult>(items.length);
+  const limit = boundedConcurrency(ports.concurrency);
+  let next = 0;
 
-  for (const item of items) {
-    try {
+  const runOne = async (index: number): Promise<void> => {
+    const item = items[index]!;
+    {
+      try {
       const outcome = await ports.orchestrate({
         taskId: item.taskId,
         maxAttempts: ports.maxAttempts ?? 3,
       });
-      results.push({ taskId: item.taskId, status: outcome.status });
+      results[index] = { taskId: item.taskId, status: outcome.status };
       ports.onResult?.(item.taskId, outcome.status);
 
       // İş bitti (terminal ya da kullanıcı cevabı bekliyor): mesaj kapanır.
       // Soru bekleyen görevi kuyrukta bırakmak onu sürekli yeniden koşturur.
       // Terminal olmayan sonuçta mesaj AÇIK kalır ki reclaim işi devralsın.
-      if (!CLOSABLE_STATUSES.has(outcome.status)) continue;
+      if (!CLOSABLE_STATUSES.has(outcome.status)) return;
       try {
         await ports.ack(item.msgId);
       } catch (reason) {
@@ -77,10 +97,24 @@ export async function pumpOnce(ports: TaskPumpPorts): Promise<PumpResult> {
     } catch (reason) {
       // ACK YOK: mesaj pending kalır ve reclaim başka tüketiciye devreder.
       // Burada ack'lemek işi sessizce kaybetmek olurdu.
-      results.push({ taskId: item.taskId, status: 'error' });
+      results[index] = { taskId: item.taskId, status: 'error' };
       ports.onError?.(item.taskId, reason);
+      }
     }
-  }
+  };
+
+  const worker = async (): Promise<void> => {
+    for (;;) {
+      const index = next;
+      next += 1;
+      if (index >= items.length) return;
+      await runOne(index);
+    }
+  };
+
+  await Promise.all(
+    Array.from({ length: Math.min(limit, items.length) }, () => worker()),
+  );
 
   return { processed: items.length, results };
 }

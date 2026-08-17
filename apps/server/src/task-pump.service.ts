@@ -24,6 +24,18 @@ export interface PumpRuntime {
   orchestrate(input: Readonly<{ taskId: EntityId; maxAttempts: number }>): Promise<Readonly<{ status: string }>>;
 }
 
+/**
+ * Eşzamanlı görev sayısı. Varsayılan 2: kadroda ikişer worker/verifier var,
+ * daha fazlası sağlayıcı rate limitine çarpar. WW_PUMP_CONCURRENCY ile
+ * ayarlanır; bozuk değer sessizce sınırsıza dönmez, varsayılana düşer.
+ */
+export function pumpConcurrency(raw = process.env['WW_PUMP_CONCURRENCY']): number {
+  if (raw === undefined || raw.trim() === '') return 2;
+  const parsed = Number(raw);
+  if (!Number.isSafeInteger(parsed) || parsed < 1) return 2;
+  return Math.min(parsed, 8);
+}
+
 @Injectable()
 export class TaskPumpService implements OnModuleInit, OnModuleDestroy {
   readonly #logger = new Logger(TaskPumpService.name);
@@ -90,6 +102,10 @@ export class TaskPumpService implements OnModuleInit, OnModuleDestroy {
         orchestrate: (call) => this.#withTaskHeartbeat(
           projectId, call.taskId, () => runtime.orchestrate(call),
         ),
+        // docs/07 → "Proje başına paralel agent 5". Pompa seri çalışıyordu:
+        // canlı koşuda iki görev aynı worker/verifier çiftini sırayla kullandı
+        // ve kadrodaki ikinci çift hiç devreye girmedi.
+        concurrency: pumpConcurrency(),
         onResult: (taskId, status) => this.#logger.log(`görev ${taskId}: ${status}`),
         onError: (taskId, reason) => this.#logger.warn(`görev ${taskId} işlenemedi: ${String(reason)}`),
       });
