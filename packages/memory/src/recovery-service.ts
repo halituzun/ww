@@ -134,6 +134,14 @@ export class RecoveryService {
     // geri doldur. Bunlar aksi halde sonsuza dek bekler — kuyruğu tüketen
     // kimse onları görmez (Redis temizlenince/budanınca gerçekten oluyor).
     const queuedTasks = await listLatestTasksByStatus(this.#ch, projectId, 'queued');
+    // 'queued' görevin CANLI denemesi yoktur; üzerindeki terminal olmayan etki
+    // tanım gereği terk edilmiştir. Uzlaştırılmazsa görev kuyrukta durur ama
+    // her atama "assignment command uzlastirilmamis" ile reddedilir ve görev
+    // kalıcı olarak koşamaz. Bunu yalnızca durum DEĞİŞTİRİRKEN yapmak yetmiyordu:
+    // süreç ölmeden önce zaten 'queued' olan görevlere hiç dokunulmuyordu.
+    for (const task of queuedTasks) {
+      await this.#reconcileAbandonedEffects(task.task_id, now);
+    }
     const inStream = await listStreamTaskIds(this.#redis, `ww:queue:${projectId}`);
     for (const taskId of planQueueRefill(queuedTasks.map((task) => task.task_id), inStream)) {
       await enqueueTask(this.#redis, `ww:queue:${projectId}`, taskId);
