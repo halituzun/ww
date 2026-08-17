@@ -49,5 +49,9 @@
   {
     "symbol": "apps/server/src/runtime-context.ts:resolveWorkspaceRoot",
     "reason": "orkestrasyon bootstrap temeli; cagiran sonraki turda gelecek"
+  },
+  {
+    "symbol": "packages/scheduler/src/escalation-recorder.ts:createEscalationRecorder",
+    "reason": "schedulerOperations.escalate uretim karsiligi; bootstrap sonraki turda baglayacak"
   }
 ]

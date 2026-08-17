@@ -63,7 +63,8 @@ export class AuditController {
     const [eventRows, messageRows] = await Promise.all([
       this.#database.ch.query({
         query: `SELECT event_id AS id, task_id, agent_id, created_at,
-            JSONExtractString(payload, 'reason') AS reason
+            JSONExtractString(payload, 'reason') AS reason,
+            JSONExtractString(payload, 'brakeKind') AS brake_kind
           FROM events
           WHERE project_id = {projectId:UUID} AND event_type = 'escalation'
           ORDER BY created_at DESC LIMIT 100`,
@@ -83,7 +84,10 @@ export class AuditController {
     const byId = new Map<string, EscalationEntry>();
     for (const row of [...eventRows, ...messageRows]) {
       const reason = String(row['reason'] ?? '');
-      const brake = /^brake:([a-z_]+)/.exec(reason);
+      // brakeKind artık payload'da açık alan; metin ayrıştırma yalnız eski
+      // kayıtlar ve mesaj kaynağı için geriye dönük yedek olarak kalır.
+      const explicit = String(row['brake_kind'] ?? '');
+      const brake = explicit === '' ? /^brake:([a-z_]+)/.exec(reason)?.[1] ?? '' : explicit;
       const id = String(row['id'] ?? '');
       if (id === '' || byId.has(id)) continue;
       byId.set(id, {
@@ -91,7 +95,7 @@ export class AuditController {
         taskId: String(row['task_id'] ?? ''),
         agentId: String(row['agent_id'] ?? ''),
         reason,
-        brakeKind: brake?.[1] ?? '',
+        brakeKind: brake,
         createdAt: String(row['created_at'] ?? ''),
       });
     }
