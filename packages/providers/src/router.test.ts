@@ -113,6 +113,39 @@ describe('ModelRouter', () => {
     expect(rows.map((r) => r.fallback_attempt)).toEqual([0, 1]);
   });
 
+  // ASIL KUSUR: yönlendirici "aynı sağlayıcıyı tekrar deneme" (retryable=false)
+  // ile "başka sağlayıcıyı deneme"yi aynı şey sayıyordu. Kimlik hatası O
+  // SAĞLAYICIYA ÖZGÜDÜR: başka sağlayıcının anahtarı farklıdır ve docs/04
+  // "düşen sağlayıcıda işler varsayılana akar" der. Canlı koşuda bozuk
+  // anahtarlı sağlayıcı tüm görevi düşürdü, fallback hiç denenmedi.
+  it('auth hatasinda yedek sağlayıcıya geçer', async () => {
+    const bad = new MockProvider({ script: [], failFirst: 99, failKind: 'auth' });
+    const good = new MockProvider({ script: [{ content: 'yedek', toolCalls: [] }] });
+    const { router, rows } = makeRouter({ bad: renamed(bad, 'bad'), good: renamed(good, 'good') }, {
+      'bad:m1': ['good:m2'],
+    });
+
+    const res = await router.complete('bad:m1', { messages: [], meta });
+    expect(res.result.content).toBe('yedek');
+    expect(res.fallbackUsed).toBe(true);
+    expect(rows.map((r) => r.status)).toEqual(['error', 'fallback_used']);
+    expect(rows.map((r) => r.error_kind)).toEqual(['auth', '']);
+  });
+
+  // Yedeği de bozuksa hata YUTULMAZ: sessizce başarısız olmak, kullanıcıya
+  // işin yapıldığı yalanını söyler.
+  it('tum zincir auth ile duserse hata firlar', async () => {
+    const bad = new MockProvider({ script: [], failFirst: 99, failKind: 'auth' });
+    const alsoBad = new MockProvider({ script: [], failFirst: 99, failKind: 'auth' });
+    const { router, rows } = makeRouter(
+      { bad: renamed(bad, 'bad'), alsoBad: renamed(alsoBad, 'alsoBad') },
+      { 'bad:m1': ['alsoBad:m2'] },
+    );
+
+    await expect(router.complete('bad:m1', { messages: [], meta })).rejects.toThrow(ProviderError);
+    expect(rows.map((r) => r.status)).toEqual(['error', 'error']);
+  });
+
   it('bad_request fallback tetiklemez, hata fırlar', async () => {
     const bad = new MockProvider({ script: [], failFirst: 99, failKind: 'bad_request' });
     const good = new MockProvider({ script: [{ content: 'yedek', toolCalls: [] }] });

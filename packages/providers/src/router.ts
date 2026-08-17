@@ -121,8 +121,10 @@ export class ModelRouter {
         // and may advance the explicit fallback chain. Ledger failures
         // (uncertain/reconciliation) are terminal and never do so.
         if (!(e instanceof ProviderError)) throw e;
-        // Kalıcı hatalarda (kötü istek / kimlik) yedek denemek anlamsız.
-        if (e instanceof ProviderError && !e.retryable) throw e;
+        // Zinciri yalnızca KÖTÜ İSTEK keser: o, her sağlayıcıda aynı şekilde
+        // düşer. Kimlik hatası ise sağlayıcıya özgüdür ve tam da yedeğe
+        // geçilmesi gereken durumdur (docs/04).
+        if (!e.advancesFallbackChain) throw e;
         continue;
       }
       try {

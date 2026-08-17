@@ -98,8 +98,19 @@ export class ProviderError extends Error {
     this.name = 'ProviderError';
   }
 
+  /** AYNI sağlayıcıyı tekrar denemek anlamlı mı? Kimlik hatasında değildir. */
   get retryable(): boolean {
     return this.kind !== 'bad_request' && this.kind !== 'auth';
+  }
+
+  /**
+   * BAŞKA bir sağlayıcıya geçmek anlamlı mı? `retryable` ile karıştırılmamalıdır:
+   * kimlik hatası O SAĞLAYICIYA özgüdür, yedeğin anahtarı farklıdır ve docs/04
+   * "düşen sağlayıcıda işler varsayılana akar" der. Yalnızca kötü istek her
+   * sağlayıcıda aynı şekilde düşer; zinciri sadece o keser.
+   */
+  get advancesFallbackChain(): boolean {
+    return this.kind !== 'bad_request';
   }
 }
 
