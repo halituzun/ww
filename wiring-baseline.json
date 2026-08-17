@@ -69,5 +69,13 @@
   {
     "symbol": "packages/scheduler/src/assignment-operations.ts:createAwaitUserAnswerOperation",
     "reason": "schedulerOperations uretim karsiligi; bootstrap baglayacak"
+  },
+  {
+    "symbol": "apps/server/src/gate-operations.ts:createGateOperations",
+    "reason": "schedulerOperations gate/commit uretim karsiligi; bootstrap baglayacak"
+  },
+  {
+    "symbol": "packages/db/src/redis-cleanup.ts:dropLeakedRedisKeys",
+    "reason": "operasyonel arac; pnpm db:clean-tests scriptinden calisir"
   }
 ]

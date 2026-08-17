@@ -11,7 +11,7 @@
     "lint": "turbo lint",
     "dev": "turbo dev",
     "wiring:check": "pnpm --filter @ww/wiring-check build && node packages/wiring-check/dist/cli.js",
-    "db:clean-tests": "node -e \"import('./packages/db/dist/test-cleanup.js').then(m=>m.dropLeakedTestDatabases({olderThanMs:3600000}).then(x=>console.log('d\u00fc\u015f\u00fcr\u00fclen:',x.length)))\""
+    "db:clean-tests": "node -e \"Promise.all([import('./packages/db/dist/test-cleanup.js'),import('./packages/db/dist/redis-cleanup.js')]).then(([a,b])=>Promise.all([a.dropLeakedTestDatabases({olderThanMs:3600000}),b.dropLeakedRedisKeys()]).then(([x,y])=>console.log('DB:',x.length,'Redis anahtar:',y)))\""
   },
   "devDependencies": {
     "@types/node": "^22.10.0",

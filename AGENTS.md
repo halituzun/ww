@@ -15,10 +15,12 @@ Bu depo, pnpm ve Turborepo kullanan bir TypeScript monorepo'sudur. Çalıştır�
 
 İnceleme istemeden önce derleme, test ve lint kontrollerini çalıştırın.
 
-- `pnpm db:clean-tests`: Sızan `ww_test_*` veritabanlarını düşürür. Entegrasyon
-  testi ORTASINDA düşerse `afterAll` çalışmaz ve veritabanı kalır; birikince
-  ClickHouse kaynak baskısı altında İLGİSİZ testleri HTTP hatasıyla kırar.
-  Açıklanamayan bağlantı hatalarında önce bunu koşun.
+- `pnpm db:clean-tests`: Sızan `ww_test_*` veritabanlarını VE `ww:*` Redis
+  anahtarlarını temizler. Entegrasyon testi ORTASINDA düşerse `afterAll`
+  çalışmaz ve artıklar kalır; birikince ClickHouse/Redis kaynak baskısı
+  altında İLGİSİZ testler düşmeye başlar (ölçülen: 84 veritabanı / 12.2k
+  anahtar, `plans` ve `redis-leases` testlerini kırıyordu). Açıklanamayan
+  bağlantı veya zamanlama hatalarında ÖNCE bunu koşun.
 - `pnpm wiring:check`: "yazılmış ama hiç bağlanmamış kod" kapısı. Testte
   kullanılan ama hiçbir üretim kodundan çağrılmayan sembolleri bulur. Mevcut
   durum `wiring-baseline.json` içinde dondurulmuştur; kapı yalnız YENİ
