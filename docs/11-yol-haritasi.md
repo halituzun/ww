@@ -38,7 +38,7 @@
 | 1 — Çekirdek Orkestrasyon | **Tamamlandı ✅** | Kabul senaryoları deterministik mock testlerle karşılanıyor |
 | 2 — Hafıza ve Dayanıklılık | **Tamamlandı ✅** | Recovery, bağlam bütçesi, frenler testli |
 | 3 — Panel Temeli | **Tamamlandı ✅** | Kabul senaryosu 2026-08-17 akşamı gerçek API ile koşuldu (kanıt tablosu aşağıda) |
-| 4 — Tam Agent Sistemi | **Kod tamam ⏳** | Faz 3 koşusu tamam; bu fazın kendi kabul senaryosu (konsey + ≥3 sağlayıcı) açık |
+| 4 — Tam Agent Sistemi | **Çoğu geçti ⏳** | Sihirbaz/konsey/onay/denetim döngüsü canlı koşuldu; kalan tek engel konseyin ≥3 sağlayıcı gereği (kanıt tablosu aşağıda) |
 | 5 — Tuval ve Dosya Gezgini | **Kod tamam ⏳** | Kabul senaryosu Faz 4'ün canlı koşusuna bağlı |
 | 6 — Test Ortamları ve Cila | **Kod tamam ⏳** | Canlı sandbox kapısı geçti; üç gerçek proje koşusu eksik |
 
@@ -288,7 +288,30 @@ devreye girmemişti. `ProviderError.advancesFallbackChain` ile ayrıldı.
 
 ## Faz 4 — Tam Agent Sistemi {#faz-4}
 
-**Durum:** Kod tamam ⏳ — kabul senaryosu bekliyor (2026-08-16)
+**Durum:** Kabul senaryosunun **çoğu geçti**, biri açık ⏳ (2026-08-18)
+
+**Canlı koşu kanıtları (gerçek DeepSeek API ile, proje `yapilacaklar`):**
+
+| Kabul adımı | Durum | Kanıt |
+|---|---|---|
+| Sihirbazdan girilir | ✅ | `POST /projects/:id/interview` → gereksinimler `knowledge`'a requirement olarak yazıldı (`14545de3`) |
+| Konsey planlar | ✅ | 3 üye, 7 tur, plan `716670a1` gerçek sentezle yazıldı |
+| Kullanıcı onaylar | ✅ | `POST /plans/:id/approval` → plan `approved`, sürüm 1 |
+| Çoklu worker/verifier | ⚠️ kısmen | İki görev de `done` (commit `7fca881`, `0363932`). Pompa artık sınırlı eşzamanlı çalışıyor, ama bu koşuda görevler sırayla işlendi ve aynı çift kullanıldı |
+| Denetçi bulgu üretir ve düzelttirir | ✅ | Ayrı koşuda: ihlalli `Counter.tsx` → STD-001 bulgusu → düzeltme görevi `useCounter.ts` üretti (commit `8e258f8b`) → yeniden denetim **0 bulgu** |
+| Uygulama kapıdan geçer | ⚠️ zayıf kapı | Her görev kapıdan geçti, ama iskeletin kapısı yalnızca "kaynak dosyalar mevcut" kontrolü yapıyor: sandbox'ta `npx tsc` çalışamadığı için gerçek derleme/lint adımı yok |
+
+**Fazı kapatmayı engelleyen tek şey:** konsey **en az 3 farklı sağlayıcı**
+ister. Şu an tek gerçek anahtar (`deepseek`) var; konsey her koşuda planın
+gövdesine şunu yazıyor: *"konsey 1 sağlayıcıya düştü (hedef 3): çapraz kontrol
+bu koşuda tam değildir"*. Çapraz kontrol gerçekten çalışana dek faz açık kalır.
+İkinci/üçüncü sağlayıcı anahtarı panelden girilmelidir.
+
+**Bu koşuların ortaya çıkardığı ve düzeltilen kusurlar:** konsey, sihirbaz ve
+standart denetçisi `apps/` içinden HİÇ çağrılmıyordu; taklit sağlayıcı gerçek
+konsey üyesi sayılıyordu; düzeltme görevi worker'ın okuyamayacağı dokümana
+atıf yapıyor ve tek hedef dosyayla imkânsız kalıyordu; pompa seri çalıştığı
+için belgelenmiş eşzamanlılık hiç devreye girmiyordu.
 
 Deterministik dilim geçiyor: `packages/agents/src/phase4-acceptance.test.ts`
 ("interview → council → audit produces one approved deterministic result") ve
