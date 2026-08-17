@@ -2,6 +2,7 @@ import { CommunicationWakeupPublisher, getFencedLease, getTaskBrief, taskLockKey
 import type { EntityId } from '@ww/shared';
 import { applyLateBinding, type LateBinder } from './late-bind-runtime.js';
 import { internalServiceTokenMap } from './internal-service-tokens.js';
+import { resolveBriefPolicy } from './task-brief-policy.js';
 import { randomUUID } from 'node:crypto';
 import type { ClickHouseClient, WwRedis } from '@ww/db';
 import type { LlmProvider, ModelRouter, RouterOptions } from '@ww/providers';
@@ -52,6 +53,7 @@ import {
   type SandboxPort,
 } from '@ww/executor';
 import {
+  DEFAULT_TASK_RULE_REFS_V1,
   runPhase1Orchestrator,
   createBrakeGuard,
   createClickHouseBrakePorts,
@@ -216,6 +218,7 @@ export interface Phase9RuntimeCompositionInput extends Omit<Phase8RuntimeComposi
     sessionId: EntityId;
     owningPmId: EntityId;
     authenticateAs: (attemptId: EntityId) => Promise<import('@ww/agents').PrincipalAuthentication>;
+    verifierFor: (attemptId: EntityId) => Promise<EntityId>;
   }>;
   readonly localSessionToken: string;
   /** Explicit agent credentials for server-owned worker/verifier communication. */
@@ -288,6 +291,14 @@ export function createPhase9RuntimeComposition(
     fallbacks: input.fallbacks,
     escalationPort: escalation,
     providerContext: input.providerContext,
+    // Kalıcı kayıt sansürlü kalır; ham sebep YALNIZCA yerel loga düşer.
+    effect: {
+      onUnexpectedError: (error, context) => {
+        const detail = error instanceof Error ? `${error.name}: ${error.message}` : String(error);
+        console.warn(`[ww] efekt ${context.effectType} ${context.state}: ${detail}`);
+        if (error instanceof Error && error.stack !== undefined) console.warn(error.stack);
+      },
+    },
   });
 
   const taskBriefService = new TaskBriefService(
@@ -306,6 +317,14 @@ export function createPhase9RuntimeComposition(
     taskBriefService,
     taskTransitionService,
     taskCausalLog,
+    {
+      // Varsayılan politika allowedTools'u BOŞ bırakıyordu: worker dosya
+      // yazamıyor, verifier diff okuyamıyordu.
+      briefPolicy: {
+        resolve: (policyInput) =>
+          resolveBriefPolicy(policyInput.task as never, DEFAULT_TASK_RULE_REFS_V1) as never,
+      },
+    },
   );
 
   // Assignment is the one operation that can be composed from the concrete
@@ -408,6 +427,7 @@ export function createPhase9RuntimeComposition(
       sessionId: input.runtimeSession.sessionId,
       owningPmId: input.runtimeSession.owningPmId,
       authenticateAs: input.runtimeSession.authenticateAs,
+      verifierFor: input.runtimeSession.verifierFor,
       now: () => new Date().toISOString(),
     })
   );

@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { notifyUnexpectedError, type UnexpectedErrorObserver } from './unexpected-error-observer.js';
 import {
   JsonValueSchema,
   canonicalSha256V1,
@@ -34,6 +35,11 @@ import {
 
 export interface EffectRunnerOptions {
   readonly clock?: ClockPort;
+  /**
+   * Beklenmeyen hatanın HAM hali; yalnızca süreç içi teşhis için.
+   * Kalıcı kayıt sansürlü kalır (sağlayıcı/anahtar/prompt sızmaz).
+   */
+  readonly onUnexpectedError?: UnexpectedErrorObserver;
   readonly escalationPort?: EffectEscalationPort;
   readonly leaseTtlMs?: number;
   readonly contentionWaitMs?: number;
@@ -145,6 +151,7 @@ export class EffectRunner {
   readonly #redis: WwRedis;
   readonly #clock: ClockPort;
   readonly #escalationPort: EffectEscalationPort | undefined;
+  readonly #onUnexpectedError: UnexpectedErrorObserver | undefined;
   readonly #leaseTtlMs: number;
   readonly #contentionWaitMs: number;
   readonly #contentionPollMs: number;
@@ -154,6 +161,7 @@ export class EffectRunner {
     this.#redis = redis;
     this.#clock = options.clock ?? systemClock;
     this.#escalationPort = options.escalationPort;
+    this.#onUnexpectedError = options.onUnexpectedError;
     this.#leaseTtlMs = effectLeaseTtl(options.leaseTtlMs ?? 30_000);
     this.#contentionWaitMs = positiveInteger(
       options.contentionWaitMs ?? 30_000,
@@ -286,6 +294,11 @@ export class EffectRunner {
       } catch (error) {
         const definite = error instanceof DurableEffectExecutionError &&
           error.outcome === 'definite_failure';
+        notifyUnexpectedError(this.#onUnexpectedError, error, {
+          effectType: input.effectType,
+          stableEffectId: input.stableEffectId,
+          state: definite ? 'failed' : 'uncertain',
+        });
         current = await this.#appendTerminal(
           current,
           input,
@@ -304,6 +317,11 @@ export class EffectRunner {
       try {
         serialized = JsonValueSchema.parse(input.serialize(value));
       } catch (error) {
+        notifyUnexpectedError(this.#onUnexpectedError, error, {
+          effectType: input.effectType,
+          stableEffectId: input.stableEffectId,
+          state: 'uncertain',
+        });
         current = await this.#appendTerminal(
           current,
           input,

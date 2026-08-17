@@ -20,6 +20,7 @@ const delivery = (send = vi.fn(async () => ({ messageId: id(99) }) as never)) =>
     communication: { send } as never,
     authentication: auth,
     authenticateAs: async () => auth,
+    verifierFor: async () => id(12),
     sessionId: id(10),
     owningPmId: id(11),
     now: () => '2026-08-17T09:00:00.000Z',
@@ -110,9 +111,27 @@ describe('createRuntimeCommunicationDelivery', () => {
       communication: { send: vi.fn() } as never,
       authentication: { type: 'agent' } as never,
       authenticateAs: async () => auth,
+      verifierFor: async () => id(12),
       sessionId: id(10),
       owningPmId: id(11),
       now: () => '2026-08-17T09:00:00.000Z',
     })).toThrow(/internal_service/);
+  });
+
+  // Politika: worker raporu YALNIZCA atanmış verifier'a gidebilir.
+  // PM'e göndermek reddedilir ve görev düşer.
+  it('raporu atanmış verifier’a gönderir, PM’e değil', async () => {
+    const { send, port } = delivery();
+    await port.report('bitti', [], { ...scope, invocationId: id(7), promptInputSnapshotId: id(8) });
+    const sent = send.mock.calls[0]![1] as never as Record<string, unknown>;
+    expect(sent['recipient']).toEqual({ type: 'agent', id: id(12) });
+  });
+
+  // Soru kanalı PM'dir; ikisi karışırsa tırmandırma zinciri kopar.
+  it('soruyu PM’e göndermeye devam eder', async () => {
+    const { send, port } = delivery();
+    await port.question({ ...scope, callId: id(5), text: 's' });
+    const sent = send.mock.calls[0]![1] as never as Record<string, unknown>;
+    expect(sent['recipient']).toEqual({ type: 'agent', id: id(11) });
   });
 });

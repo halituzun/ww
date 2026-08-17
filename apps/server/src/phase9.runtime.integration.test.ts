@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { VERIFIER_TOOLS, WORKER_TOOLS } from './task-brief-policy.js';
 import type { INestApplication } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import request from 'supertest';
@@ -374,7 +375,9 @@ describe.skipIf(probe === undefined || probeRedis === undefined)('Phase 9 runtim
       taskId: taskId as never,
       workerPrompt: { name: `phase9.${projectId}.worker`, version: 1 },
       verifierPrompt: { name: `phase9.${projectId}.verifier`, version: 1 },
-      allowedTools: [],
+      // Politika kabul kriterlerini görevden alır; mühür onunla eşleşmeli.
+      acceptanceCriteria: ['gate passes'],
+      allowedTools: [...WORKER_TOOLS, ...VERIFIER_TOOLS],
       cutoffAt: new Date().toISOString(),
     });
     expect(brief.taskId).toBe(taskId);
@@ -463,7 +466,9 @@ describe.skipIf(probe === undefined || probeRedis === undefined)('Phase 9 runtim
       taskId: questionTaskId as never,
       workerPrompt: { name: `phase9.${projectId}.worker`, version: 1 },
       verifierPrompt: { name: `phase9.${projectId}.verifier`, version: 1 },
-      allowedTools: [],
+      // Politika kabul kriterlerini görevden alır; mühür onunla eşleşmeli.
+      acceptanceCriteria: ['answer is applied to a fresh attempt'],
+      allowedTools: [...WORKER_TOOLS, ...VERIFIER_TOOLS],
       cutoffAt: new Date().toISOString(),
     });
     askQuestion = true;
@@ -599,7 +604,9 @@ describe.skipIf(probe === undefined || probeRedis === undefined)('Phase 9 runtim
       taskId: rejectTaskId as never,
       workerPrompt: { name: `phase9.${projectId}.worker`, version: 1 },
       verifierPrompt: { name: `phase9.${projectId}.verifier`, version: 1 },
-      allowedTools: [],
+      // Politika kabul kriterlerini görevden alır; mühür onunla eşleşmeli.
+      acceptanceCriteria: ['fresh attempt is approved'],
+      allowedTools: [...WORKER_TOOLS, ...VERIFIER_TOOLS],
       cutoffAt: new Date().toISOString(),
     });
     const transitionAt = new Date().toISOString();
@@ -702,7 +709,9 @@ describe.skipIf(probe === undefined || probeRedis === undefined)('Phase 9 runtim
       taskId: alwaysRejectTaskId as never,
       workerPrompt: { name: `phase9.${projectId}.worker`, version: 1 },
       verifierPrompt: { name: `phase9.${projectId}.verifier`, version: 1 },
-      allowedTools: [],
+      // Politika kabul kriterlerini görevden alır; mühür onunla eşleşmeli.
+      acceptanceCriteria: ['must escalate on attempt three'],
+      allowedTools: [...WORKER_TOOLS, ...VERIFIER_TOOLS],
       cutoffAt: new Date().toISOString(),
     });
     for (let rejection = 0; rejection < 3; rejection += 1) {

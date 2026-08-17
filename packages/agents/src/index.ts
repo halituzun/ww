@@ -20,3 +20,5 @@ export * from './pm-loop.js';
 export * from './agent-runtime.js';
 export * from './runtime-bridge.js';
 export * from './runtime-communication-delivery.js';
+export * from './unexpected-error-observer.js';
+export * from './strict-json.js';

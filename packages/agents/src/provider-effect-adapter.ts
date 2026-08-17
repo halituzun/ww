@@ -5,6 +5,7 @@ import {
 } from '@ww/shared';
 import { ProviderError, type ProviderInvocationEffect } from '@ww/providers';
 import { DurableEffectExecutionError } from './errors.js';
+import { toStrictJson } from './strict-json.js';
 import { EffectRunner } from './effect-runner.js';
 
 export interface ProviderEffectContext {
@@ -53,7 +54,9 @@ export class DurableProviderInvocationEffect implements ProviderInvocationEffect
           throw error;
         }
       },
-      serialize: (value) => JsonValueSchema.parse(value),
+      // JSON'da undefined yoktur; tek bir tanımsız alan efekti 'uncertain'
+      // yapıp model çağrısını hiç tamamlatmıyordu.
+      serialize: (value) => JsonValueSchema.parse(toStrictJson(value)),
       parse: (value) => value as T,
       });
     } catch (error) {
@@ -85,7 +88,9 @@ export class DurableProviderInvocationEffect implements ProviderInvocationEffect
       },
       replaySafety: 'replay_safe',
       execute: async () => ({ reconciled: false }),
-      serialize: (value) => JsonValueSchema.parse(value),
+      // JSON'da undefined yoktur; tek bir tanımsız alan efekti 'uncertain'
+      // yapıp model çağrısını hiç tamamlatmıyordu.
+      serialize: (value) => JsonValueSchema.parse(toStrictJson(value)),
       parse: (value) => value as { reconciled: boolean },
     });
   }

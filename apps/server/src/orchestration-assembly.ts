@@ -13,6 +13,7 @@ import {
   createTransitionOperation,
 } from '@ww/scheduler';
 import type { ClickHouseClient, WwRedis } from '@ww/db';
+import { chUsageSink } from '@ww/providers';
 import type { LlmProvider, RoutingIndex } from '@ww/providers';
 import type { EntityId } from '@ww/shared';
 import { createExecutorComposition, createResumeUserAnswerOperation } from './executor-composition.js';
@@ -123,7 +124,9 @@ export async function createOrchestrationComposition(
       issuedAt: new Date().toISOString(),
     },
     providerContext: { sessionId, owningPmId },
-    usageSink: async () => undefined,
+    // Kontör kaydı ŞART: politika, model çağrısının kanıtlanmış kullanım
+    // kaydı olmadan raporu kabul etmez (ve maliyet takibi de buradan gelir).
+    usageSink: chUsageSink(input.ch),
     snapshotBuilder: new TaskContextSnapshotBuilder(input.ch),
     executor,
     toolFactory: createToolPortFactory({
@@ -144,6 +147,12 @@ export async function createOrchestrationComposition(
           throw new Error(`worker agent yetkisi yok: ${attempt.workerAgentId}`);
         }
         return { type: 'agent_capability' as const, credential, issuedAt: new Date().toISOString() };
+      },
+      // Rapor atanmış verifier'a gider; PM soru/tırmandırma kanalıdır.
+      verifierFor: async (attemptId: EntityId) => {
+        const attempt = await getAssignmentAttempt(input.ch, attemptId);
+        if (attempt === null) throw new Error(`deneme bulunamadı: ${attemptId}`);
+        return attempt.verifierAgentId;
       },
     },
     runtimeContext: createRuntimeContextService({

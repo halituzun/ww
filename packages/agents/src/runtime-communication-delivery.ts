@@ -25,6 +25,12 @@ export interface RuntimeCommunicationDeliveryInput {
    * raporunu system olarak göndermek politika tarafından reddedilir.
    */
   readonly authenticateAs: (attemptId: EntityId) => Promise<PrincipalAuthentication>;
+  /**
+   * Raporun alıcısı: politika worker raporunun YALNIZCA atanmış verifier'a
+   * (ya da scheduler'a) gitmesine izin verir. PM'e rapor göndermek reddedilir;
+   * PM soru/tırmandırma kanalıdır.
+   */
+  readonly verifierFor: (attemptId: EntityId) => Promise<EntityId>;
   readonly authentication: PrincipalAuthentication;
   readonly sessionId: EntityId;
   /** Soruların ilk düştüğü yer: projenin PM agent'ı (docs/03 tırmandırma zinciri). */
@@ -86,7 +92,7 @@ export function createRuntimeCommunicationDelivery(
       const send: SendMessageInputV1 = {
         ...scopeOf(provenance),
         sessionId: input.sessionId,
-        recipient: { type: 'agent', id: input.owningPmId },
+        recipient: { type: 'agent', id: await input.verifierFor(provenance.assignmentAttemptId) },
         kind: 'report',
         payload: { type: 'report', summary, evidenceRefs: [...evidenceRefs] },
         idempotencyKey: `runtime:report:${provenance.assignmentAttemptId}:${provenance.invocationId}`,
