@@ -77,5 +77,13 @@
   {
     "symbol": "packages/db/src/redis-cleanup.ts:dropLeakedRedisKeys",
     "reason": "operasyonel arac; pnpm db:clean-tests scriptinden calisir"
+  },
+  {
+    "symbol": "apps/server/src/prompt-assembly.ts:assemblePromptMessages",
+    "reason": "runtimeContext prompt kurulumu; bootstrap baglayacak"
+  },
+  {
+    "symbol": "apps/server/src/prompt-assembly.ts:renderPromptTemplate",
+    "reason": "runtimeContext prompt kurulumu; bootstrap baglayacak"
   }
 ]
