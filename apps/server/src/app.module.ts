@@ -15,6 +15,7 @@ import { PlanApplicationService, PlansController } from './plans.controller.js';
 import { DelegationApplicationService, DelegationController } from './delegation.controller.js';
 import { MobilePreviewController } from './mobile-preview.controller.js';
 import { KnowledgeController } from './knowledge.controller.js';
+import { PromptsController } from './prompts.controller.js';
 import { RoleModelsController } from './role-models.controller.js';
 import { BudgetController } from './budget.controller.js';
 import { AuditController } from './audit.controller.js';
@@ -49,6 +50,7 @@ import {
 @Module({
   imports: [OrchestrationModule],
   controllers: [
+    PromptsController,
     KnowledgeController,
     MobilePreviewController,
     DelegationController,

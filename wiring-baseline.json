@@ -1,6 +1,12 @@
 [
-  "apps/server/src/runtime-composition.ts:createPhase8RuntimeComposition",
-  "apps/server/src/runtime-composition.ts:phase8RuntimeFromEnvironment",
+  {
+    "symbol": "apps/server/src/runtime-composition.ts:createPhase8RuntimeComposition",
+    "reason": "Phase 9 composition tarafından geçildi; yalnızca eski sözleşme testleri kullanıyor"
+  },
+  {
+    "symbol": "apps/server/src/runtime-composition.ts:phase8RuntimeFromEnvironment",
+    "reason": "Phase 9 composition tarafından geçildi; yalnızca eski sözleşme testleri kullanıyor"
+  },
   {
     "symbol": "packages/agents/src/phase4-acceptance.ts:runPhase4Acceptance",
     "reason": "Faz 4 kabul senaryosu koşucusu; kabul turunda elle çalıştırılır"
@@ -27,7 +33,6 @@
   "packages/db/src/repositories/messages.ts:listMessagesBySession",
   "packages/db/src/repositories/messages.ts:listPendingInboxMessages",
   "packages/db/src/repositories/messages.ts:listProtocolV1AnswerRepliesToMessage",
-  "packages/db/src/repositories/prompts.ts:activatePromptVersion",
   "packages/db/src/repositories/prompts.ts:getActivePromptAsOf",
   {
     "symbol": "packages/db/src/testutil.ts:clickhouseUp",
