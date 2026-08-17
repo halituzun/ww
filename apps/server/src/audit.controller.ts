@@ -51,30 +51,51 @@ export class AuditController {
     };
   }
 
+  /**
+   * Tırmandırmalar İKİ kaynaktan okunur.
+   *
+   * docs/03 her basamağın hem `messages`'a hem `events`'e yazılmasını söyler.
+   * Gerçekte `escalation-delivery` yalnız mesaj üretiyor; frenler ise
+   * scheduler.escalate üzerinden event bekliyor. Tek kaynağa bakmak paneli
+   * yapısal olarak boş bırakırdı. İkisi birleştirilip kimliğe göre tekilleştirilir.
+   */
   async #readEscalations(projectId: string): Promise<EscalationEntry[]> {
-    const result = await this.#database.ch.query({
-      // events append-only'dir; tırmandırma geçmişi burada kalıcıdır.
-      query: `SELECT event_id, task_id, agent_id, created_at,
-          JSONExtractString(payload, 'reason') AS reason
-        FROM events
-        WHERE project_id = {projectId:UUID} AND event_type = 'escalation'
-        ORDER BY created_at DESC
-        LIMIT 100`,
-      query_params: { projectId },
-      format: 'JSONEachRow',
-    });
-    const rows = await result.json<Record<string, unknown>>();
-    return rows.map((row) => {
+    const [eventRows, messageRows] = await Promise.all([
+      this.#database.ch.query({
+        query: `SELECT event_id AS id, task_id, agent_id, created_at,
+            JSONExtractString(payload, 'reason') AS reason
+          FROM events
+          WHERE project_id = {projectId:UUID} AND event_type = 'escalation'
+          ORDER BY created_at DESC LIMIT 100`,
+        query_params: { projectId }, format: 'JSONEachRow',
+      }).then((r) => r.json<Record<string, unknown>>()),
+
+      this.#database.ch.query({
+        query: `SELECT message_id AS id, task_id, from_agent_id AS agent_id, created_at,
+            content AS reason
+          FROM messages
+          WHERE project_id = {projectId:UUID} AND kind = 'escalation'
+          ORDER BY created_at DESC LIMIT 100`,
+        query_params: { projectId }, format: 'JSONEachRow',
+      }).then((r) => r.json<Record<string, unknown>>()),
+    ]);
+
+    const byId = new Map<string, EscalationEntry>();
+    for (const row of [...eventRows, ...messageRows]) {
       const reason = String(row['reason'] ?? '');
       const brake = /^brake:([a-z_]+)/.exec(reason);
-      return {
-        eventId: String(row['event_id'] ?? ''),
+      const id = String(row['id'] ?? '');
+      if (id === '' || byId.has(id)) continue;
+      byId.set(id, {
+        eventId: id,
         taskId: String(row['task_id'] ?? ''),
         agentId: String(row['agent_id'] ?? ''),
         reason,
         brakeKind: brake?.[1] ?? '',
         createdAt: String(row['created_at'] ?? ''),
-      };
-    });
+      });
+    }
+
+    return [...byId.values()].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   }
 }

@@ -52,6 +52,30 @@ describe.skipIf(!up)('AuditController', () => {
       ],
       format: 'JSONEachRow',
     });
+
+    await ch.insert({
+      table: 'messages',
+      values: [
+        {
+          message_id: randomUUID(), project_id: projectId, session_id: randomUUID(),
+          task_id: taskId, from_agent_id: randomUUID(), to_agent_id: randomUUID(),
+          kind: 'escalation', content: 'mesaj kaynaklı tırmandırma', model_ref: '',
+          created_at: at(5),
+        },
+        // Farklı proje ve farklı tür sızmamalı.
+        {
+          message_id: randomUUID(), project_id: randomUUID(), session_id: randomUUID(),
+          task_id: randomUUID(), from_agent_id: randomUUID(), to_agent_id: randomUUID(),
+          kind: 'escalation', content: 'sizmamali', model_ref: '', created_at: at(6),
+        },
+        {
+          message_id: randomUUID(), project_id: projectId, session_id: randomUUID(),
+          task_id: taskId, from_agent_id: randomUUID(), to_agent_id: randomUUID(),
+          kind: 'report', content: 'siradan rapor', model_ref: '', created_at: at(7),
+        },
+      ],
+      format: 'JSONEachRow',
+    });
   });
 
   afterAll(async () => {
@@ -61,9 +85,25 @@ describe.skipIf(!up)('AuditController', () => {
     await ch.close();
   });
 
+  // docs/03: her tırmandırma basamağı messages'a VE events'e yazılmalı.
+  // Gerçekte escalation-delivery yalnız mesaj yazıyor; rapor bu yüzden iki
+  // kaynağı da okur, aksi halde panel yapısal olarak boş kalırdı.
+  it('mesaj kaynaklı tırmandırmayı da raporlar', async () => {
+    const report = await controller.report(projectId);
+    const fromMessage = report.escalations.find((entry) => entry.reason.includes('mesaj kaynaklı'));
+    expect(fromMessage).toBeDefined();
+    expect(fromMessage?.taskId).toBe(taskId);
+  });
+
+  it('aynı tırmandırma iki kaynakta da varsa tek kez görünür', async () => {
+    const report = await controller.report(projectId);
+    const ids = report.escalations.map((entry) => entry.eventId);
+    expect(new Set(ids).size).toBe(ids.length);
+  });
+
   it('yalnız istenen projenin tırmandırmalarını döner', async () => {
     const report = await controller.report(projectId);
-    expect(report.escalations).toHaveLength(2);
+    expect(report.escalations).toHaveLength(3); // 2 event + 1 mesaj
     expect(report.escalations.every((entry) => entry.reason !== 'brake:wall_clock: sizmamali')).toBe(true);
   });
 

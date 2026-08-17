@@ -195,7 +195,10 @@ pm          — kararı verir VEYA kullanıcıya taşır
 kullanıcı   — panelde soru kutusu (waiting_user)
 ```
 
-Her basamak `messages`'a `escalation` kaydı + `events`'e `escalation` olayı yazar;
+Her basamak `messages`'a `escalation` kaydı + `events`'e `escalation` olayı yazar
+(**gerçek durum 2026-08-17:** `escalation-delivery` yalnız mesaj üretiyor, `events`
+tarafına yazan üretim kodu yok; frenler ise `scheduler.escalate` üzerinden event
+bekliyor. Denetim ucu bu yüzden İKİ kaynağı da okur ve tekilleştirir);
 panelin denetim ekranında tırmandırma geçmişi görünür. Bütçe ve kaçak-döngü
 frenlerinin tetiklediği tırmandırmalar da aynı zincire girer
 ([07 — Zamanlayıcı](07-zamanlayici.md#frenler)).
