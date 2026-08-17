@@ -51,6 +51,9 @@ export const POLICY_RULE_IDS = [
   'COMM-001', 'COMM-002', 'COMM-003', 'COMM-004', 'COMM-005', 'COMM-006',
   'TASK-001', 'TASK-002', 'TASK-003', 'TASK-004',
   'TOOL-001', 'TOOL-002', 'TOOL-003', 'TOOL-004',
+  // docs/09 kod standartları. STD-001: View katmanında fetch/iş mantığı yasak
+  // (React MVVM). Denetçiler bu kimliklerle bulgu açar.
+  'STD-001',
 ] as const;
 
 export const PROJECT_TYPES = ['web', 'mobile', 'api', 'fullstack'] as const;

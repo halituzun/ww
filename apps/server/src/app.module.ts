@@ -1,5 +1,7 @@
 import { Module } from '@nestjs/common';
 import { CouncilController } from './council.controller.js';
+import { StandardsAuditController } from './standards-audit.controller.js';
+import { StandardsAuditApplicationService } from './standards-audit.service.js';
 import { CouncilApplicationService } from './council.service.js';
 import { HealthController } from './health.controller.js';
 import { MessagesController } from './messages.controller.js';
@@ -55,6 +57,7 @@ import {
     MobilePreviewController,
     DelegationController,
     CouncilController,
+    StandardsAuditController,
     PlansController,HealthController, ProjectsController, TasksController, MessagesController, OperationsController, FilesController, NarratorController, ProvidersController, RoleModelsController, BudgetController, AuditController, RuntimeController],
   providers: [
     EVENTS_GATEWAY_PROVIDER,
@@ -63,6 +66,7 @@ import {
     RecoverySweeperService,
     PlanApplicationService,
     CouncilApplicationService,
+    StandardsAuditApplicationService,
     DelegationApplicationService,
     { provide: HEALTH_DEPENDENCIES, useValue: DEFAULT_HEALTH_DEPENDENCIES },
     HealthService,
