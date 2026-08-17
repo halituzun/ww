@@ -67,7 +67,11 @@ export async function runWorkerLoop(input: WorkerLoopInput): Promise<WorkerLoopR
       } catch (toolError) {
         return { reason: 'failure', turns: turn + 1, detail: `araç çalıştırılamadı: ${toolCall.name} — ${toolError instanceof Error ? toolError.message : String(toolError)}` };
       }
-      messages.push({ role: 'tool', toolCallId: parsedCallId, content: JSON.stringify(toolResult) });
+      // Sağlayıcıya KENDİ tool_call_id'si geri verilmeli; türetilen UUID
+      // yalnızca iç denetim/efekt katmanı içindir. Türetileni geri yollamak
+      // "tool_calls must be followed by tool messages responding to each
+      // tool_call_id" 400'üne yol açıyordu.
+      messages.push({ role: 'tool', toolCallId: toolCall.id, content: JSON.stringify(toolResult) });
     }
     messages.splice(messages.length - result.result.toolCalls.length, 0, {
       role: 'assistant',

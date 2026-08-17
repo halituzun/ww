@@ -68,12 +68,13 @@ export function createGateOperations(input: GateOperationsInput) {
       binding = next;
     },
 
-    async gate({ taskId, attempt }: Readonly<{ taskId: EntityId; attempt: AssignmentAttemptV1 }>) {
+    async gate({ taskId, attempt, targetFiles }: Readonly<{ taskId: EntityId; attempt: AssignmentAttemptV1; targetFiles?: readonly string[] }>) {
       const { gateRunner, workspace } = required();
       await workspace.initialize();
       const evidence = await gateRunner.run(attempt.projectId, workspace, {
         operationId: randomUUID(),
         occurredAt: new Date().toISOString(),
+        ...(targetFiles === undefined ? {} : { extraInputs: targetFiles }),
       });
       gatePassed.set(`${taskId}:${attempt.assignmentAttemptId}`, evidence.passed);
       return { passed: evidence.passed, evidenceRefs: evidence.evidenceRefs };

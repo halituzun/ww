@@ -7,8 +7,15 @@
 // görünüp hiçbir şey üretmez.
 import type { TaskRowLike } from './task-brief-policy-types.js';
 
-/** Worker'ın dosya üretebilmesi için gereken asgari küme. */
-export const WORKER_TOOLS = ['read_file', 'write_file', 'list_dir'] as const;
+/**
+ * Worker'ın asgari kümesi. `ask_question` ve `report_result` İLETİŞİM
+ * araçlarıdır ama yine de izinli listede olmalı: worker döngüsü model'in
+ * istediği aracı bu listeye göre süzer ve eksik olunca "model kayıtlı olmayan
+ * aracı istedi: report_result" ile düşüyordu — yani worker işini bitiremiyordu.
+ */
+export const WORKER_TOOLS = [
+  'read_file', 'write_file', 'edit_file', 'ask_question', 'report_result',
+] as const;
 /** Verifier diff'i bunlarla okur (salt-okuma sınırı tool-factory'de). */
 export const VERIFIER_TOOLS = ['git_diff'] as const;
 

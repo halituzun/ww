@@ -49,6 +49,13 @@ export interface GateEvidence {
 }
 
 export interface GateRunContext {
+  /**
+   * Göreve özgü ek girdi dosyaları (brief.targetFiles). Statik ww.gate.json
+   * gelecekteki dosyaları bilemez; dizin listelemek ise geçersizdir çünkü her
+   * girdi DOSYA olarak okunur. Bu alan olmadan kapı ya boş kaynakla "geçti"
+   * yalanı söyler ya da EISDIR ile düşer.
+   */
+  readonly extraInputs?: readonly string[];
   readonly operationId: EntityId;
   readonly occurredAt: string;
   readonly deadlineAt?: string;
@@ -173,8 +180,10 @@ export class GateRunner {
       discardedOutputs: config.discardedOutputs,
     });
     const inputFiles: SandboxInputFile[] = [{ path: 'ww.gate.json', content: raw, sha256: sha256(raw) }];
-    for (const relativePath of config.inputs) {
-      if (relativePath === 'ww.gate.json') continue;
+    const seen = new Set<string>(['ww.gate.json']);
+    for (const relativePath of [...config.inputs, ...(context.extraInputs ?? [])]) {
+      if (seen.has(relativePath)) continue;
+      seen.add(relativePath);
       const content = await workspace.readText(relativePath, 0, 1_048_576);
       inputFiles.push({ path: relativePath, content, sha256: sha256(content) });
     }

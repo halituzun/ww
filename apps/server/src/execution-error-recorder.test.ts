@@ -133,4 +133,20 @@ describe('createExecutionErrorRecorder', () => {
     const payload = String((appendEvent.mock.calls[0]![0] as never as Record<string, unknown>)['payload']);
     expect(JSON.parse(payload).stack).toContain('execution-error-recorder.test');
   });
+
+  // FSM'de 'fail' yalnızca working'den geçerlidir; aşamaya bakmadan
+  // göndermek görevi takılı bırakıyordu.
+  it('testing aşamasında gate_failed geçişi kullanır', async () => {
+    const { transition, handle } = recorder();
+    await handle(call({ phase: 'testing' }));
+    expect((transition.mock.calls[0]![0] as never as Record<string, unknown>)['action'])
+      .toBe('gate_failed');
+  });
+
+  it('verifying aşamasında verifier_rejected kullanır', async () => {
+    const { transition, handle } = recorder();
+    await handle(call({ phase: 'verifying' }));
+    expect((transition.mock.calls[0]![0] as never as Record<string, unknown>)['action'])
+      .toBe('verifier_rejected');
+  });
 });

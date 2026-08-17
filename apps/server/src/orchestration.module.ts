@@ -43,6 +43,8 @@ import {
 } from '@ww/scheduler';
 import { CommunicationWakeupPublisher, appendPromptVersion, createRedis, getActivePrompt } from '@ww/db';
 import { BOOTSTRAP_AGENTS, planBootstrapPrompts } from './agent-bootstrap.js';
+import { writeProjectScaffold } from './project-scaffold-writer.js';
+import { resolveWorkspaceRoot } from './runtime-context.js';
 
 function observeWakeupPublishError(error: Error, wakeup: { readonly recipient: unknown; readonly messageId: string }): void {
   // Redis is only a wakeup optimisation; the durable inbox poll repairs a
@@ -90,6 +92,17 @@ export class ProjectApplicationService implements ProjectApplication {
     const projectId = randomUUID() as EntityId;
     const now = new Date().toISOString();
     const project = await createProject(this.database.ch, { project_id: projectId, name: input.name, slug: input.slug ?? input.name.toLowerCase().replace(/[^a-z0-9]+/g, '-'), type: input.type ?? 'web', status: 'draft', description: input.description, workspace_path: `workspace/${projectId}`, budget_usd_limit: input.budgetUsdLimit, settings: {}, active_plan_id: NIL_UUID, created_at: now, updated_at: now });
+    // Workspace iskeleti: kapı komutlarını ww.gate.json'dan okur. Dosya
+    // yoksa iş üretilebiliyor ama KABUL EDİLEMİYOR ("Dosya bulunamadı").
+    await writeProjectScaffold(
+      resolveWorkspaceRoot(
+        process.env['WW_WORKSPACE_ROOT'] ?? `${process.cwd()}/workspace`,
+        project.slug,
+      ),
+      project.type,
+      project.slug,
+    );
+
     if (input.bootstrapAgents) {
       // Agent'lar prompt'a İŞARET EDER; satırı önce yaz, yoksa sarkan referans
       // brief mühürlemede patlar ve projenin hiçbir görevi koşamaz.

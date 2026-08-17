@@ -12,10 +12,10 @@ export interface Phase1SchedulerPort {
   awaitUserAnswer(input: Readonly<{ taskId: EntityId; attempt: AssignmentAttemptV1; question: string; questionMessageId?: EntityId }>): Promise<void>;
   resumeUserAnswer(input: Readonly<{ projectId: EntityId; taskId: EntityId; taskBriefId: EntityId; previousAttemptId: EntityId; questionMessageId: EntityId; replyMessageId: EntityId; answer: string }>): Promise<AssignmentAttemptV1>;
   handleExecutionError(input: Readonly<{ taskId: EntityId; attempt: AssignmentAttemptV1; phase: 'working' | 'verifying' | 'testing' | 'committing'; error: unknown }>): Promise<TaskStatus>;
-  transition(input: Readonly<{ taskId: EntityId; attempt: AssignmentAttemptV1; action: 'start_work' | 'report_result' | 'verifier_approved' | 'gate_passed' | 'commit_completed' | 'fail'; evidenceRefs?: readonly string[]; resultSummary?: string }>): Promise<Readonly<{ status: TaskStatus }>>;
+  transition(input: Readonly<{ taskId: EntityId; attempt: AssignmentAttemptV1; action: 'start_work' | 'report_result' | 'verifier_approved' | 'verifier_rejected' | 'gate_passed' | 'gate_failed' | 'commit_completed' | 'fail'; evidenceRefs?: readonly string[]; resultSummary?: string }>): Promise<Readonly<{ status: TaskStatus }>>;
   reassign(input: Readonly<{ taskId: EntityId; reason: 'retry_after_rejection' | 'retry_after_gate_failure'; evidenceRefs: readonly string[] }>): Promise<AssignmentAttemptV1>;
   escalate(input: Readonly<{ taskId: EntityId; attempt: AssignmentAttemptV1; reason: string }>): Promise<void>;
-  gate(input: Readonly<{ taskId: EntityId; attempt: AssignmentAttemptV1 }>): Promise<Readonly<{ passed: boolean; evidenceRefs: readonly string[] }>>;
+  gate(input: Readonly<{ taskId: EntityId; attempt: AssignmentAttemptV1; targetFiles?: readonly string[] }>): Promise<Readonly<{ passed: boolean; evidenceRefs: readonly string[] }>>;
   commit(input: Readonly<{ taskId: EntityId; attempt: AssignmentAttemptV1 }>): Promise<Readonly<{ commitHash: string }>>;
 }
 
@@ -102,16 +102,35 @@ async function runAssignedLifecycle(input: Phase1OrchestratorInput & { brief: Ta
         await input.scheduler.escalate({ taskId: input.taskId, attempt, reason: 'verifier third persistent rejection' });
         return { status: 'escalated', attempts };
       }
+      // Reddi ÖNCE duruma yaz: 'verifier_rejected' görevi verifying'den
+      // working'e döndürür ve reassign working görev ister. Bu geçiş
+      // atlandığı için yeniden deneme "reassignment working task gerektirir"
+      // ile düşüyordu — yani verifier reddettiğinde görev ASLA yeniden
+      // denenemiyordu.
+      await input.scheduler.transition({
+        taskId: input.taskId, attempt, action: 'verifier_rejected',
+        evidenceRefs: checked.verdict.evidenceRefs,
+      });
       attempt = await input.scheduler.reassign({ taskId: input.taskId, reason: 'retry_after_rejection', evidenceRefs: checked.verdict.evidenceRefs });
       continue;
     }
     await input.scheduler.transition({ taskId: input.taskId, attempt, action: 'verifier_approved', evidenceRefs: checked.verdict.evidenceRefs });
-    const gate = await input.scheduler.gate({ taskId: input.taskId, attempt });
+    // Kapı görevin hedef dosyalarını görmeli: statik ww.gate.json gelecekteki
+    // dosyaları bilemez ve her girdi DOSYA olarak okunur (dizin geçersiz).
+    const gate = await input.scheduler.gate({
+      taskId: input.taskId,
+      attempt,
+      targetFiles: (input.brief as unknown as { targetFiles?: readonly string[] }).targetFiles ?? [],
+    });
     if (!gate.passed) {
       if (attempts >= maxAttempts) {
         await input.scheduler.escalate({ taskId: input.taskId, attempt, reason: 'gate failed at attempt limit' });
         return { status: 'escalated', attempts };
       }
+      // Aynı kural kapı için: 'gate_failed' testing'den working'e döndürür.
+      await input.scheduler.transition({
+        taskId: input.taskId, attempt, action: 'gate_failed', evidenceRefs: gate.evidenceRefs,
+      });
       attempt = await input.scheduler.reassign({ taskId: input.taskId, reason: 'retry_after_gate_failure', evidenceRefs: gate.evidenceRefs });
       continue;
     }

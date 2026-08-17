@@ -41,4 +41,17 @@ describe('resolveBriefPolicy', () => {
     const rules = [{ id: 'r1' }];
     expect(resolveBriefPolicy(task(), rules).ruleRefs).toBe(rules);
   });
+
+  // Worker raporunu report_result ile bitirir; araç izinli değilse görev
+  // "kayıtlı olmayan araç" ile düşer ve iş asla teslim edilemez.
+  it('worker’a iletişim araçlarını da verir', () => {
+    const allowed = resolveBriefPolicy(task(), []).allowedTools;
+    expect(allowed).toContain('report_result');
+    expect(allowed).toContain('ask_question');
+  });
+
+  // Verifier salt-okuma sınırı tool-factory'de ayrıca uygulanır.
+  it('worker’a komut çalıştırma vermez', () => {
+    expect(resolveBriefPolicy(task(), []).allowedTools).not.toContain('run_command');
+  });
 });

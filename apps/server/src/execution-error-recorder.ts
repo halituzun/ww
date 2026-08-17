@@ -32,6 +32,18 @@ export interface ExecutionErrorRecorderInput {
   now(): string;
 }
 
+/**
+ * FSM'de 'fail' YALNIZCA working durumundan geçerlidir. Aşamaya bakmadan
+ * 'fail' göndermek "gecersiz task FSM gecisi: testing --fail--> ?" ile
+ * düşüyor ve görev takılı kalıyordu.
+ */
+const ACTION_BY_PHASE: Readonly<Record<string, string>> = Object.freeze({
+  working: 'fail',
+  verifying: 'verifier_rejected',
+  testing: 'gate_failed',
+  committing: 'fail',
+});
+
 const reasonText = (error: unknown): string =>
   error instanceof Error ? `${error.name}: ${error.message}` : String(error);
 
@@ -75,7 +87,7 @@ export function createExecutionErrorRecorder(input: ExecutionErrorRecorderInput)
       await input.transition({
         taskId: call.taskId,
         attempt: call.attempt,
-        action: 'fail',
+        action: ACTION_BY_PHASE[call.phase] ?? 'fail',
         resultSummary: reason,
       });
     } catch (transitionError) {

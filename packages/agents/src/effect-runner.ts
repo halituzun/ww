@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { notifyUnexpectedError, type UnexpectedErrorObserver } from './unexpected-error-observer.js';
+import { toStrictJson } from './strict-json.js';
 import {
   JsonValueSchema,
   canonicalSha256V1,
@@ -315,7 +316,9 @@ export class EffectRunner {
 
       let serialized: JsonValue;
       try {
-        serialized = JsonValueSchema.parse(input.serialize(value));
+        // JSON'da undefined yoktur; tek bir tanımsız alan tüm efekti
+        // 'uncertain' yapıyordu. Normalleştirme TÜM efekt türleri için burada.
+        serialized = JsonValueSchema.parse(toStrictJson(input.serialize(value)));
       } catch (error) {
         notifyUnexpectedError(this.#onUnexpectedError, error, {
           effectType: input.effectType,

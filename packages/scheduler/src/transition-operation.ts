@@ -84,6 +84,19 @@ export function createTransitionOperation(input: TransitionOperationInput) {
         request = { ...identity, action, verdictMessageId: randomUUID() };
         break;
 
+      // Ret ve kapı başarısızlığı görevi working'e döndürür; bu geçişler
+      // desteklenmediği için yeniden deneme hiç çalışmıyordu.
+      case 'verifier_rejected':
+        request = {
+          ...identity,
+          action,
+          verdictMessageId: randomUUID(),
+          reason: resultSummary?.trim() !== undefined && resultSummary.trim() !== ''
+            ? resultSummary.trim()
+            : 'verifier işi reddetti',
+        };
+        break;
+
       case 'commit_completed': {
         const commitHash = refs.find((ref) => COMMIT_HASH.test(ref));
         if (commitHash === undefined) {
@@ -92,6 +105,17 @@ export function createTransitionOperation(input: TransitionOperationInput) {
         request = { ...identity, action, commitHash, artifactIds: [] };
         break;
       }
+
+      case 'gate_failed':
+        request = {
+          ...identity,
+          action,
+          reason: resultSummary?.trim() !== undefined && resultSummary.trim() !== ''
+            ? resultSummary.trim()
+            : 'kapı adımı geçilemedi',
+          evidenceRefs: refs,
+        };
+        break;
 
       case 'fail':
         // Çağıranın sebebi ezilmemeli: "neden düştü" sorusunun tek cevabı odur.
