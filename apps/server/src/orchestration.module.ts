@@ -41,7 +41,8 @@ import {
   TaskCausalLog,
   TaskTransitionService,
 } from '@ww/scheduler';
-import { CommunicationWakeupPublisher, createRedis } from '@ww/db';
+import { CommunicationWakeupPublisher, appendPromptVersion, createRedis, getActivePrompt } from '@ww/db';
+import { BOOTSTRAP_AGENTS, planBootstrapPrompts } from './agent-bootstrap.js';
 
 function observeWakeupPublishError(error: Error, wakeup: { readonly recipient: unknown; readonly messageId: string }): void {
   // Redis is only a wakeup optimisation; the durable inbox poll repairs a
@@ -90,11 +91,17 @@ export class ProjectApplicationService implements ProjectApplication {
     const now = new Date().toISOString();
     const project = await createProject(this.database.ch, { project_id: projectId, name: input.name, slug: input.slug ?? input.name.toLowerCase().replace(/[^a-z0-9]+/g, '-'), type: input.type ?? 'web', status: 'draft', description: input.description, workspace_path: `workspace/${projectId}`, budget_usd_limit: input.budgetUsdLimit, settings: {}, active_plan_id: NIL_UUID, created_at: now, updated_at: now });
     if (input.bootstrapAgents) {
-      for (const agent of [
-        { role: 'pm' as const, group: 'management' as const, name: 'PM', model: 'mock:pm' },
-        { role: 'worker' as const, group: 'coding' as const, name: 'Worker', model: 'mock:worker' },
-        { role: 'verifier' as const, group: 'coding' as const, name: 'Verifier', model: 'mock:verifier' },
-      ]) {
+      // Agent'lar prompt'a İŞARET EDER; satırı önce yaz, yoksa sarkan referans
+      // brief mühürlemede patlar ve projenin hiçbir görevi koşamaz.
+      const canonical = new Map<string, { prompt_name: string; prompt_version: number; content: string }>();
+      for (const spec of BOOTSTRAP_AGENTS) {
+        const active = await getActivePrompt(this.database.ch, spec.canonicalPrompt);
+        if (active !== null) canonical.set(spec.canonicalPrompt, active);
+      }
+      for (const prompt of planBootstrapPrompts(projectId, canonical)) {
+        await appendPromptVersion(this.database.ch, { ...prompt, created_at: now });
+      }
+      for (const agent of BOOTSTRAP_AGENTS) {
         await createAgent(this.database.ch, { agent_id: randomUUID(), project_id: projectId, role: agent.role, group: agent.group, name: agent.name, model_ref: agent.model, parent_agent_id: NIL_UUID, clone_of: NIL_UUID, status: 'idle', current_task_id: NIL_UUID, prompt_name: `bootstrap.${projectId}.${agent.role}`, prompt_version: 1, tasks_done: 0, tasks_rejected: 0, created_at: now, updated_at: now });
       }
     }

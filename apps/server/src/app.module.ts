@@ -10,6 +10,7 @@ import { NarratorController } from './narrator.controller.js';
 import { ProvidersController } from './providers.controller.js';
 import { ProviderHealthScheduler } from './provider-health.scheduler.js';
 import { TaskPumpService } from './task-pump.service.js';
+import { PlanApplicationService, PlansController } from './plans.controller.js';
 import { RoleModelsController } from './role-models.controller.js';
 import { BudgetController } from './budget.controller.js';
 import { AuditController } from './audit.controller.js';
@@ -43,11 +44,13 @@ import {
 
 @Module({
   imports: [OrchestrationModule],
-  controllers: [HealthController, ProjectsController, TasksController, MessagesController, OperationsController, FilesController, NarratorController, ProvidersController, RoleModelsController, BudgetController, AuditController, RuntimeController],
+  controllers: [
+    PlansController,HealthController, ProjectsController, TasksController, MessagesController, OperationsController, FilesController, NarratorController, ProvidersController, RoleModelsController, BudgetController, AuditController, RuntimeController],
   providers: [
     EVENTS_GATEWAY_PROVIDER,
     ProviderHealthScheduler,
     TaskPumpService,
+    PlanApplicationService,
     { provide: HEALTH_DEPENDENCIES, useValue: DEFAULT_HEALTH_DEPENDENCIES },
     HealthService,
     { provide: PROJECT_APPLICATION, useExisting: ProjectApplicationService },
