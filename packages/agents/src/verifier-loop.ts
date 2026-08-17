@@ -30,7 +30,29 @@ export async function runVerifierLoop(input: VerifierInput): Promise<VerifierRes
   const result = await input.router.complete(input.modelRef, { messages: [...input.prompt], tools: [{ name: 'submit_verdict', description: 'Submit strict verifier verdict', parameters: VERDICT_TOOL_PARAMETERS }], meta: { projectId: input.brief.projectId, agentId: input.attempt.verifierAgentId, taskId: input.brief.taskId, purpose: 'completion', invocationId: input.snapshot.invocationId, taskBriefId: input.brief.taskBriefId, assignmentAttemptId: input.attempt.assignmentAttemptId, promptInputSnapshotId: input.snapshot.promptInputSnapshotId } });
   // Model verdikti birden çok kez gönderebiliyor; aynı içerik hoş görülür,
   // çelişkili içerik reddedilir (belirsizlik sessizce çözülmez).
-  const tool = selectVerdictCall(result.result.toolCalls as never);
+  let calls = result.result.toolCalls as never as readonly { name: string; args: unknown }[];
+
+  // Model bazen aracı hiç çağırmadan düz metin döner ve verdikt alınamaz;
+  // sağlayıcı katmanında tool_choice zorlaması yok. TEK bir kararlı yeniden
+  // deneme, yaygın bu davranışı görevi düşürmeden aşar. İkinci kez de
+  // çağırmazsa hata açık kalır: verdikt UYDURULMAZ.
+  if (!calls.some((call) => call.name === 'submit_verdict')) {
+    const retry = await input.router.complete(input.modelRef, {
+      messages: [
+        ...input.prompt,
+        {
+          role: 'user',
+          content: 'Yanıt olarak DÜZ METİN kabul edilmiyor. Kararını yalnızca '
+            + 'submit_verdict aracını çağırarak bildir.',
+        },
+      ],
+      tools: [{ name: 'submit_verdict', description: 'Submit strict verifier verdict', parameters: VERDICT_TOOL_PARAMETERS }],
+      meta: { projectId: input.brief.projectId, agentId: input.attempt.verifierAgentId, taskId: input.brief.taskId, purpose: 'completion', invocationId: input.snapshot.invocationId, taskBriefId: input.brief.taskBriefId, assignmentAttemptId: input.attempt.assignmentAttemptId, promptInputSnapshotId: input.snapshot.promptInputSnapshotId },
+    } as never);
+    calls = retry.result.toolCalls as never;
+  }
+
+  const tool = selectVerdictCall(calls);
   const verdict = parseStrictVerdictArguments(tool.args);
   return { verdict, invocationId: input.snapshot.invocationId };
 }

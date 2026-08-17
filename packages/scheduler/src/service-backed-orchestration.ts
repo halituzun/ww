@@ -81,13 +81,31 @@ export interface SchedulerRepositoryWriters {
   appendEvent(input: AppendEventInput): Promise<unknown>;
 }
 
+/**
+ * Kimlik türetmeden ÖNCE katı JSON'a normalleştirilir: girdide tek bir
+ * `undefined` alan (ör. deadlineAt verilmemişse) canonicalSha256V1'i
+ * "değer strict JSON veri modeline uymalıdır" ile düşürüyor ve kapı adımı
+ * hiç tamamlanamıyordu. undefined anahtar düşürmek JSON anlambiliminde
+ * kayıpsızdır; kimlik yine deterministiktir.
+ */
+function stripUndefined(value: unknown): unknown {
+  if (value === null || typeof value !== 'object') return value;
+  if (Array.isArray(value)) return value.map((item) => (item === undefined ? null : stripUndefined(item)));
+  const output: Record<string, unknown> = {};
+  for (const [key, entry] of Object.entries(value as Record<string, unknown>)) {
+    if (entry === undefined) continue;
+    output[key] = stripUndefined(entry);
+  }
+  return output;
+}
+
 function deterministicId(namespace: string, value: unknown): EntityId {
-  const hex = canonicalSha256V1({ namespace, value });
+  const hex = canonicalSha256V1({ namespace, value: stripUndefined(value) });
   return EntityIdSchema.parse(`${hex.slice(0, 8)}-${hex.slice(8, 12)}-5${hex.slice(13, 16)}-8${hex.slice(17, 20)}-${hex.slice(20, 32)}`);
 }
 
 function sequence(value: unknown): string {
-  return BigInt(`0x${canonicalSha256V1(value).slice(0, 15)}`).toString();
+  return BigInt(`0x${canonicalSha256V1(stripUndefined(value)).slice(0, 15)}`).toString();
 }
 
 /** Repository-backed persistence adapter. The DB repositories retain idempotency/reconciliation semantics. */

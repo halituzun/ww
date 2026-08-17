@@ -4,7 +4,7 @@
 // düşen görevler sonsuza dek 'queued' kalıyordu — kuyruğu tüketip
 // `orchestrate` çağıran hiçbir üretim kodu yoktu. Kayıt ≠ tüketim.
 import { Inject, Injectable, Logger, Optional, type OnModuleDestroy, type OnModuleInit } from '@nestjs/common';
-import { ackQueue, createRedis, ensureGroup, getLatestTask, queueKey, readQueue, reclaimQueue, setHeartbeat, setTaskHeartbeat } from '@ww/db';
+import { ackQueue, createRedis, deleteQueueMessage, ensureGroup, getLatestTask, queueKey, readQueue, reclaimQueue, setHeartbeat, setTaskHeartbeat } from '@ww/db';
 import { EntityIdSchema, NIL_UUID, type EntityId } from '@ww/shared';
 import type { WwRedis } from '@ww/db';
 import { PHASE8_RUNTIME } from './runtime-composition.js';
@@ -150,8 +150,13 @@ export class TaskPumpService implements OnModuleInit, OnModuleDestroy {
     });
     this.#reclaimCursor = reclaim.nextCursor;
     for (const dead of reclaim.exhausted) {
-      // Teslim sınırını aşan iş sessizce dönüp durmamalı; görünür olmalı.
-      this.#logger.warn(`görev ${dead.taskId} teslim sınırını aştı — otomatik denenmeyecek`);
+      // Tükenmiş mesajı ACK'leyip stream'den SİLİYORUZ: aksi halde kurtarma
+      // "bu görev zaten kuyrukta" deyip yeniden eklemiyor ve görev kalıcı
+      // olarak görünmez oluyordu. Görev hâlâ 'queued' ise kurtarma taze bir
+      // teslim sayacıyla geri koyar; değilse zaten ilerlemiştir.
+      this.#logger.warn(`görev ${dead.taskId} teslim sınırını aştı — kuyruktan düşürülüyor`);
+      await ackQueue(redis, stream, PUMP_GROUP, dead.msgId);
+      await deleteQueueMessage(redis, stream, dead.msgId);
     }
 
     const read = await readQueue(redis, stream, PUMP_GROUP, consumer, { count: 5 });

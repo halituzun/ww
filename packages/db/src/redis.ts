@@ -642,6 +642,23 @@ export async function reclaimQueue(
   });
 }
 
+/**
+ * Teslim sınırını aşmış mesajı stream'den siler.
+ *
+ * NEDEN VAR: tükenmiş mesaj PEL'den çıksa bile stream'de kalır; kurtarmanın
+ * "bu görev zaten kuyrukta" kontrolü onu VAR sayar ve görevi bir daha
+ * eklemez. Sonuç: ClickHouse'da `queued` görünen ama hiçbir tüketicinin
+ * göremediği KALICI olarak görünmez iş.
+ */
+export async function deleteQueueMessage(
+  r: WwRedis,
+  stream: QueueKey,
+  msgId: string,
+): Promise<void> {
+  nonEmpty(msgId, 'msgId');
+  await r.xDel(canonicalQueueKey(stream), msgId);
+}
+
 export async function ackQueue(
   r: WwRedis,
   stream: QueueKey,
