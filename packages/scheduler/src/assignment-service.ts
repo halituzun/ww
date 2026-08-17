@@ -63,6 +63,7 @@ import {
 } from './ports.js';
 import { TaskBriefService } from './task-brief-service.js';
 import { TaskCausalLog } from './task-causal-log.js';
+import { isRetryableFailedCommand } from './retryable-command.js';
 import {
   TaskTransitionService,
   assignmentAttemptIdForAssign,
@@ -1612,6 +1613,22 @@ export class AssignmentService {
         'INTEGRITY_CONFLICT',
         `assignment command causation/request hash catismasi: ${causationId}`,
       );
+    }
+    // Kurtarmanın uzlaştırdığı (düşmüş) replay-safe komut yeni denemeyi
+    // ENGELLEMEMELİDİR; aksi halde uzlaştırma blokajı bir adım öteye taşır ve
+    // görev yine kalıcı olarak atanamaz kalır (bkz. retryable-command.ts).
+    if (row !== null && isRetryableFailedCommand(row)) {
+      await guard.assertHeld();
+      row = await appendEffectVersion(this.#ch, {
+        causation_id: row.causation_id,
+        stable_effect_id: row.stable_effect_id,
+        expectedVersion: row.effect_version,
+        state: 'pending',
+        result: {},
+        error: '',
+        lease_fence: guard.lease.fence,
+        created_at: requestedAt,
+      });
     }
     if (
       row !== null && row.state !== 'pending' && row.state !== 'succeeded' &&

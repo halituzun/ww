@@ -18,7 +18,12 @@ import {
   listLatestPlansByStatus,
 } from '@ww/db';
 import { NIL_UUID, type EntityId } from '@ww/shared';
-import { auditMvvmView, type StandardsViolation } from './standards-audit.js';
+import { auditMvvmView } from './standards-audit.js';
+import {
+  correctiveTargetFiles,
+  correctiveTaskDescription,
+  viewModelPathFor,
+} from './corrective-task.js';
 import { resolveTaskPlanId } from './task-plan-id.js';
 import { SERVER_DATABASE, type ServerDatabase } from './orchestration.module.js';
 
@@ -34,18 +39,6 @@ export interface StandardsAuditOutcome {
     readonly filePath: string;
     readonly correctiveTaskId: EntityId;
   }[];
-}
-
-/** Düzeltme görevinin tanımı: worker'ın ne yapacağı burada AÇIKÇA yazılır. */
-export function correctiveTaskDescription(violation: StandardsViolation): string {
-  return [
-    violation.summary,
-    '',
-    `Kanıt: ${violation.evidenceRefs.join(', ')}`,
-    '',
-    'Bu dosyayı docs/09 MVVM standardına uygun hale getir: veri erişimini ve',
-    'durumu ViewModel katmanına taşı, View yalnızca çizsin. Davranışı değiştirme.',
-  ].join('\n');
 }
 
 @Injectable()
@@ -96,7 +89,12 @@ export class StandardsAuditApplicationService {
         plan_id: planId,
         parent_task_id: sourceTaskId ?? NIL_UUID,
         title: `Standart düzeltmesi: ${violation.filePath}`,
-        description: correctiveTaskDescription(violation),
+        description: correctiveTaskDescription({
+          summary: violation.summary,
+          viewPath: violation.filePath,
+          viewModelPath: viewModelPathFor(violation.filePath),
+          evidenceRefs: violation.evidenceRefs,
+        }),
         acceptance_criteria: [`${violation.filePath} docs/09 MVVM standardına uyar`],
         status: 'queued',
         // Düzeltme görevi standart ihlalidir: normal öncelikte kuyruğa girer.
@@ -106,7 +104,10 @@ export class StandardsAuditApplicationService {
         verifier_agent_id: NIL_UUID,
         group: 'coding',
         depends_on: [],
-        target_files: [violation.filePath],
+        // View'ın YANINDA ViewModel dosyası da hedeftir: mantığı taşımak
+        // ikinci dosyayı yazmayı gerektirir ve executor mühürlü hedef dışına
+        // yazdırmaz — tek hedefle düzeltme fiilen imkânsızdı.
+        target_files: [...correctiveTargetFiles(violation.filePath)],
         attempt: 0,
         max_attempts: 3,
         // Düzeltme görevi kaynak görevin ALTINDA açılır; derinlik sınırı
