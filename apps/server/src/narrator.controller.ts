@@ -1,4 +1,5 @@
 import { Body, Controller, Inject, Post, Param } from '@nestjs/common';
+import { narrateEvent } from './narrator-evidence.js';
 import { z } from 'zod';
 import { EntityIdSchema, type EntityId } from '@ww/shared';
 import { listEvents } from '@ww/db';
@@ -21,7 +22,13 @@ export class NarratorController {
       projectId: id,
       question: input.question,
       ...(input.cutoffAt === undefined ? {} : { cutoffAt: input.cutoffAt }),
-      evidence: events.map((event) => ({ source: `event:${event.event_id}`, summary: `${event.event_type}: ${JSON.stringify(event.payload)}`, createdAt: event.created_at })),
+      // Ham JSON yükü okunamaz bir döküm üretiyordu; olaylar insan
+      // cümlesine çevrilir (kaynak kimliği kanıt olarak korunur).
+      evidence: events.map((event) => ({
+        source: `event:${event.event_id}`,
+        summary: narrateEvent(event as never),
+        createdAt: event.created_at,
+      })),
     });
   }
 }
