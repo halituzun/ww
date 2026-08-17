@@ -8,9 +8,21 @@
 import { randomUUID } from 'node:crypto';
 import type { AssignmentAttemptV1, EntityId } from '@ww/shared';
 
+/**
+ * Kapı kanıtının GERÇEK şekli (docs/05). Yerel tip `evidenceRefs` içeriyordu
+ * ama GateEvidence'da böyle bir alan YOK; okumak undefined döndürüp kapı
+ * adımını "evidenceRefs is not iterable" ile düşürüyordu.
+ */
+export interface GateStepEvidenceLike {
+  readonly name: string;
+  readonly passed: boolean;
+  readonly exitCode: number | null;
+}
+
 export interface GateEvidenceLike {
-  passed: boolean;
-  evidenceRefs: readonly string[];
+  readonly passed: boolean;
+  readonly configPath: string;
+  readonly steps: readonly GateStepEvidenceLike[];
 }
 
 export interface WorkspaceLike {
@@ -52,6 +64,14 @@ export interface GateBinding {
   workspace: WorkspaceLike;
 }
 
+/** Kapı kanıtı: hangi adım geçti/kaldı — denetim izinin okunabilir çekirdeği. */
+export function gateEvidenceRefs(evidence: GateEvidenceLike): readonly string[] {
+  return Object.freeze([
+    `gate_config:${evidence.configPath}`,
+    ...evidence.steps.map((step) => `gate_step:${step.name}:${step.passed ? 'passed' : 'failed'}:${step.exitCode ?? 'null'}`),
+  ]);
+}
+
 export function createGateOperations(input: GateOperationsInput) {
   let binding: GateBinding | undefined;
   const gatePassed = new Map<string, boolean>();
@@ -77,7 +97,10 @@ export function createGateOperations(input: GateOperationsInput) {
         ...(targetFiles === undefined ? {} : { extraInputs: targetFiles }),
       });
       gatePassed.set(`${taskId}:${attempt.assignmentAttemptId}`, evidence.passed);
-      return { passed: evidence.passed, evidenceRefs: evidence.evidenceRefs };
+      // GateEvidence'da `evidenceRefs` YOKTUR (passed/configPath/steps vardır);
+      // onu okumak undefined döndürüp "evidenceRefs is not iterable" ile
+      // kapı adımını düşürüyordu. Kanıt adımlardan türetilir.
+      return { passed: evidence.passed, evidenceRefs: gateEvidenceRefs(evidence) };
     },
 
     async commit({ taskId, attempt }: Readonly<{ taskId: EntityId; attempt: AssignmentAttemptV1 }>) {

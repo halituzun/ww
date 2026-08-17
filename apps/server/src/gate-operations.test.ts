@@ -18,7 +18,12 @@ const details = async () => ({
 
 function fakes(over: { passed?: boolean } = {}) {
   const gateRunner: GateRunnerLike = {
-    run: vi.fn(async () => ({ passed: over.passed ?? true, evidenceRefs: ['ww.gate.json'] })),
+    // GateEvidence'ın GERÇEK şekli: evidenceRefs diye bir alan yoktur.
+    run: vi.fn(async () => ({
+      passed: over.passed ?? true,
+      configPath: 'ww.gate.json',
+      steps: [{ name: 'typecheck', passed: over.passed ?? true, exitCode: over.passed === false ? 1 : 0 }],
+    })),
   };
   const git: GitWorkspaceLike = {
     commitAfterSuccessfulGate: vi.fn(async () => ({ commitHash: 'abc1234def' })),
@@ -42,7 +47,10 @@ describe('createGateOperations', () => {
     ops.bind({ gateRunner, git, workspace: { initialize: async () => undefined } as never });
 
     await expect(ops.gate({ taskId: id(2), attempt }))
-      .resolves.toEqual({ passed: true, evidenceRefs: ['ww.gate.json'] });
+      .resolves.toEqual({
+        passed: true,
+        evidenceRefs: ['gate_config:ww.gate.json', 'gate_step:typecheck:passed:0'],
+      });
   });
 
   it('kapı düşerse passed=false döner', async () => {

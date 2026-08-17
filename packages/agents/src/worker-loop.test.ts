@@ -111,3 +111,46 @@ describe('runWorkerLoop başarısızlık sebebi', () => {
     expect(result.detail).toMatch(/iletişim|iletisim/i);
   });
 });
+
+// ASIL KUSUR: araç hatası TÜM görevi düşürüyordu. Model henüz var olmayan bir
+// dosyayı okumaya kalkınca ("Dosya bulunamadı") iş ölüyordu; oysa doğru
+// davranış hatayı modele bildirip uyarlanmasına izin vermektir.
+describe('runWorkerLoop araç hatası', () => {
+  const brief = {
+    projectId: id(1), taskId: id(2), taskBriefId: id(3),
+    allowedTools: ['read_file', 'report_result'], acceptanceCriteria: ['x'],
+  } as never;
+  const attempt = {
+    assignmentAttemptId: id(4), projectId: id(1), taskId: id(2),
+    taskBriefId: id(3), workerAgentId: id(5), verifierAgentId: id(6),
+  } as never;
+  const snapshot = { invocationId: id(7), promptInputSnapshotId: id(8) } as never;
+
+  it('hatayı modele geri verir ve döngü sürer', async () => {
+    let call = 0;
+    const seen: unknown[] = [];
+    const result = await runWorkerLoop({
+      brief, attempt, snapshot, modelRef: 'm', prompt: [],
+      router: {
+        complete: async (_ref: unknown, request: { messages: unknown[] }) => {
+          call += 1;
+          seen.push(request.messages);
+          return call === 1
+            ? { result: { toolCalls: [{ name: 'read_file', id: 'c1', args: { path: 'src/Board.tsx' } }] } }
+            : { result: { toolCalls: [], content: 'dosya yoktu, oluşturdum' } };
+        },
+      } as never,
+      tools: {
+        definitions: () => [{ name: 'read_file' }, { name: 'report_result' }],
+        validate: () => ({}),
+        execute: async () => { throw new Error('Dosya bulunamadı: src/Board.tsx'); },
+      } as never,
+      communication: { question: async () => ({ messageId: id(9) }), report: async () => undefined } as never,
+    } as never);
+
+    expect(result.reason).toBe('report');
+    expect(call).toBe(2);
+    const second = seen[1] as { role: string; content?: string }[];
+    expect(JSON.stringify(second)).toContain('Dosya bulunamadı');
+  });
+});

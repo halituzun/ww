@@ -156,10 +156,12 @@ export function createServiceBackedSchedulerPort(input: ServiceBackedSchedulerIn
     transition: (value) => input.base.transition(value),
     reassign: (value) => input.base.reassign(value),
     escalate: (value) => input.base.escalate(value),
-    gate: async ({ taskId, attempt }) => {
+    gate: async ({ taskId, attempt, targetFiles }) => {
       const run = async (freshAttempt: AssignmentAttemptV1) => {
         await input.fence.assertCurrent({ taskId, attempt: freshAttempt });
-        const result = await input.gate.run({ taskId, attempt: freshAttempt });
+        // targetFiles burada DÜŞÜYORDU: kapı görevin ürettiği dosyaları hiç
+        // görmüyor, ya boş kaynakla "geçti" diyor ya da girdiyi bulamıyordu.
+        const result = await input.gate.run({ taskId, attempt: freshAttempt, ...(targetFiles === undefined ? {} : { targetFiles }) });
         await input.artifacts.appendGate({ taskId, attempt: freshAttempt, passed: result.passed, evidenceRefs: result.evidenceRefs, ...(result.eventId === undefined ? {} : { eventId: result.eventId }) });
         return result;
       };

@@ -65,7 +65,18 @@ export async function runWorkerLoop(input: WorkerLoopInput): Promise<WorkerLoopR
       try {
         toolResult = await input.tools.execute({ callId: parsedCallId, name: toolCall.name, args, occurredAt: now() });
       } catch (toolError) {
-        return { reason: 'failure', turns: turn + 1, detail: `araç çalıştırılamadı: ${toolCall.name} — ${toolError instanceof Error ? toolError.message : String(toolError)}` };
+        // Araç hatası görevi ÖLDÜRMEZ: modele sonuç olarak geri verilir ki
+        // uyarlansın. Model henüz var olmayan bir dosyayı okumaya kalktığında
+        // ("Dosya bulunamadı: src/Board.tsx") tüm görev düşüyordu; oysa doğru
+        // davranış "dosya yok, o hâlde oluştur" diyebilmesidir. Döngü maxTurns
+        // ile sınırlı, frenler maliyeti sınırlar; kalıcı hata zaten tekrar eder.
+        const detail = toolError instanceof Error ? toolError.message : String(toolError);
+        messages.push({
+          role: 'tool',
+          toolCallId: toolCall.id,
+          content: JSON.stringify({ error: detail, tool: toolCall.name }),
+        });
+        continue;
       }
       // Sağlayıcıya KENDİ tool_call_id'si geri verilmeli; türetilen UUID
       // yalnızca iç denetim/efekt katmanı içindir. Türetileni geri yollamak
