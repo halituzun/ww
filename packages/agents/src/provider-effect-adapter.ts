@@ -4,6 +4,7 @@ import {
   type EntityId,
 } from '@ww/shared';
 import { ProviderError, type ProviderInvocationEffect } from '@ww/providers';
+import { canonicalSha256V1 } from '@ww/shared';
 import { DurableEffectExecutionError } from './errors.js';
 import { toStrictJson } from './strict-json.js';
 import { EffectRunner } from './effect-runner.js';
@@ -34,7 +35,13 @@ export class DurableProviderInvocationEffect implements ProviderInvocationEffect
       ...(taskId === undefined ? {} : { taskId }),
       assignmentAttemptId: attemptId,
       causationId: invocationId,
-      stableEffectId: `provider-invocation:${invocationId}:${input.fallbackAttempt}`,
+      // Bir worker döngüsü AYNI invocation içinde birden çok model çağrısı
+      // yapar (araç turu, sonra rapor). Anahtar yalnızca invocation+fallback
+      // olunca ikinci çağrı birincinin anahtarını kullanıyor ve defter
+      // "effect anahtari farkli istekle kullanildi" ile reddediyordu.
+      // İstek özeti anahtara girer: aynı istek aynı anahtarı (idempotent
+      // yeniden deneme), farklı istek farklı anahtarı alır.
+      stableEffectId: `provider-invocation:${invocationId}:${input.fallbackAttempt}:${canonicalSha256V1({ modelRef: input.modelRef, request }).slice(0, 16)}`,
       effectType: 'provider_completion_v1',
       request: { modelRef: input.modelRef, request },
       replaySafety: 'non_replay_safe',

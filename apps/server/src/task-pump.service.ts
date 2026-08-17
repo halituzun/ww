@@ -4,8 +4,7 @@
 // düşen görevler sonsuza dek 'queued' kalıyordu — kuyruğu tüketip
 // `orchestrate` çağıran hiçbir üretim kodu yoktu. Kayıt ≠ tüketim.
 import { Inject, Injectable, Logger, Optional, type OnModuleDestroy, type OnModuleInit } from '@nestjs/common';
-import { ackQueue, createRedis, ensureGroup, getLatestTask, queueKey, readQueue, reclaimQueue } from '@ww/db';
-import { getActivePrompt } from '@ww/db';
+import { ackQueue, createRedis, ensureGroup, queueKey, readQueue, reclaimQueue } from '@ww/db';
 import { EntityIdSchema, type EntityId } from '@ww/shared';
 import type { WwRedis } from '@ww/db';
 import { PHASE8_RUNTIME } from './runtime-composition.js';
@@ -14,8 +13,6 @@ import { pumpOnce, type PumpItem } from './task-pump.js';
 
 export const TASK_PUMP_INTERVAL_MS = 3_000;
 const PUMP_GROUP = 'scheduler';
-const WORKER_PROMPT = 'role.worker.coding';
-const VERIFIER_PROMPT = 'role.verifier';
 // Çöken/yeniden başlayan bir tüketicinin üzerinde kalan mesaj bu süre sonunda
 // devralınır; reclaim olmazsa o iş sonsuza dek asılı kalır.
 const RECLAIM_MIN_IDLE_MS = 30_000;
@@ -23,16 +20,7 @@ const MAX_DELIVERIES = 5;
 
 /** Composition'ın pompanın ihtiyaç duyduğu dar yüzeyi. */
 export interface PumpRuntime {
-  taskBriefService: {
-    seal(input: Readonly<{
-      taskId: EntityId;
-      workerPrompt: { name: string; version: number };
-      verifierPrompt: { name: string; version: number };
-      allowedTools: readonly string[];
-      cutoffAt: string;
-    }>): Promise<unknown>;
-  };
-  orchestrate(input: Readonly<{ taskId: EntityId; brief: unknown; maxAttempts: number }>): Promise<Readonly<{ status: string }>>;
+  orchestrate(input: Readonly<{ taskId: EntityId; maxAttempts: number }>): Promise<Readonly<{ status: string }>>;
 }
 
 @Injectable()
@@ -96,7 +84,6 @@ export class TaskPumpService implements OnModuleInit, OnModuleDestroy {
       const result = await pumpOnce({
         claim: async () => this.#claim(projectId),
         ack: async (msgId) => { await ackQueue(redis, stream, PUMP_GROUP, msgId); },
-        seal: async (taskId) => this.#seal(runtime, projectId, taskId) as never,
         orchestrate: (input) => runtime.orchestrate(input),
         onResult: (taskId, status) => this.#logger.log(`görev ${taskId}: ${status}`),
         onError: (taskId, reason) => this.#logger.warn(`görev ${taskId} işlenemedi: ${String(reason)}`),
@@ -147,29 +134,4 @@ export class TaskPumpService implements OnModuleInit, OnModuleDestroy {
     }));
   }
 
-  // Brief atama anında MÜHÜRLENİR: prompt sürümü o an sabitlenir, sonradan
-  // prompt değişse bile bu görev aynı girdiyle çalışmış sayılır.
-  async #seal(runtime: PumpRuntime, projectId: EntityId, taskId: EntityId): Promise<unknown> {
-    // KARARLI cutoff: her turda `now()` kullanmak her denemede YENİ bir brief
-    // mühürlüyordu. İkinci tur, ilk turun attempt'ine bağlı olmayan bir brief
-    // üretiyor ve rapor "task brief uyusmuyor" ile reddediliyordu.
-    const task = await getLatestTask(this.#database.ch, projectId, taskId);
-    if (task === null) throw new Error(`görev bulunamadı: ${taskId}`);
-    const cutoffAt = task.created_at;
-
-    const [worker, verifier] = await Promise.all([
-      getActivePrompt(this.#database.ch, WORKER_PROMPT),
-      getActivePrompt(this.#database.ch, VERIFIER_PROMPT),
-    ]);
-    if (worker === null) throw new Error(`aktif prompt yok: ${WORKER_PROMPT}`);
-    if (verifier === null) throw new Error(`aktif prompt yok: ${VERIFIER_PROMPT}`);
-
-    return runtime.taskBriefService.seal({
-      taskId,
-      workerPrompt: { name: worker.prompt_name, version: worker.prompt_version },
-      verifierPrompt: { name: verifier.prompt_name, version: verifier.prompt_version },
-      allowedTools: ['read_file', 'write_file', 'list_dir', 'git_diff'],
-      cutoffAt,
-    });
-  }
 }

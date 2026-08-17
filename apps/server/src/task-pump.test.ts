@@ -9,7 +9,6 @@ function ports(over: Partial<TaskPumpPorts> = {}): TaskPumpPorts {
   return {
     claim: async () => [item(1)],
     ack: vi.fn(async () => undefined),
-    seal: vi.fn(async () => ({ taskId: id(1) }) as never),
     orchestrate: vi.fn(async () => ({ status: 'done' })),
     maxAttempts: 3,
     ...over,
@@ -18,14 +17,14 @@ function ports(over: Partial<TaskPumpPorts> = {}): TaskPumpPorts {
 
 describe('pumpOnce', () => {
   it('boş kuyrukta hiçbir iş yapmaz', async () => {
-    const seal = vi.fn(async () => ({}) as never);
-    const result = await pumpOnce(ports({ claim: async () => [], seal }));
+    const orchestrate = vi.fn(async () => ({ status: 'done' }));
+    const result = await pumpOnce(ports({ claim: async () => [], orchestrate }));
 
     expect(result.processed).toBe(0);
-    expect(seal).not.toHaveBeenCalled();
+    expect(orchestrate).not.toHaveBeenCalled();
   });
 
-  it('görevi mühürler, orkestre eder ve ack’ler', async () => {
+  it('görevi orkestre eder ve ack’ler', async () => {
     const ack = vi.fn(async () => undefined);
     const orchestrate = vi.fn(async () => ({ status: 'done' }));
     const result = await pumpOnce(ports({ ack, orchestrate }));
@@ -47,11 +46,6 @@ describe('pumpOnce', () => {
     expect(result.results[0]).toMatchObject({ taskId: id(1), status: 'error' });
   });
 
-  it('mühürleme hatasında da ack etmez', async () => {
-    const ack = vi.fn(async () => undefined);
-    await pumpOnce(ports({ ack, seal: async () => { throw new Error('prompt yok'); } }));
-    expect(ack).not.toHaveBeenCalled();
-  });
 
   // Yutulan hata, kuyruğun neden dolduğunu görünmez kılar.
   it('hatayı onError ile bildirir', async () => {
@@ -69,7 +63,6 @@ describe('pumpOnce', () => {
     const ack = vi.fn(async () => undefined);
     const result = await pumpOnce(ports({
       claim: async () => [item(1), item(2)],
-      seal: async () => ({}) as never,
       orchestrate: orchestrate as never,
       ack,
     }));
@@ -107,10 +100,4 @@ describe('pumpOnce', () => {
     expect(onError).toHaveBeenCalledTimes(1);
   });
 
-  it('mühürlenen brief’i orkestrasyona geçirir', async () => {
-    const brief = { taskId: id(1), goal: 'tahta' } as never;
-    const orchestrate = vi.fn(async () => ({ status: 'done' }));
-    await pumpOnce(ports({ seal: async () => brief, orchestrate }));
-    expect(orchestrate.mock.calls[0]![0]).toMatchObject({ brief });
-  });
 });

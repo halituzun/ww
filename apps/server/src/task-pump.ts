@@ -5,7 +5,7 @@
 // tam yaşam döngüsünü ise composition'ın `orchestrate`'i koşturur — ve
 // ikisini birleştiren hiçbir üretim kodu yoktu. Kayıt ≠ tüketim; bu ayrımın
 // görünmez kalması deponun en pahalı hata sınıfıdır.
-import type { EntityId, TaskBriefV1 } from '@ww/shared';
+import type { EntityId } from '@ww/shared';
 
 export interface PumpItem {
   readonly msgId: string;
@@ -26,10 +26,13 @@ export interface TaskPumpPorts {
   /** Kuyruktan teslim alınan mesajlar (grup + reclaim semantiği çağıranda). */
   claim(): Promise<readonly PumpItem[]>;
   ack(msgId: string): Promise<void>;
-  seal(taskId: EntityId): Promise<TaskBriefV1>;
+  /**
+   * Brief'i pompa MÜHÜRLEMEZ: atama onu agent'ların prompt sürümleriyle
+   * mühürler ve agent seçimi worker'ın prompt'unun brief'le eşleşmesini ister.
+   * Pompa ayrıca mühürleyince o eşleşme bozuluyor ("idle worker bulunamadi").
+   */
   orchestrate(input: Readonly<{
     taskId: EntityId;
-    brief: TaskBriefV1;
     maxAttempts: number;
   }>): Promise<Readonly<{ status: string }>>;
   readonly maxAttempts?: number;
@@ -43,10 +46,8 @@ export async function pumpOnce(ports: TaskPumpPorts): Promise<PumpResult> {
 
   for (const item of items) {
     try {
-      const brief = await ports.seal(item.taskId);
       const outcome = await ports.orchestrate({
         taskId: item.taskId,
-        brief,
         maxAttempts: ports.maxAttempts ?? 3,
       });
       results.push({ taskId: item.taskId, status: outcome.status });

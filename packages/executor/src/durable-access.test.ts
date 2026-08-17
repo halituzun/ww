@@ -88,13 +88,25 @@ describe('DurableExecutorAccess', () => {
     expect(test.state.loadFileLockOwner).not.toHaveBeenCalled();
   });
 
+  // Görev kilidi operasyon mutex'idir: assignment/transition/causal onu kısa
+  // süreli alıp bırakır. "Kilit hâlâ bu attempt'in olmalı" kuralı mimariye
+  // aykırıydı ve HER araç çağrısını düşürüyordu.
   it.each([
     null,
-    { owner: 'scheduler:other', fence: '9' },
+    { owner: 'transition:abc', fence: '9' },
     { owner: 'scheduler:one', fence: '8' },
-  ])('eksik/stale Redis fence kanıtını reddeder: %j', async (lease) => {
+  ])('kilit tutulmuyorsa veya daha düşük fence’teyse izin verir: %j', async (lease) => {
     const test = fixture();
     test.state.loadTaskLease = vi.fn(async () => lease);
+    await expect(new DurableExecutorAccess(test.state).assertAuthorized(test.input))
+      .resolves.toBeUndefined();
+  });
+
+  // Devralma koruması: daha yüksek fence, başka bir tarafın görevi aldığını
+  // gösterir; bu attempt artık yazmamalıdır.
+  it('daha yüksek fence devraldıysa reddeder', async () => {
+    const test = fixture();
+    test.state.loadTaskLease = vi.fn(async () => ({ owner: 'assignment:next', fence: '11' }));
     await expect(new DurableExecutorAccess(test.state).assertAuthorized(test.input))
       .rejects.toMatchObject({ code: 'LEASE_REQUIRED' });
   });

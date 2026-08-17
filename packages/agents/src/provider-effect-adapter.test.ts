@@ -59,3 +59,59 @@ describe('DurableProviderInvocationEffect', () => {
     expect(requests[0]).toMatchObject({ modelRef: 'x:m', usage: { promptTokens: 3, completionTokens: 2 }, latencyMs: 7 });
   });
 });
+
+// ASIL KUSUR: bir worker döngüsü aynı invocation içinde birden çok model
+// çağrısı yapar (araç turu, sonra rapor). Anahtar yalnızca invocation+fallback
+// olunca ikinci çağrı birincinin anahtarını kullanıyor ve defter
+// "effect anahtari farkli istekle kullanildi" ile reddediyordu.
+describe('DurableProviderInvocationEffect anahtar ayrımı', () => {
+  const runnerSpy = () => {
+    const ids: string[] = [];
+    return {
+      ids,
+      runner: {
+        run: async (input: { stableEffectId: string; execute: () => Promise<unknown> }) => {
+          ids.push(input.stableEffectId);
+          return input.execute();
+        },
+      } as never,
+    };
+  };
+
+  const meta = {
+    projectId: '00000000-0000-4000-8000-000000000001',
+    assignmentAttemptId: '00000000-0000-4000-8000-000000000004',
+    taskId: '00000000-0000-4000-8000-000000000002',
+  };
+  const context = {
+    sessionId: '00000000-0000-4000-8000-00000000000a',
+    owningPmId: '00000000-0000-4000-8000-00000000000b',
+  } as never;
+  const invocationId = '00000000-0000-4000-8000-000000000007';
+
+  const call = (spy: ReturnType<typeof runnerSpy>, messages: unknown) =>
+    new DurableProviderInvocationEffect(spy.runner, context).run({
+      invocationId,
+      modelRef: 'deepseek:chat',
+      fallbackAttempt: 0,
+      request: { messages, meta } as never,
+      execute: async () => ({ ok: true }),
+    } as never);
+
+  it('farklı istekler farklı efekt anahtarı alır', async () => {
+    const spy = runnerSpy();
+    await call(spy, [{ role: 'user', content: 'ilk tur' }]);
+    await call(spy, [{ role: 'user', content: 'ikinci tur' }]);
+
+    expect(spy.ids[0]).not.toBe(spy.ids[1]);
+  });
+
+  // Aynı isteğin yeniden denenmesi AYNI anahtarı almalı: idempotency budur.
+  it('aynı istek aynı anahtarı alır', async () => {
+    const spy = runnerSpy();
+    await call(spy, [{ role: 'user', content: 'aynı' }]);
+    await call(spy, [{ role: 'user', content: 'aynı' }]);
+
+    expect(spy.ids[0]).toBe(spy.ids[1]);
+  });
+});

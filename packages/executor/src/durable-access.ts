@@ -78,12 +78,21 @@ export class DurableExecutorAccess implements ExecutorAccessPort {
     ) {
       throw new ExecutorError('LEASE_REQUIRED', 'Kalıcı assignment fence bağlamı eşleşmiyor');
     }
-    if (
-      lease === null ||
-      lease.owner !== input.leaseOwner ||
-      lease.fence !== String(input.leaseFence)
-    ) {
-      throw new ExecutorError('LEASE_REQUIRED', 'Current Redis task lease/fence bulunamadı');
+    // Görev kilidi OPERASYON MUTEX'idir, sahiplik belgesi değil: assignment,
+    // transition ve causal-log onu kısa süreli alır ve bırakır (owner önekleri
+    // `assignment:`/`transition:`/`causal:`). Bu yüzden "kilit hâlâ bu
+    // attempt'in olmalı" kuralı MİMARİYE AYKIRIYDI ve her araç çağrısını
+    // düşürüyordu — worker hiçbir dosya yazamıyordu.
+    //
+    // Güncellik kanıtı yukarıdaki KALICI kontrollerdir (ClickHouse'daki task
+    // ve attempt bu çağrıyı işaret etmeli). Redis kilidinden beklenen tek şey
+    // devralma koruması: daha YÜKSEK fence'li bir kilit varsa başka bir taraf
+    // görevi devralıyordur ve bu attempt artık yazmamalıdır.
+    if (lease !== null && BigInt(lease.fence) > BigInt(input.leaseFence)) {
+      throw new ExecutorError(
+        'LEASE_REQUIRED',
+        `Görevi daha yüksek fence devraldı: ${lease.fence} > ${input.leaseFence}`,
+      );
     }
     if (input.requireFileLock) {
       if (input.relativePath === undefined) {

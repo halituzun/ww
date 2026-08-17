@@ -22,7 +22,12 @@ export interface Phase1SchedulerPort {
 export interface Phase1OrchestratorInput {
   readonly brakes?: Phase1BrakeCheck | undefined;
   readonly taskId: EntityId;
-  readonly brief: TaskBriefV1;
+  /**
+   * Çağıranın brief'i. `loadBrief` verilmişse GEREKSİZDİR: bağlayıcı brief
+   * atamanın mühürlediğidir. Çağıranın ayrıca mühürlemesi, agent seçimini de
+   * bozuyordu (seçim worker'ın prompt'unun brief'le eşleşmesini ister).
+   */
+  readonly brief?: TaskBriefV1;
   /**
    * Atamanın FİİLEN bağladığı brief'i yükler. İlk atama brief'i kendi
    * mühürler (agent prompt sürümleri + kendi cutoff'u); çağıranın ayrıca
@@ -54,7 +59,7 @@ function boundedAttempts(value: number | undefined): number {
   return attempts;
 }
 
-async function runAssignedLifecycle(input: Phase1OrchestratorInput, initialAttempt: AssignmentAttemptV1, maxAttempts: number, initialCount: number, alreadyWorking = false): Promise<Phase1OrchestratorResult> {
+async function runAssignedLifecycle(input: Phase1OrchestratorInput & { brief: TaskBriefV1 }, initialAttempt: AssignmentAttemptV1, maxAttempts: number, initialCount: number, alreadyWorking = false): Promise<Phase1OrchestratorResult> {
   let attempt = initialAttempt;
   for (let attempts = initialCount; attempts <= maxAttempts; attempts += 1) {
     // Fren, iş BAŞLAMADAN kontrol edilir: tetiklenmişse token/para harcanmaz.
@@ -124,10 +129,11 @@ export async function runPhase1Orchestrator(input: Phase1OrchestratorInput): Pro
   const attempt = await input.scheduler.assign(input.taskId);
   try {
     // Brief atamadan sonra çözülür: bağlayıcı olan atamanınkidir.
-    const effective = input.loadBrief === undefined
-      ? input
-      : { ...input, brief: await input.loadBrief(attempt) };
-    return await runAssignedLifecycle(effective, attempt, maxAttempts, 1);
+    const bound = input.loadBrief === undefined ? input.brief : await input.loadBrief(attempt);
+    if (bound === undefined) {
+      throw new Phase1OrchestratorError('brief yok: loadBrief ya da brief verilmelidir');
+    }
+    return await runAssignedLifecycle({ ...input, brief: bound }, attempt, maxAttempts, 1);
   } catch (error) {
     const status = await input.scheduler.handleExecutionError({ taskId: input.taskId, attempt, phase: 'working', error });
     return { status, attempts: 1 };
@@ -142,9 +148,15 @@ export async function resumePhase1Orchestrator(input: Phase1ResumeInput): Promis
   const previousAttemptId = EntityIdSchema.parse(input.previousAttemptId);
   if (input.answer.trim() === '') throw new Phase1OrchestratorError('kullanıcı cevabı boş olamaz');
   if (replyMessageId === questionMessageId) throw new Phase1OrchestratorError('cevap mesajı soru mesajıyla aynı olamaz');
-  const attempt = await input.scheduler.resumeUserAnswer({ projectId: input.brief.projectId, taskId: input.taskId, taskBriefId: input.brief.taskBriefId, previousAttemptId, questionMessageId, replyMessageId, answer: input.answer });
+  // Devam akışı çağıranın brief'ini ZORUNLU kılar: hangi brief'e cevap
+  // verildiği belirsiz kalamaz.
+  const resumeBrief = input.brief;
+  if (resumeBrief === undefined) {
+    throw new Phase1OrchestratorError('kullanıcı cevabı akışı brief gerektirir');
+  }
+  const attempt = await input.scheduler.resumeUserAnswer({ projectId: resumeBrief.projectId, taskId: input.taskId, taskBriefId: resumeBrief.taskBriefId, previousAttemptId, questionMessageId, replyMessageId, answer: input.answer });
   try {
-    return await runAssignedLifecycle(input, attempt, maxAttempts, 1, true);
+    return await runAssignedLifecycle({ ...input, brief: resumeBrief }, attempt, maxAttempts, 1, true);
   } catch (error) {
     const status = await input.scheduler.handleExecutionError({ taskId: input.taskId, attempt, phase: 'working', error });
     return { status, attempts: 1 };
