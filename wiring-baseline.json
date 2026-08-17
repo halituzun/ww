@@ -53,5 +53,13 @@
   {
     "symbol": "packages/scheduler/src/escalation-recorder.ts:createEscalationRecorder",
     "reason": "schedulerOperations.escalate uretim karsiligi; bootstrap sonraki turda baglayacak"
+  },
+  {
+    "symbol": "packages/scheduler/src/transition-operation.ts:createTransitionOperation",
+    "reason": "schedulerOperations.transition uretim karsiligi; bootstrap baglayacak"
+  },
+  {
+    "symbol": "packages/db/src/test-cleanup.ts:dropLeakedTestDatabases",
+    "reason": "operasyonel arac; pnpm db:clean-tests scriptinden calisir"
   }
 ]
