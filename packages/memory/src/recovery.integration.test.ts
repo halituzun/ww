@@ -71,7 +71,11 @@ describe.skipIf(probe === undefined || probeRedis === undefined)('RecoveryServic
   });
 
   it('stale worker/task leaseini queued + idle yapar ve ikinci restart duplicate üretmez', async () => {
-    const service = new RecoveryService(ch, redis, { now: () => now });
+    // Kurtarma artık bekleme payı ister: heartbeat ancak atamadan SONRA
+    // yazılabildiği için yeni atanmış canlı agent'ı ölü saymamalıdır. Bu
+    // senaryodaki agent/görev gerçekten ölüdür; payın dolduğu an sabitlenir.
+    const afterGrace = new Date(Date.parse(now) + 120_000).toISOString();
+    const service = new RecoveryService(ch, redis, { now: () => afterGrace });
     const first = await service.recoverProject(projectId);
     expect(first.requeuedTaskIds).toEqual([taskId]);
     expect(first.idledAgentIds).toEqual([agentId]);

@@ -19,13 +19,18 @@ export class RecoverySweeperService implements OnModuleInit, OnModuleDestroy {
   }
 
   onModuleInit(): void {
-    // VARSAYILAN KAPALI. Süpürücü canlı koşuda ÇALIŞAN görevi düşürüp
-    // agent'larını boşa aldı ve dosya kilidini devraldı
-    // ("file lock renew foreign owner ile catisti"). Kurtarma "iş canlı mı"
-    // sorusunu heartbeat'ten okuyor; agent heartbeat'i ancak atamadan SONRA
-    // yazılabildiği için açılış penceresinde çalışan iş ölü görünüyor.
-    // Güvenilir canlılık sinyali kurulana kadar açıkça açılmalıdır.
-    if (process.env['WW_ENABLE_RECOVERY_SWEEP'] !== '1') return;
+    // VARSAYILAN AÇIK. Bir süre kapalıydı: süpürücü canlı koşuda ÇALIŞAN
+    // görevi düşürüp agent'larını boşa alıyor ve dosya kilidini devralıyordu
+    // ("file lock renew foreign owner ile catisti"). Sebep, kurtarmanın
+    // canlılığı yalnızca heartbeat YOKLUĞUNDAN okumasıydı; heartbeat ise ancak
+    // atamadan SONRA yazılabiliyor. Artık bekleme payı var
+    // (packages/memory recovery-staleness.ts), dolayısıyla yeni atanmış iş
+    // korunuyor.
+    //
+    // Kapalı kalması da bedavaya değildi: ölü koşuların bıraktığı agent'lar
+    // sonsuza dek 'busy' kalıyor ve proje "idle worker bulunamadi" ile yeni
+    // iş alamaz hale geliyordu. WW_ENABLE_RECOVERY_SWEEP=0 ile kapatılabilir.
+    if (process.env['WW_ENABLE_RECOVERY_SWEEP'] === '0') return;
     const projectId = process.env['WW_RUNTIME_PROJECT_ID'];
     if (projectId === undefined || projectId.trim() === '') return;
     this.#timer = setInterval(() => { void this.sweep(projectId); }, RECOVERY_SWEEP_INTERVAL_MS);

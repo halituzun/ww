@@ -14,11 +14,14 @@ import {
 } from '@ww/db';
 import { NIL_UUID, canonicalSha256V1, type EntityId } from '@ww/shared';
 import { planQueueRefill } from './queue-refill.js';
+import { DEFAULT_RECOVERY_GRACE_MS, isRecoverableStale } from './recovery-staleness.js';
 
 export interface RecoveryClock { now(): string; }
 
 export interface RecoveryOptions {
   readonly heartbeatTtlMs?: number;
+  /** Heartbeat'in ilk kez yazılabilmesi için tanınan pay. */
+  readonly recoveryGraceMs?: number;
   readonly taskStatuses?: readonly TaskRow['status'][];
 }
 
@@ -45,6 +48,7 @@ export class RecoveryService {
   readonly #redis: WwRedis;
   readonly #clock: RecoveryClock;
   readonly #heartbeatTtlMs: number;
+  readonly #graceMs: number;
   readonly #statuses: readonly TaskRow['status'][];
 
   constructor(ch: ClickHouseClient, redis: WwRedis, clock: RecoveryClock = { now: () => new Date().toISOString() }, options: RecoveryOptions = {}) {
@@ -52,6 +56,7 @@ export class RecoveryService {
     this.#redis = redis;
     this.#clock = clock;
     this.#heartbeatTtlMs = options.heartbeatTtlMs ?? 30_000;
+    this.#graceMs = options.recoveryGraceMs ?? DEFAULT_RECOVERY_GRACE_MS;
     this.#statuses = options.taskStatuses ?? DEFAULT_STATUSES;
     if (!Number.isSafeInteger(this.#heartbeatTtlMs) || this.#heartbeatTtlMs < 1) throw new Error('heartbeatTtlMs gecersiz');
   }
@@ -67,7 +72,16 @@ export class RecoveryService {
     const staleAgentIds = new Set<EntityId>();
     for (const agent of agents) {
       if (agent.status === 'busy' || agent.status === 'waiting_verify' || agent.status === 'waiting_answer') {
-        if (await staleHeartbeat(this.#redis, `ww:hb:${agent.agent_id}`)) staleAgentIds.add(agent.agent_id);
+        // Heartbeat YOKLUĞU tek başına yetmez: heartbeat ancak atamadan sonra
+        // yazılabilir, yeni atanmış canlı agent ölü görünürdü (bkz.
+        // recovery-staleness.ts).
+        const stale = isRecoverableStale({
+          heartbeatMissing: await staleHeartbeat(this.#redis, `ww:hb:${agent.agent_id}`),
+          lastUpdatedAtMs: Date.parse(agent.updated_at),
+          nowMs,
+          graceMs: this.#graceMs,
+        });
+        if (stale) staleAgentIds.add(agent.agent_id);
       }
     }
     for (const agent of agents) {
@@ -94,7 +108,12 @@ export class RecoveryService {
         if (task === null) continue;
         const workerStale = task.worker_agent_id !== NIL_UUID && staleAgentIds.has(task.worker_agent_id);
         const verifierStale = task.verifier_agent_id !== NIL_UUID && staleAgentIds.has(task.verifier_agent_id);
-        const taskStale = await staleHeartbeat(this.#redis, `ww:hb:task:${task.task_id}`);
+        const taskStale = isRecoverableStale({
+          heartbeatMissing: await staleHeartbeat(this.#redis, `ww:hb:task:${task.task_id}`),
+          lastUpdatedAtMs: Date.parse(task.updated_at),
+          nowMs,
+          graceMs: this.#graceMs,
+        });
         if (!workerStale && !verifierStale && !taskStale) continue;
         const next = { ...task, status: 'queued' as const, worker_agent_id: NIL_UUID, verifier_agent_id: NIL_UUID, task_brief_id: NIL_UUID, assignment_attempt_id: NIL_UUID, updated_at: now };
         await appendTaskVersion(this.#ch, { expectedVersion: task.version, next });
