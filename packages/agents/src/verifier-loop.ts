@@ -1,3 +1,4 @@
+import { normalizeVerdictArguments } from './verdict-normalize.js';
 import { POLICY_RULE_IDS, StructuredVerdictV1Schema, type AssignmentAttemptV1, type EntityId, type PromptInputSnapshotV1, type StructuredVerdictV1, type TaskBriefV1, type PromptMessageV1 } from '@ww/shared';
 import type { ModelRouter } from '@ww/providers';
 
@@ -8,7 +9,10 @@ function parseStrictVerdictArguments(value: unknown): StructuredVerdictV1 {
   if (value === null || typeof value !== 'object' || Array.isArray(value)) throw new Error('submit_verdict argümanı object olmalıdır');
   const keys = Object.keys(value);
   if (keys.length !== 1 || keys[0] !== 'verdict') throw new Error('submit_verdict yalnız verdict alanını taşımalıdır');
-  return StructuredVerdictV1Schema.parse((value as { verdict?: unknown }).verdict);
+  // Boş kanıt referansları şemayı düşürüyordu; bilgi taşımadıkları için ayıklanır.
+  return StructuredVerdictV1Schema.parse(
+    normalizeVerdictArguments((value as { verdict?: unknown }).verdict),
+  );
 }
 
 const VERDICT_TOOL_PARAMETERS: Record<string, unknown> = {

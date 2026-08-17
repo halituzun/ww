@@ -10,6 +10,7 @@ import { NarratorController } from './narrator.controller.js';
 import { ProvidersController } from './providers.controller.js';
 import { ProviderHealthScheduler } from './provider-health.scheduler.js';
 import { TaskPumpService } from './task-pump.service.js';
+import { RecoverySweeperService } from './recovery-sweeper.service.js';
 import { PlanApplicationService, PlansController } from './plans.controller.js';
 import { RoleModelsController } from './role-models.controller.js';
 import { BudgetController } from './budget.controller.js';
@@ -50,6 +51,7 @@ import {
     EVENTS_GATEWAY_PROVIDER,
     ProviderHealthScheduler,
     TaskPumpService,
+    RecoverySweeperService,
     PlanApplicationService,
     { provide: HEALTH_DEPENDENCIES, useValue: DEFAULT_HEALTH_DEPENDENCIES },
     HealthService,
