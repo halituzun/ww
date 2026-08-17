@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import {
   brakeLabel,
   fetchAuditReport,
+  resolveFinding,
   severityTone,
   EMPTY_AUDIT_REPORT,
   type AuditReport,
@@ -17,6 +18,25 @@ const STATUS_LABEL: Record<string, string> = {
 // docs/08 → Denetim Ekranı: denetçi bulguları, tırmandırma geçmişi, fren olayları.
 export function AuditPanel({ projectId }: { projectId: string }) {
   const [report, setReport] = useState<AuditReport>(EMPTY_AUDIT_REPORT);
+  // Karar kullanıcıdan gelir; gerekçesiz kapatmayı sunucu da reddeder.
+  const [notes, setNotes] = useState<Record<string, string>>({});
+  const [error, setError] = useState('');
+
+  const decide = async (findingId: string, status: 'resolved' | 'dismissed') => {
+    const resolution = (notes[findingId] ?? '').trim();
+    if (resolution === '') {
+      setError('Kapatma gerekçesi zorunludur.');
+      return;
+    }
+    try {
+      await resolveFinding(projectId, findingId, { status, resolution });
+      setError('');
+      setReport(await fetchAuditReport(projectId));
+    } catch (reason) {
+      // Hata yutulursa kullanıcı bulguyu kapattığını sanır.
+      setError(reason instanceof Error ? reason.message : 'Bulgu güncellenemedi');
+    }
+  };
 
   useEffect(() => {
     if (!projectId) return;
@@ -55,6 +75,7 @@ export function AuditPanel({ projectId }: { projectId: string }) {
         <div className="budget-block">
           <h4>Bulgular</h4>
           <ul className="audit-findings">
+            {error !== '' ? <li className="audit-error">{error}</li> : null}
             {report.findings.map((finding) => (
               <li key={finding.findingId} className={`audit-finding audit-finding--${severityTone(finding.severity)}`}>
                 <div className="audit-finding__head">
@@ -68,6 +89,24 @@ export function AuditPanel({ projectId }: { projectId: string }) {
                     : null}
                   {finding.taskId ? <code>{finding.taskId.slice(0, 8)}</code> : null}
                 </div>
+                {finding.status === 'open' || finding.status === 'correction_pending' ? (
+                  <div className="audit-finding__actions">
+                    <input
+                      aria-label={`Gerekçe ${finding.findingId}`}
+                      placeholder="Kapatma gerekçesi"
+                      value={notes[finding.findingId] ?? ''}
+                      onChange={(event) => setNotes((current) => ({
+                        ...current, [finding.findingId]: event.target.value,
+                      }))}
+                    />
+                    <button type="button" onClick={() => void decide(finding.findingId, 'resolved')}>
+                      Kapat
+                    </button>
+                    <button type="button" onClick={() => void decide(finding.findingId, 'dismissed')}>
+                      Reddet
+                    </button>
+                  </div>
+                ) : null}
               </li>
             ))}
           </ul>

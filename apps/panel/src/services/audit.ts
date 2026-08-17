@@ -1,5 +1,5 @@
 // Denetim ekranı IO (docs/08 → Denetim Ekranı).
-import { getJsonOr, type RequestOptions } from './http.js';
+import { getJsonOr, requestJson, type RequestOptions } from './http.js';
 
 export type AuditFindingStatus = 'open' | 'correction_pending' | 'resolved' | 'dismissed';
 
@@ -65,4 +65,25 @@ export function severityTone(severity: string): Severity {
   if (severity === 'critical' || severity === 'high') return 'critical';
   if (severity === 'medium' || severity === 'warning') return 'warning';
   return 'neutral';
+}
+
+/**
+ * Bulguyu kapatır / reddeder / yeniden açar.
+ *
+ * NEDEN VAR: denetim ekranı salt-okunurdu — sunucu bulguyu kapatabiliyordu
+ * ama kullanıcı kapatamıyordu; yani iş akışı panelde yarım kalıyordu.
+ * Gerekçe zorunludur: gerekçesiz kapatma "neden kapandı" sorusunu cevapsız
+ * bırakır (sunucu da bunu reddeder).
+ */
+export async function resolveFinding(
+  projectId: string,
+  findingId: string,
+  input: Readonly<{ status: AuditFindingStatus; resolution?: string; correctiveTaskId?: string }>,
+  options: RequestOptions = {},
+): Promise<unknown> {
+  return requestJson(
+    `/projects/${projectId}/audit/findings/${findingId}`,
+    { ...options, method: 'PATCH', body: input },
+    'Bulgu güncellenemedi',
+  );
 }
