@@ -1,199 +1,34 @@
+// Çalışma alanı ekranı — SALT GÖRÜNÜM (docs/09 MVVM).
+//
+// Durum, veri yükleme, yoklama, canlı bağlantı ve eylemler
+// `useWorkspaceViewModel` içindedir; burada iş mantığı bulunmaz.
 import { useHealth } from './viewmodels/useHealth.js';
-import { useEffect, useMemo, useRef, useState } from 'react';
 import { TaskCanvas } from './components/TaskCanvas.js';
 import { FileEditor } from './components/FileEditor.js';
 import { ProvidersPage } from './components/ProvidersPage.js';
 import { BudgetPanel } from './components/BudgetPanel.js';
 import { AuditPanel } from './components/AuditPanel.js';
 import { NotificationBell } from './components/NotificationBell.js';
-import { fetchBudgetReport, EMPTY_BUDGET_REPORT, type BudgetReport } from './services/budget.js';
-import { fetchAuditReport, EMPTY_AUDIT_REPORT, type AuditReport } from './services/audit.js';
-import { fetchProviders, type Provider } from './services/providers.js';
-import {
-  appendTimelineEvent, countTaskStatuses, pickSelectedFile, type TimelineEvent,
-} from './viewmodels/workspace-logic.js';
-import {
-  connectionLabel, nextReconnectDelay, resumeCursor, type ConnectionState,
-} from './viewmodels/live-connection.js';
-import {
-  askNarrator as askNarratorService,
-  createProject as createProjectService,
-  fetchApiArtifacts, fetchFiles, fetchProject, fetchProjects, fetchProviderHealth,
-  fetchTasks, fetchUsage, sendUserCommand,
-  updateProjectStatus as updateProjectStatusService,
-  type ApiArtifact, type FileIndex, type Project, type ProviderHealth, type Task, type Usage,
-} from './services/projects.js';
-
-
-const apiBase = import.meta.env.VITE_API_URL ?? 'http://localhost:4000';
+import { connectionLabel } from './viewmodels/live-connection.js';
+import { useWorkspaceViewModel } from './viewmodels/useWorkspaceViewModel.js';
 
 export default function App() {
   const { health, state, status } = useHealth();
-  const [page, setPage] = useState<'workspace' | 'providers'>(() => new URLSearchParams(window.location.search).get('page') === 'providers' ? 'providers' : 'workspace');
-  const [budgetReport, setBudgetReport] = useState<BudgetReport>(EMPTY_BUDGET_REPORT);
-  const [auditReport, setAuditReport] = useState<AuditReport>(EMPTY_AUDIT_REPORT);
-  const [providerList, setProviderList] = useState<Provider[]>([]);
-  const [projectId, setProjectId] = useState(() => new URLSearchParams(window.location.search).get('project') ?? '');
-  const [tasks, setTasks] = useState<Task[]>([]);
-  const [projects, setProjects] = useState<Project[]>([]);
-  const [projectDraft, setProjectDraft] = useState({ name: '', type: 'web', budget: '10' });
-  const [projectStatusMessage, setProjectStatusMessage] = useState('');
-  const [projectStatus, setProjectStatus] = useState<string>('');
-  const [usage, setUsage] = useState<Usage | null>(null);
-  const [files, setFiles] = useState<FileIndex[]>([]);
-  const [providerHealth, setProviderHealth] = useState<ProviderHealth[]>([]);
-  const [apiArtifacts, setApiArtifacts] = useState<ApiArtifact[]>([]);
-  const [selectedFile, setSelectedFile] = useState<string | undefined>();
-  const [events, setEvents] = useState<TimelineEvent[]>([]);
-  const [connection, setConnection] = useState<ConnectionState>('offline');
-  const eventsRef = useRef<TimelineEvent[]>([]);
-  const [message, setMessage] = useState('');
-  const [messageStatus, setMessageStatus] = useState('');
-  const [apiPath, setApiPath] = useState('/health');
-  const [apiResponse, setApiResponse] = useState('');
-  const [narratorQuestion, setNarratorQuestion] = useState('Bunu nasıl yaptın?');
-  const [narratorResult, setNarratorResult] = useState<{ answer: string; evidenceRefs: string[] } | null>(null);
-  const [tab, setTab] = useState<'tasks' | 'timeline' | 'canvas' | 'files' | 'api' | 'preview'>('tasks');
-
-  useEffect(() => {
-    if (projectId) return;
-    void fetchProjects().then(setProjects);
-  }, [projectId]);
-
-  useEffect(() => {
-    if (!projectId) return;
-    let active = true;
-    const load = async () => {
-      const [project, nextTasks, nextUsage, nextFiles, health, artifacts] = await Promise.all([
-        fetchProject(projectId), fetchTasks(projectId), fetchUsage(projectId),
-        fetchFiles(projectId), fetchProviderHealth(projectId), fetchApiArtifacts(projectId),
-      ]);
-      if (!active) return;
-      if (project) setProjectStatus(project.status);
-      setTasks(nextTasks);
-      setUsage(nextUsage);
-      setFiles(nextFiles);
-      setSelectedFile((current) => pickSelectedFile(current, nextFiles));
-      setProviderHealth(health);
-      setApiArtifacts(artifacts);
-    };
-    void load();
-    const timer = window.setInterval(() => { void load(); }, 2_000);
-    return () => { active = false; window.clearInterval(timer); };
-  }, [projectId]);
-
-  // Kopan bağlantı sessizce ölmemeli: üstel geri çekilmeyle yeniden bağlanır
-  // ve görülen en yüksek seq'ten devam eder (baştan akıtmak çift kayıt üretir).
-  useEffect(() => {
-    if (!projectId || typeof WebSocket === 'undefined') return;
-    let active = true;
-    let socket: WebSocket | undefined;
-    let timer: number | undefined;
-    let attempt = 0;
-
-    const connect = () => {
-      if (!active) return;
-      setConnection(attempt === 0 ? 'connecting' : 'retrying');
-      socket = new WebSocket(`${apiBase.replace(/^http/, 'ws')}/events`);
-
-      socket.onopen = () => {
-        attempt = 0;
-        setConnection('open');
-        socket?.send(JSON.stringify({
-          event: 'subscribe',
-          data: { projectId, afterSeq: resumeCursor(eventsRef.current) },
-        }));
-      };
-
-      socket.onmessage = (message) => {
-        try {
-          const next = JSON.parse(message.data as string) as TimelineEvent;
-          setEvents((current) => {
-            const updated = appendTimelineEvent(current, next);
-            eventsRef.current = updated;
-            return updated;
-          });
-        } catch { /* bozuk çerçeveler yok sayılır */ }
-      };
-
-      const retry = () => {
-        if (!active) return;
-        setConnection('retrying');
-        timer = window.setTimeout(connect, nextReconnectDelay(attempt));
-        attempt += 1;
-      };
-      socket.onclose = retry;
-      socket.onerror = () => socket?.close();
-    };
-
-    connect();
-    return () => {
-      active = false;
-      if (timer !== undefined) window.clearTimeout(timer);
-      socket?.close();
-      setConnection('offline');
-    };
-  }, [projectId]);
-
-  // docs/08 bildirim kaynakları: bütçe, sağlayıcı sağlığı, bekleyen soru, tırmandırma.
-  useEffect(() => {
-    let active = true;
-    const load = () => {
-      void fetchProviders().then((next) => { if (active) setProviderList(next); });
-      if (!projectId) return;
-      void fetchBudgetReport(projectId).then((next) => { if (active) setBudgetReport(next); });
-      void fetchAuditReport(projectId).then((next) => { if (active) setAuditReport(next); });
-    };
-    load();
-    const timer = window.setInterval(load, 15_000);
-    return () => { active = false; window.clearInterval(timer); };
-  }, [projectId]);
-
-  const statusCounts = useMemo(() => countTaskStatuses(tasks), [tasks]);
-  const sendCommand = async () => {
-    if (!projectId || message.trim() === '') return;
-    setMessageStatus('Gönderiliyor…');
-    try {
-      await sendUserCommand(projectId, message);
-      setMessage('');
-      setMessageStatus('Mesaj gönderildi');
-    } catch (reason) {
-      setMessageStatus(reason instanceof Error ? reason.message : 'Mesaj gönderilemedi');
-    }
-  };
-  const runApiRequest = async () => {
-    setApiResponse('Çalışıyor…');
-    try { const response = await fetch(`${apiBase}${apiPath}`); setApiResponse(`${response.status} ${await response.text()}`); }
-    catch { setApiResponse('İstek başarısız'); }
-  };
-  const askNarrator = async () => {
-    if (!projectId || narratorQuestion.trim() === '') return;
-    try {
-      setNarratorResult(await askNarratorService(projectId, narratorQuestion));
-    } catch {
-      setNarratorResult(null);
-    }
-  };
-  const updateProjectStatus = async (status: 'paused' | 'running' | 'archived') => {
-    try {
-      await updateProjectStatusService(projectId, status);
-      setProjectStatus(status);
-    } catch (reason) {
-      setProjectStatusMessage(reason instanceof Error ? reason.message : 'Durum değiştirilemedi');
-    }
-  };
-  const createProject = async () => {
-    try {
-      const project = await createProjectService({
-        name: projectDraft.name, type: projectDraft.type, budgetUsd: projectDraft.budget,
-      });
-      setProjects((current) => [...current, project]);
-      setProjectId(project.project_id);
-      setProjectStatusMessage('Proje oluşturuldu.');
-    } catch (reason) {
-      setProjectStatusMessage(reason instanceof Error ? reason.message : 'Proje oluşturulamadı');
-    }
-  };
+  const {
+    page, setPage,
+    projectId, setProjectId,
+    budgetReport, auditReport, providerList,
+    tasks, projects, projectDraft, setProjectDraft,
+    projectStatusMessage, projectStatus,
+    usage, files, providerHealth, apiArtifacts,
+    selectedFile, setSelectedFile,
+    events, connection, statusCounts,
+    message, setMessage, messageStatus,
+    apiPath, setApiPath, apiResponse,
+    narratorQuestion, setNarratorQuestion, narratorResult,
+    tab, setTab,
+    sendCommand, runApiRequest, askNarrator, updateProjectStatus, createProject,
+  } = useWorkspaceViewModel();
 
   if (page === 'providers') {
     return (
