@@ -97,5 +97,17 @@
   {
     "symbol": "apps/server/src/executor-composition.ts:createResumeUserAnswerOperation",
     "reason": "bootstrap parcasi; nihai birlestirme baglayacak"
+  },
+  {
+    "symbol": "apps/server/src/orchestration-bootstrap.ts:bootstrapOrchestrationRuntime",
+    "reason": "motor bootstrapi; main.ts baglantisi bir sonraki adimda"
+  },
+  {
+    "symbol": "apps/server/src/orchestration-assembly.ts:createOrchestrationComposition",
+    "reason": "motor bootstrapi; main.ts baglantisi bir sonraki adimda"
+  },
+  {
+    "symbol": "apps/server/src/late-binding.ts:createLateBoundPort",
+    "reason": "motor bootstrapi; main.ts baglantisi bir sonraki adimda"
   }
 ]
