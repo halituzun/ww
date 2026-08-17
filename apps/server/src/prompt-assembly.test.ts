@@ -119,4 +119,29 @@ describe('assemblePromptMessages', () => {
     const text = messages.map((message) => message.content).join('\n');
     expect(text).toMatch(/belirtilmedi|verilmedi/i);
   });
+
+  // ASIL KUSUR: boş hedef listesi worker'a "(kısıt yok)" diye gösteriliyordu.
+  // Oysa executor boş listeyi "hiçbir dosya yazılamaz" diye uygular ve
+  // write_file'ı "mühürlü görev hedeflerinde değil" ile reddeder. Worker
+  // yalana güvenip yazmayı denedi, reddedildi ve görev takıldı.
+  it('bos hedef listesini kisit yok diye sunmaz', () => {
+    const messages = assemblePromptMessages({
+      template: 'Sen bir worker agent’sın.',
+      brief: brief({ targetFiles: [] }) as never,
+      contextPack: '',
+    });
+    const text = messages.map((message) => message.content).join('\n');
+
+    expect(text).not.toContain('Hedef dosyalar:\n- (kısıt yok)');
+    expect(text).toMatch(/hedef dosya (bildirilmedi|yok)/i);
+  });
+
+  it('hedef dosyalar bildirildiginde onlari listeler', () => {
+    const messages = assemblePromptMessages({
+      template: 'Sen bir worker agent’sın.',
+      brief: brief({ targetFiles: ['src/colors.ts'] }) as never,
+      contextPack: '',
+    });
+    expect(messages.map((message) => message.content).join('\n')).toContain('src/colors.ts');
+  });
 });

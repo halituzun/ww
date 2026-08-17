@@ -88,7 +88,13 @@ export function assemblePromptMessages(input: AssembleInput): PromptMessage[] {
   // Kapsam bilgisi ayrı bir user mesajında: worker'ın hedef dosya ve araç
   // sınırını görmesi, sandbox reddine düşmeden doğru davranması için gerekir.
   const scope = [
-    `Hedef dosyalar:\n${list(brief.targetFiles, '- (kısıt yok)')}`,
+    // "(kısıt yok)" YALANDI: executor boş listeyi "hiçbir dosya yazılamaz"
+    // diye uygular ve write_file'ı reddeder. Worker bu yalana güvenip yazmayı
+    // deniyor, reddediliyor ve görev takılıyordu.
+    `Hedef dosyalar:\n${list(
+      brief.targetFiles,
+      '- (hedef dosya bildirilmedi — yazma araçları bu görevde kullanılamaz)',
+    )}`,
     `İzinli araçlar:\n${list(brief.allowedTools, '- (kısıt yok)')}`,
     `Token bütçesi: ${brief.tokenBudget === 0 ? 'sınırsız' : brief.tokenBudget}`,
   ].join('\n\n');
