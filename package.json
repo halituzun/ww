@@ -7,11 +7,12 @@
   },
   "scripts": {
     "build": "turbo build",
-    "test": "turbo test",
+    "test": "turbo test --concurrency=1",
     "lint": "turbo lint",
     "dev": "turbo dev",
     "wiring:check": "pnpm --filter @ww/wiring-check build && node packages/wiring-check/dist/cli.js",
-    "db:clean-tests": "node -e \"Promise.all([import('./packages/db/dist/test-cleanup.js'),import('./packages/db/dist/redis-cleanup.js')]).then(([a,b])=>Promise.all([a.dropLeakedTestDatabases({olderThanMs:3600000}),b.dropLeakedRedisKeys()]).then(([x,y])=>console.log('DB:',x.length,'Redis anahtar:',y)))\""
+    "db:clean-tests": "node -e \"Promise.all([import('./packages/db/dist/test-cleanup.js'),import('./packages/db/dist/redis-cleanup.js')]).then(([a,b])=>Promise.all([a.dropLeakedTestDatabases({olderThanMs:3600000}),b.dropLeakedRedisKeys()]).then(([x,y])=>console.log('DB:',x.length,'Redis anahtar:',y)))\"",
+    "test:parallel": "turbo test"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",

@@ -49,22 +49,48 @@ gerçek ağ gidiş-dönüşü). Yani sağlayıcı zinciri uçtan uca çalışıy
 kabul senaryosu hâlâ açık: gerçek bir PROJE koşusu için orkestrasyon runtime'ı
 gerekiyor (aşağı bakın).
 
-**EN KRİTİK AÇIK (2026-08-17 keşfi):** Agent orkestrasyon runtime'ı **hiç
-başlatılmıyor.** `registerPhase9RuntimeConfig` hiçbir üretim kodundan
-çağrılmıyor ve `WW_PHASE8_RUNTIME_ENABLED` hiçbir yerde ayarlanmıyor; ayrıca
-`SchedulerWorker` hiç kurulmuyor. Server REST, WebSocket, migration, recovery
-ve sağlayıcı sağlık taramasını koşar — ama görev kuyruğunu tüketen kimse
-yoktur, yani panelden açılan bir projenin görevleri sonsuza dek `queued`
-kalır. Durum artık açılış logunda ve `GET /runtime` ucunda görünür.
-Faz 1'in kabul senaryosu testlerde geçer (orkestratör doğrudan çağrılır);
-eksik olan, çalışan sunucunun bu döngüyü başlatmasıdır.
+**ÇÖZÜLDÜ (2026-08-17):** Orkestrasyon runtime'ı artık açılışta başlıyor
+(`GET /runtime` → `enabled`), kuyruğu `TaskPumpService` tüketiyor ve model
+gerçekten çağrılıyor: DeepSeek satranç tahtası bileşenini üretti, kullanım
+kaydı `api_usage`'a yazıldı (102 token, ~$0.0002) ve görev `verifying`
+aşamasına ulaştı.
 
-**Bu özeti okuyan ajan için tek kritik gerçek:** Platform bugüne kadar **hiç gerçek
-LLM API'sine bağlanmadı.** `secrets/` dizini yok, `api_providers`'ta kayıtlı tek
-sağlayıcı `mock`, `api_usage` tablosunda sıfır gerçek çağrı var. Tüm doğrulama
-`MockProvider` üzerinden yapıldı. Faz 0-2 zaten mock ile tanımlı olduğu için
-tamamdır; Faz 3-6'nın kabul senaryoları ise açıkça gerçek API ve insanlı panel
-koşusu istediğinden **kod bitmiş olsa da faz kapanmamıştır**.
+**EN KRİTİK AÇIK (2026-08-17): görev kirası sahipliği.** Worker'ın araç
+çağrısı executor'a ulaşıyor ama `write_file` şu hatayla düşüyor:
+`Current Redis task lease/fence bulunamadı`. Sebep iki paket arasındaki
+tasarım boşluğudur:
+
+- `AssignmentService.assign()` görev kirasını `assignment:<attemptId>`
+  sahibiyle alır, attempt satırına `leaseOwner`/`leaseFence` yazar ve
+  **assign biterken kirayı bırakır**.
+- `durable-access` ise araç çalıştırılırken kiranın **hâlâ canlı ve aynı
+  sahiple** durmasını şart koşar.
+
+Yani iş, kirayı elinde tutan biri tarafından koşulmalıdır; `SchedulerWorker`
+bunun için tasarlanmıştı ama yalnızca ATAMA yapıyor, yaşam döngüsünü
+koşturmuyor. Karar verilmesi gereken: (a) kirayı `assign` sonrası koşucuya
+devretmek, (b) yaşam döngüsünü kiranın içinde koşturmak, (c) executor'ın
+kontrolünü "attempt hâlâ current" invaryantına dayandırmak. Bu seçim
+yapılmadan hiçbir görev dosya yazamaz.
+
+**Kapı güvenilirliği (2026-08-17):** `pnpm test` artık `--concurrency=1` ile
+koşar. Paralel koşumda ClickHouse yükü altında zamanlama duyarlı entegrasyon
+testleri (plans, effects, health e2e) rastgele düşüyordu; her biri izole
+geçtiği için bu bir ürün hatası değil, kapı gürültüsüdür — ve gürültülü kapı,
+gerçek kırılmayı gizler. Hızlı yerel döngü için `pnpm test:parallel` durur.
+
+**Bu özeti okuyan ajan için tek kritik gerçek (2026-08-17 güncellendi):**
+Platform artık gerçek LLM API'siyle çalışıyor. `api_providers`'ta `deepseek`
+kayıtlı ve etkin, sağlık taraması onu `ok` raporluyor, `api_usage`'da gerçek
+tamamlama çağrıları var. Model, istenen React bileşenini fiilen üretti.
+
+Ama **hâlâ hiçbir görev dosya yazamadı**: yukarıdaki görev kirası açığı
+`write_file`'ı engelliyor. Yani zincir "model cevap verdi"ye kadar gerçek,
+"iş teslim edildi"ye kadar değil. Faz 3-6'nın kabul senaryoları gerçek API
+ve insanlı panel koşusu istediğinden **kod bitmiş olsa da faz kapanmamıştır**.
+
+Ayrıca çapraz kontrol zayıf: worker ve verifier aynı sağlayıcıda (yalnızca
+DeepSeek yapılandırılmış). Faz 4 konseyi en az üç sağlayıcı ister.
 
 **Doğrulama komutları:**
 
