@@ -921,6 +921,20 @@ export async function setHeartbeat(
   await r.set(heartbeatKey(agentId), 'alive', { PX: ttlMs });
 }
 
+/**
+ * Görev canlılık işareti. Kurtarma agent VE görev heartbeat'ine bakar (OR):
+ * görev işareti yazılmazsa ÇALIŞAN iş bile daima "ölü" sayılır ve dosya
+ * kilidi devralınır.
+ */
+export async function setTaskHeartbeat(
+  r: WwRedis,
+  taskId: string,
+  ttlMs = 30_000,
+): Promise<void> {
+  positiveInteger(ttlMs, 'ttlMs');
+  await r.set(`ww:hb:task:${EntityIdSchema.parse(taskId)}`, 'alive', { PX: ttlMs });
+}
+
 export async function checkHeartbeat(r: WwRedis, agentId: string): Promise<boolean> {
   return await r.exists(heartbeatKey(agentId)) === 1;
 }

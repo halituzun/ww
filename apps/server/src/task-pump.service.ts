@@ -4,12 +4,13 @@
 // düşen görevler sonsuza dek 'queued' kalıyordu — kuyruğu tüketip
 // `orchestrate` çağıran hiçbir üretim kodu yoktu. Kayıt ≠ tüketim.
 import { Inject, Injectable, Logger, Optional, type OnModuleDestroy, type OnModuleInit } from '@nestjs/common';
-import { ackQueue, createRedis, ensureGroup, queueKey, readQueue, reclaimQueue } from '@ww/db';
-import { EntityIdSchema, type EntityId } from '@ww/shared';
+import { ackQueue, createRedis, ensureGroup, getLatestTask, queueKey, readQueue, reclaimQueue, setHeartbeat, setTaskHeartbeat } from '@ww/db';
+import { EntityIdSchema, NIL_UUID, type EntityId } from '@ww/shared';
 import type { WwRedis } from '@ww/db';
 import { PHASE8_RUNTIME } from './runtime-composition.js';
 import { SERVER_DATABASE, type ServerDatabase } from './orchestration.module.js';
 import { pumpOnce, type PumpItem } from './task-pump.js';
+import { withHeartbeat } from './work-heartbeat.js';
 
 export const TASK_PUMP_INTERVAL_MS = 3_000;
 const PUMP_GROUP = 'scheduler';
@@ -84,7 +85,11 @@ export class TaskPumpService implements OnModuleInit, OnModuleDestroy {
       const result = await pumpOnce({
         claim: async () => this.#claim(projectId),
         ack: async (msgId) => { await ackQueue(redis, stream, PUMP_GROUP, msgId); },
-        orchestrate: (input) => runtime.orchestrate(input),
+        // Canlılık işareti olmadan kurtarma ÇALIŞAN işi ölü sanıp dosya
+        // kilidini devralıyordu.
+        orchestrate: (call) => this.#withTaskHeartbeat(
+          projectId, call.taskId, () => runtime.orchestrate(call),
+        ),
         onResult: (taskId, status) => this.#logger.log(`görev ${taskId}: ${status}`),
         onError: (taskId, reason) => this.#logger.warn(`görev ${taskId} işlenemedi: ${String(reason)}`),
       });
@@ -102,6 +107,32 @@ export class TaskPumpService implements OnModuleInit, OnModuleDestroy {
       ? createRedis()
       : Promise.resolve(this.#database.redis);
     return this.#redis;
+  }
+
+  /** Görevin worker/verifier agent'ları ve görevin kendisi için canlılık işareti. */
+  async #withTaskHeartbeat<T>(
+    projectId: EntityId,
+    taskId: EntityId,
+    run: () => Promise<T>,
+  ): Promise<T> {
+    const redis = await this.#connect();
+
+    return withHeartbeat({
+      // Agent'lar orchestrate'in İÇİNDE atanır; listeyi önceden okumak boş
+      // kalır ve atanan agent hiç canlılık işareti almazdı.
+      beat: async () => {
+        const task = await getLatestTask(this.#database.ch, projectId, taskId);
+        const agentIds = [task?.worker_agent_id, task?.verifier_agent_id]
+          .filter((agentId): agentId is string => typeof agentId === 'string' && agentId !== NIL_UUID);
+        await Promise.all([
+          setTaskHeartbeat(redis, taskId),
+          ...agentIds.map((agentId) => setHeartbeat(redis, agentId)),
+        ]);
+      },
+      setTimer: (fn, delayMs) => setInterval(fn, delayMs) as unknown as number,
+      clearTimer: (handle) => clearInterval(handle as unknown as NodeJS.Timeout),
+      onError: (reason) => this.#logger.warn(`canlılık işareti yazılamadı: ${String(reason)}`),
+    }, run);
   }
 
   async #claim(projectId: EntityId): Promise<readonly PumpItem[]> {

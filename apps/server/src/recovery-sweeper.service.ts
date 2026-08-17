@@ -19,10 +19,13 @@ export class RecoverySweeperService implements OnModuleInit, OnModuleDestroy {
   }
 
   onModuleInit(): void {
-    if (process.env['WW_DISABLE_RECOVERY_SWEEP'] === '1') {
-      this.#logger.log('kurtarma süpürücüsü WW_DISABLE_RECOVERY_SWEEP=1 ile kapatıldı');
-      return;
-    }
+    // VARSAYILAN KAPALI. Süpürücü canlı koşuda ÇALIŞAN görevi düşürüp
+    // agent'larını boşa aldı ve dosya kilidini devraldı
+    // ("file lock renew foreign owner ile catisti"). Kurtarma "iş canlı mı"
+    // sorusunu heartbeat'ten okuyor; agent heartbeat'i ancak atamadan SONRA
+    // yazılabildiği için açılış penceresinde çalışan iş ölü görünüyor.
+    // Güvenilir canlılık sinyali kurulana kadar açıkça açılmalıdır.
+    if (process.env['WW_ENABLE_RECOVERY_SWEEP'] !== '1') return;
     const projectId = process.env['WW_RUNTIME_PROJECT_ID'];
     if (projectId === undefined || projectId.trim() === '') return;
     this.#timer = setInterval(() => { void this.sweep(projectId); }, RECOVERY_SWEEP_INTERVAL_MS);

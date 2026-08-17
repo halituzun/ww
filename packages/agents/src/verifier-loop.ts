@@ -1,4 +1,5 @@
 import { normalizeVerdictArguments } from './verdict-normalize.js';
+import { selectVerdictCall } from './verdict-selection.js';
 import { POLICY_RULE_IDS, StructuredVerdictV1Schema, type AssignmentAttemptV1, type EntityId, type PromptInputSnapshotV1, type StructuredVerdictV1, type TaskBriefV1, type PromptMessageV1 } from '@ww/shared';
 import type { ModelRouter } from '@ww/providers';
 
@@ -27,10 +28,9 @@ const VERDICT_TOOL_PARAMETERS: Record<string, unknown> = {
 
 export async function runVerifierLoop(input: VerifierInput): Promise<VerifierResult> {
   const result = await input.router.complete(input.modelRef, { messages: [...input.prompt], tools: [{ name: 'submit_verdict', description: 'Submit strict verifier verdict', parameters: VERDICT_TOOL_PARAMETERS }], meta: { projectId: input.brief.projectId, agentId: input.attempt.verifierAgentId, taskId: input.brief.taskId, purpose: 'completion', invocationId: input.snapshot.invocationId, taskBriefId: input.brief.taskBriefId, assignmentAttemptId: input.attempt.assignmentAttemptId, promptInputSnapshotId: input.snapshot.promptInputSnapshotId } });
-  if (result.result.toolCalls.length !== 1 || result.result.toolCalls[0]?.name !== 'submit_verdict') {
-    throw new Error('verifier yalnız tek bir submit_verdict çağırmalıdır');
-  }
-  const tool = result.result.toolCalls[0];
+  // Model verdikti birden çok kez gönderebiliyor; aynı içerik hoş görülür,
+  // çelişkili içerik reddedilir (belirsizlik sessizce çözülmez).
+  const tool = selectVerdictCall(result.result.toolCalls as never);
   const verdict = parseStrictVerdictArguments(tool.args);
   return { verdict, invocationId: input.snapshot.invocationId };
 }
