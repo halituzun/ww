@@ -326,3 +326,9 @@ dd {
 .fihrist__tasks { list-style: none; padding: 0; display: flex; flex-wrap: wrap; gap: 8px; }
 .fihrist__error { color: var(--danger, #d95926); }
 .fihrist__narrative { margin-top: 8px; white-space: pre-wrap; }
+
+
+/* Zaman çizelgesi kaydırıcısı (docs/11 Faz 5). */
+.scrubber { margin-bottom: 12px; }
+.scrubber input[type="range"] { width: 100%; }
+.scrubber__meta { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; font-size: 13px; }

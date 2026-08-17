@@ -9,6 +9,7 @@ import {
   appendTimelineEvent, countTaskStatuses, pickSelectedFile, type TimelineEvent,
 } from './workspace-logic.js';
 import { createLiveEventSubscription } from './live-subscription.js';
+import { replayAt } from './timeline-replay.js';
 import type { ConnectionState } from './live-connection.js';
 import { fetchBudgetReport, EMPTY_BUDGET_REPORT, type BudgetReport } from '../services/budget.js';
 import { fetchAuditReport, EMPTY_AUDIT_REPORT, type AuditReport } from '../services/audit.js';
@@ -62,6 +63,9 @@ export function useWorkspaceViewModel() {
   const [narratorResult, setNarratorResult] = useState<
     { answer: string; evidenceRefs: string[] } | null
   >(null);
+  // docs/11 Faz 5: geçmişe kaydırıcı. Sonsuz (Infinity) "canlı" demektir;
+  // yeni olay geldikçe kullanıcı geçmişten canlıya sürüklenmez.
+  const [timelineCursor, setTimelineCursor] = useState(Number.POSITIVE_INFINITY);
   const [tab, setTab] = useState<'tasks' | 'timeline' | 'canvas' | 'files' | 'api' | 'preview'>('tasks');
 
   useEffect(() => {
@@ -190,6 +194,8 @@ export function useWorkspaceViewModel() {
     usage, files, providerHealth, apiArtifacts,
     selectedFile, setSelectedFile,
     events, connection, statusCounts,
+    timelineCursor, setTimelineCursor,
+    replay: replayAt(events, timelineCursor),
     message, setMessage, messageStatus,
     apiPath, setApiPath, apiResponse,
     narratorQuestion, setNarratorQuestion, narratorResult,
