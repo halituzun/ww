@@ -47,10 +47,6 @@
     "reason": "deterministik testler için; üretimde gerçek sağlayıcı kullanılır"
   },
   {
-    "symbol": "packages/scheduler/src/plan-approval-service.ts:PlanApprovalService",
-    "reason": "docs/03 konsey/plan onayı: yazıldı, bağlanmadı — açık iş"
-  },
-  {
     "symbol": "packages/scheduler/src/replanning-service.ts:ReplanningService",
     "reason": "docs/03 yeniden planlama: yazıldı, bağlanmadı — açık iş"
   }

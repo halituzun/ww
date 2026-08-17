@@ -1,6 +1,8 @@
 import { randomUUID } from 'node:crypto';
-import { Body, Controller, Get, Inject, Injectable, Param, Post, Req } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Get, Inject, Injectable, Param, Post, Req } from '@nestjs/common';
 import { createPlan, getLatestProject, listLatestAgents, listLatestPlansByStatus } from '@ww/db';
+import { PlanApprovalError, PlanApprovalService } from '@ww/scheduler';
+import { parseApprovalInput } from './plan-approval.service.js';
 import type { EntityId } from '@ww/shared';
 import { parseLocalSession, type LocalSessionRequest } from './auth/local-session.js';
 import { SERVER_DATABASE, type ServerDatabase } from './orchestration.module.js';
@@ -28,6 +30,29 @@ export class PlanApplicationService {
     return createPlan(this.database.ch, row as never);
   }
 
+  /**
+   * Planı onaylar ya da reddeder (docs/08 "plana müdahale"). Servis yazılıydı
+   * ama çağıran yoktu: kullanıcı planı ne onaylayabiliyor ne reddedebiliyordu.
+   */
+  async decide(projectId: string, planId: string, input: ReturnType<typeof parseApprovalInput>) {
+    const service = new PlanApprovalService(this.database.ch);
+    try {
+      return await service.apply({
+        projectId: projectId as EntityId,
+        planId: planId as EntityId,
+        approved: input.approved,
+        // Kararı KİMİN verdiği iz bırakmalı; onay sahipsiz olamaz.
+        actor: 'local-user',
+        now: new Date().toISOString(),
+        ...(input.note === undefined ? {} : { note: input.note }),
+      });
+    } catch (reason) {
+      // Geçersiz durum geçişi kullanıcı hatasıdır; 500 sebebi gizler.
+      if (reason instanceof PlanApprovalError) throw new BadRequestException(reason.message);
+      throw reason;
+    }
+  }
+
   async list(projectId: string) {
     const approved = await listLatestPlansByStatus(this.database.ch, projectId as EntityId, 'approved');
     return approved;
@@ -51,5 +76,16 @@ export class PlansController {
   @Get()
   list(@Param('projectId') projectId: string) {
     return this.plans.list(projectId);
+  }
+
+  @Post(':planId/approval')
+  decide(
+    @Req() request: LocalSessionRequest,
+    @Param('projectId') projectId: string,
+    @Param('planId') planId: string,
+    @Body() body: unknown,
+  ) {
+    parseLocalSession(request);
+    return this.plans.decide(projectId, planId, parseApprovalInput(body));
   }
 }
