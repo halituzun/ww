@@ -1,7 +1,9 @@
-import { Controller, Get, Inject, Param } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Get, Inject, Param, Post, Req } from '@nestjs/common';
 import { z } from 'zod';
 import { AUDIT_FINDING_STATUSES } from '@ww/shared';
-import { listLatestAuditFindingsByStatus } from '@ww/db';
+import { createAuditFinding, listLatestAuditFindingsByStatus } from '@ww/db';
+import { parseLocalSession, type LocalSessionRequest } from './auth/local-session.js';
+import { buildAuditFinding, parseFindingInput } from './audit-finding.service.js';
 import { SERVER_DATABASE, type ServerDatabase } from './orchestration.module.js';
 
 const ProjectId = z.string().uuid();
@@ -49,6 +51,31 @@ export class AuditController {
       // devreye girdiği, denetçi bulgularından ayrı bir sinyaldir.
       brakeTrips: escalations.filter((entry) => entry.brakeKind !== '').length,
     };
+  }
+
+  /**
+   * Denetim bulgusu kaydeder (docs/03 standart denetçileri).
+   *
+   * Bulguyu YARATAN hiçbir üretim yolu yoktu: ekran kalıcı olarak boştu ve
+   * boş bir denetim ekranı "ihlal yok" der — oysa denetim hiç çalışmamıştır.
+   */
+  @Post('findings')
+  async record(
+    @Req() request: LocalSessionRequest,
+    @Param('projectId') projectId: string,
+    @Body() body: unknown,
+  ) {
+    parseLocalSession(request);
+    const id = ProjectId.parse(projectId);
+    const now = new Date().toISOString();
+    const finding = buildAuditFinding(id, parseFindingInput(body), now);
+    try {
+      return await createAuditFinding(this.#database.ch, { finding: finding as never, updated_at: now });
+    } catch (reason) {
+      // Şema ihlali kullanıcı hatasıdır (ör. düzeltme bekleyen bulguda görev yok).
+      const message = reason instanceof Error ? reason.message : String(reason);
+      throw new BadRequestException(message);
+    }
   }
 
   /**
