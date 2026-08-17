@@ -1,11 +1,19 @@
-import { EntityIdSchema, type TaskBriefV1, type AssignmentAttemptV1, type PromptInputSnapshotV1, type EntityId, type JsonObject, type JsonValue, type PromptMessageV1 } from '@ww/shared';
+import { toolCallEntityId } from './tool-call-id.js';
+import { type TaskBriefV1, type AssignmentAttemptV1, type PromptInputSnapshotV1, type EntityId, type JsonObject, type JsonValue, type PromptMessageV1 } from '@ww/shared';
 import type { ModelRouter, NormalizedToolCall, ToolDef } from '@ww/providers';
 
 export type WorkerStopReason = 'question' | 'report' | 'deadline' | 'budget' | 'failure';
 export interface WorkerToolPort { definitions(): readonly ToolDef[]; validate(name: string, args: unknown): unknown; execute(call: Readonly<{ callId: EntityId; name: string; args: unknown; occurredAt: string }>): Promise<JsonValue>; }
 export interface WorkerCommunicationPort { question(input: Readonly<{ projectId: EntityId; taskId: EntityId; taskBriefId: EntityId; assignmentAttemptId: EntityId; callId: EntityId; text: string }>): Promise<Readonly<{ messageId: EntityId }>>; report(summary: string, evidenceRefs: readonly string[], provenance: Readonly<{ projectId: EntityId; taskId: EntityId; taskBriefId: EntityId; assignmentAttemptId: EntityId; invocationId: EntityId; promptInputSnapshotId: EntityId }>): Promise<void>; }
 export interface WorkerLoopInput { readonly brief: TaskBriefV1; readonly attempt: AssignmentAttemptV1; readonly snapshot: PromptInputSnapshotV1; readonly modelRef: string; readonly router: ModelRouter; readonly tools: WorkerToolPort; readonly communication?: WorkerCommunicationPort; readonly prompt: readonly PromptMessageV1[]; readonly maxTurns?: number; readonly now?: () => string; }
-export interface WorkerLoopResult { readonly reason: WorkerStopReason; readonly turns: number; readonly summary?: string; readonly questionMessageId?: EntityId; readonly question?: string; }
+export interface WorkerLoopResult {
+  readonly reason: WorkerStopReason;
+  readonly turns: number;
+  /**
+   * Başarısızlığın SEBEBİ. Sekiz ayrı 'failure' dönüşü sebepsizdi: görev
+   * düşüyor, ne logda ne veritabanında tek satır iz kalmıyordu.
+   */
+  readonly detail?: string; readonly summary?: string; readonly questionMessageId?: EntityId; readonly question?: string; }
 
 export async function runWorkerLoop(input: WorkerLoopInput): Promise<WorkerLoopResult> {
   const maxTurns = input.maxTurns ?? 16;
@@ -22,41 +30,42 @@ export async function runWorkerLoop(input: WorkerLoopInput): Promise<WorkerLoopR
     });
     if (result.result.toolCalls.length === 0) {
       const summary = result.result.content?.trim();
-      if (!summary) return { reason: 'failure', turns: turn + 1 };
-      if (input.communication === undefined) return { reason: 'failure', turns: turn + 1 };
+      if (!summary) return { reason: 'failure', turns: turn + 1, detail: 'model araç çağırmadı ve boş özet döndü' };
+      if (input.communication === undefined) return { reason: 'failure', turns: turn + 1, detail: 'rapor yazılacak iletişim kanalı yok' };
       await input.communication.report(summary, [], { projectId: input.brief.projectId, taskId: input.brief.taskId, taskBriefId: input.brief.taskBriefId, assignmentAttemptId: input.attempt.assignmentAttemptId, invocationId: input.snapshot.invocationId, promptInputSnapshotId: input.snapshot.promptInputSnapshotId });
       return { reason: 'report', turns: turn + 1, summary };
     }
     const registeredTools = new Set(allowedDefinitions().map((definition) => definition.name));
     for (const toolCall of result.result.toolCalls as readonly NormalizedToolCall[]) {
-      if (!registeredTools.has(toolCall.name)) return { reason: 'failure', turns: turn + 1 };
+      if (!registeredTools.has(toolCall.name)) return { reason: 'failure', turns: turn + 1, detail: `model kayıtlı olmayan aracı istedi: ${toolCall.name}` };
       let args: unknown;
       let parsedCallId: EntityId;
       try {
-        parsedCallId = EntityIdSchema.parse(toolCall.id);
+        // Sağlayıcı kimliği kanonik EntityId'ye deterministik çevrilir.
+        parsedCallId = toolCallEntityId(input.snapshot.invocationId, toolCall.id);
         args = input.tools.validate(toolCall.name, toolCall.args);
-      } catch {
-        return { reason: 'failure', turns: turn + 1 };
+      } catch (toolError) {
+        return { reason: 'failure', turns: turn + 1, detail: `araç çağrısı doğrulanamadı: ${toolCall.name} — ${toolError instanceof Error ? toolError.message : String(toolError)}` };
       }
       if (toolCall.name === 'ask_question') {
         const candidate = typeof args === 'object' && args !== null && 'content' in args ? (args as { content: unknown }).content : undefined;
         const text = typeof candidate === 'string' ? candidate.trim() : '';
-        if (!text) return { reason: 'failure', turns: turn + 1 };
-        if (input.communication === undefined) return { reason: 'failure', turns: turn + 1 };
+        if (!text) return { reason: 'failure', turns: turn + 1, detail: 'soru metni boş' };
+        if (input.communication === undefined) return { reason: 'failure', turns: turn + 1, detail: 'soru sorulacak iletişim kanalı yok' };
         const message = await input.communication.question({ projectId: input.brief.projectId, taskId: input.brief.taskId, taskBriefId: input.brief.taskBriefId, assignmentAttemptId: input.attempt.assignmentAttemptId, callId: parsedCallId, text });
         return { reason: 'question', turns: turn + 1, questionMessageId: message.messageId, question: text };
       }
       if (toolCall.name === 'report_result') {
         const reportArgs = args as { summary?: unknown; evidenceRefs?: unknown };
-        if (typeof reportArgs.summary !== 'string' || !Array.isArray(reportArgs.evidenceRefs) || !reportArgs.evidenceRefs.every((x) => typeof x === 'string')) return { reason: 'failure', turns: turn + 1 };
+        if (typeof reportArgs.summary !== 'string' || !Array.isArray(reportArgs.evidenceRefs) || !reportArgs.evidenceRefs.every((x) => typeof x === 'string')) return { reason: 'failure', turns: turn + 1, detail: 'report_result argümanları şemaya uymuyor' };
         await input.tools.execute({ callId: parsedCallId, name: toolCall.name, args, occurredAt: now() });
         return { reason: 'report', turns: turn + 1, summary: reportArgs.summary };
       }
       let toolResult: JsonValue;
       try {
         toolResult = await input.tools.execute({ callId: parsedCallId, name: toolCall.name, args, occurredAt: now() });
-      } catch {
-        return { reason: 'failure', turns: turn + 1 };
+      } catch (toolError) {
+        return { reason: 'failure', turns: turn + 1, detail: `araç çalıştırılamadı: ${toolCall.name} — ${toolError instanceof Error ? toolError.message : String(toolError)}` };
       }
       messages.push({ role: 'tool', toolCallId: parsedCallId, content: JSON.stringify(toolResult) });
     }

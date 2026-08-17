@@ -138,4 +138,35 @@ describe('createTransitionOperation kimliği', () => {
       serviceName: 'ww-scheduler',
     });
   });
+
+  // ASIL KUSUR: 'fail' eylemi sebebi SABİT bir metinle eziyordu; worker'ın
+  // gerçek başarısızlık sebebi (ör. "model kayıtlı olmayan aracı istedi")
+  // hiçbir yere yazılmıyor, görev "neden düştü" bilinmeden kapanıyordu.
+  it('fail sebebi çağıranın özetini taşır', async () => {
+    const seen: unknown[] = [];
+    const operation = createTransitionOperation({
+      port: { apply: async (_p: unknown, request: unknown) => { seen.push(request); return {}; } } as never,
+      principalName: 'ww-scheduler',
+    });
+
+    await operation({
+      taskId: '00000000-0000-4000-8000-000000000002' as never,
+      attempt, action: 'fail',
+      resultSummary: 'model kayıtlı olmayan aracı istedi: rm_rf',
+    });
+
+    expect((seen[0] as Record<string, unknown>)['reason'])
+      .toBe('model kayıtlı olmayan aracı istedi: rm_rf');
+  });
+
+  it('özet verilmezse genel sebebe düşer', async () => {
+    const seen: unknown[] = [];
+    const operation = createTransitionOperation({
+      port: { apply: async (_p: unknown, request: unknown) => { seen.push(request); return {}; } } as never,
+      principalName: 'ww-scheduler',
+    });
+
+    await operation({ taskId: '00000000-0000-4000-8000-000000000002' as never, attempt, action: 'fail' });
+    expect(String((seen[0] as Record<string, unknown>)['reason']).length).toBeGreaterThan(0);
+  });
 });

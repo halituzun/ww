@@ -61,3 +61,53 @@ describe('worker loop', () => {
     expect(sent).toBe(false);
   });
 });
+
+// ASIL KUSUR: worker döngüsünün SEKİZ ayrı 'failure' dönüşü vardı ve hiçbiri
+// sebep taşımıyordu. Görev düşüyor, ne logda ne veritabanında tek satır iz
+// kalmıyordu — santranç görevi tam olarak böyle sessizce düştü.
+describe('runWorkerLoop başarısızlık sebebi', () => {
+  const brief = {
+    projectId: id(1), taskId: id(2), taskBriefId: id(3),
+    allowedTools: ['read_file'], acceptanceCriteria: ['x'],
+  } as never;
+  const attempt = {
+    assignmentAttemptId: id(4), projectId: id(1), taskId: id(2),
+    taskBriefId: id(3), workerAgentId: id(5), verifierAgentId: id(6),
+  } as never;
+  const snapshot = { invocationId: id(7), promptInputSnapshotId: id(8) } as never;
+
+  const loop = (over: Record<string, unknown>) => runWorkerLoop({
+    brief, attempt, snapshot, modelRef: 'm', prompt: [],
+    tools: { definitions: () => [{ name: 'read_file' }], validate: () => ({}), execute: async () => ({}) } as never,
+    communication: { question: async () => ({ messageId: id(9) }), report: async () => undefined } as never,
+    ...over,
+  } as never);
+
+  it('kayıtlı olmayan araç istendiğinde sebebi bildirir', async () => {
+    const result = await loop({
+      router: { complete: async () => ({ result: { toolCalls: [{ name: 'rm_rf', callId: id(9), args: {} }] } }) },
+    });
+
+    expect(result.reason).toBe('failure');
+    expect(result.detail).toMatch(/rm_rf/);
+  });
+
+  it('boş özet döndüğünde sebebi bildirir', async () => {
+    const result = await loop({
+      router: { complete: async () => ({ result: { toolCalls: [], content: '   ' } }) },
+    });
+
+    expect(result.reason).toBe('failure');
+    expect(result.detail).toMatch(/özet|ozet/i);
+  });
+
+  it('iletişim kanalı yokken sebebi bildirir', async () => {
+    const result = await loop({
+      communication: undefined,
+      router: { complete: async () => ({ result: { toolCalls: [], content: 'bitti' } }) },
+    });
+
+    expect(result.reason).toBe('failure');
+    expect(result.detail).toMatch(/iletişim|iletisim/i);
+  });
+});

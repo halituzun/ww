@@ -365,6 +365,10 @@ function mutateTask(
     };
   } else if (request.action === 'report_result') {
     next = { ...next, result_summary: request.resultSummary };
+  } else if (request.action === 'fail') {
+    // Düşen görev NEDEN düştüğünü taşımalı; sebep yalnızca reddedilme
+    // yollarına yazılıyordu ve 'fail' sessiz kalıyordu.
+    next = { ...next, reject_reason: request.reason };
   } else if (request.action === 'verifier_rejected' || request.action === 'gate_failed') {
     next = {
       ...next,

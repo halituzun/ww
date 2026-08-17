@@ -3,7 +3,7 @@ import { BrakeError } from './safety-brakes.js';
 
 /** Narrow bridge owned by server composition; scheduler does not import agents. */
 export interface Phase1RuntimePort {
-  work(input: Readonly<{ brief: TaskBriefV1; attempt: AssignmentAttemptV1 }>): Promise<Readonly<{ kind: 'question' | 'report' | 'failure'; summary?: string; question?: string; questionMessageId?: EntityId }>>;
+  work(input: Readonly<{ brief: TaskBriefV1; attempt: AssignmentAttemptV1 }>): Promise<Readonly<{ kind: 'question' | 'report' | 'failure'; summary?: string; question?: string; questionMessageId?: EntityId; detail?: string }>>;
   verify(input: Readonly<{ brief: TaskBriefV1; attempt: AssignmentAttemptV1; summary: string }>): Promise<Readonly<{ verdict: StructuredVerdictV1; diff: string }>>;
 }
 
@@ -12,7 +12,7 @@ export interface Phase1SchedulerPort {
   awaitUserAnswer(input: Readonly<{ taskId: EntityId; attempt: AssignmentAttemptV1; question: string; questionMessageId?: EntityId }>): Promise<void>;
   resumeUserAnswer(input: Readonly<{ projectId: EntityId; taskId: EntityId; taskBriefId: EntityId; previousAttemptId: EntityId; questionMessageId: EntityId; replyMessageId: EntityId; answer: string }>): Promise<AssignmentAttemptV1>;
   handleExecutionError(input: Readonly<{ taskId: EntityId; attempt: AssignmentAttemptV1; phase: 'working' | 'verifying' | 'testing' | 'committing'; error: unknown }>): Promise<TaskStatus>;
-  transition(input: Readonly<{ taskId: EntityId; attempt: AssignmentAttemptV1; action: 'start_work' | 'report_result' | 'verifier_approved' | 'gate_passed' | 'commit_completed' | 'fail'; evidenceRefs?: readonly string[] }>): Promise<Readonly<{ status: TaskStatus }>>;
+  transition(input: Readonly<{ taskId: EntityId; attempt: AssignmentAttemptV1; action: 'start_work' | 'report_result' | 'verifier_approved' | 'gate_passed' | 'commit_completed' | 'fail'; evidenceRefs?: readonly string[]; resultSummary?: string }>): Promise<Readonly<{ status: TaskStatus }>>;
   reassign(input: Readonly<{ taskId: EntityId; reason: 'retry_after_rejection' | 'retry_after_gate_failure'; evidenceRefs: readonly string[] }>): Promise<AssignmentAttemptV1>;
   escalate(input: Readonly<{ taskId: EntityId; attempt: AssignmentAttemptV1; reason: string }>): Promise<void>;
   gate(input: Readonly<{ taskId: EntityId; attempt: AssignmentAttemptV1 }>): Promise<Readonly<{ passed: boolean; evidenceRefs: readonly string[] }>>;
@@ -80,7 +80,13 @@ async function runAssignedLifecycle(input: Phase1OrchestratorInput, initialAttem
       return { status: 'waiting_user', attempts };
     }
     if (work.kind === 'failure') {
-      await input.scheduler.transition({ taskId: input.taskId, attempt, action: 'fail' });
+      // Sebep geçişe yazılır; yoksa görev "neden düştü" bilinmeden kapanır.
+      await input.scheduler.transition({
+        taskId: input.taskId,
+        attempt,
+        action: 'fail',
+        ...(work.detail === undefined ? {} : { resultSummary: work.detail }),
+      });
       return { status: 'failed', attempts };
     }
     if (work.summary === undefined || work.summary.trim() === '') throw new Phase1OrchestratorError('worker raporu boş olamaz');

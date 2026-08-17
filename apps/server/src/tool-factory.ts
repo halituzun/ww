@@ -2,6 +2,7 @@
 //
 // Worker yazar, verifier YALNIZ okur. Bu ayrım denetimin temelidir: verifier
 // denetlediği kodu değiştirebilseydi bağımsız denetim diye bir şey kalmazdı.
+import { executorToolRegistry } from '@ww/executor';
 import type { AssignmentAttemptV1, EntityId, JsonValue, TaskBriefV1 } from '@ww/shared';
 
 export interface ToolDefinitionLike {
@@ -20,8 +21,16 @@ export interface ToolCallLike {
 export interface ToolExecutorLike {
   /** Bağlam ZORUNLU: izinli araçlar brief ve role göre süzülür. */
   definitions(context: Record<string, unknown>): readonly ToolDefinitionLike[];
-  validate(name: string, args: unknown): unknown;
   execute(context: Record<string, unknown>, call: ToolCallLike): Promise<JsonValue>;
+}
+
+/**
+ * Araç argümanı doğrulaması ARAÇ KAYDINDA yaşar. Fabrika bir zamanlar
+ * `executor.validate(...)` çağırıyordu — böyle bir metot hiç yoktu ve HER
+ * araç çağrısı "validate is not a function" ile düşüyordu.
+ */
+function validateToolArgs(name: string, args: unknown): unknown {
+  return executorToolRegistry.parseArguments(name as never, args);
 }
 
 export interface ToolPortLike {
@@ -70,7 +79,8 @@ export function createToolPortFactory(input: ToolFactoryInput) {
       return {
         definitions: () => input.executor.definitions(contextFor(scope, 'worker'))
           .filter((definition) => allowed.includes(definition.name)),
-        validate: (name, args) => input.executor.validate(name, args),
+        // Doğrulama araç kaydındadır; executor'da böyle bir metot YOK.
+        validate: (name, args) => validateToolArgs(name, args),
         execute: (call) => input.executor.execute(contextFor(scope, 'worker'), call),
       };
     },
@@ -81,7 +91,7 @@ export function createToolPortFactory(input: ToolFactoryInput) {
       return {
         definitions: () => input.executor.definitions(contextFor(scope, 'verifier'))
           .filter((definition) => allowed.includes(definition.name)),
-        validate: (name, args) => input.executor.validate(name, args),
+        validate: (name, args) => validateToolArgs(name, args),
         execute: async (call) => {
           // Sınır BURADA uygulanır: yazma çağrısı executor'a hiç ulaşmaz,
           // yoksa denetim kaydına yetkisiz bir deneme düşer ve kafa karıştırır.

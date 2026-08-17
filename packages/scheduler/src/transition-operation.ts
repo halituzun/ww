@@ -94,7 +94,14 @@ export function createTransitionOperation(input: TransitionOperationInput) {
       }
 
       case 'fail':
-        request = { ...identity, action, reason: 'orkestratör görevi başarısız kapattı' };
+        // Çağıranın sebebi ezilmemeli: "neden düştü" sorusunun tek cevabı odur.
+        request = {
+          ...identity,
+          action,
+          reason: resultSummary?.trim() !== undefined && resultSummary.trim() !== ''
+            ? resultSummary.trim()
+            : 'orkestratör görevi başarısız kapattı',
+        };
         break;
 
       default:

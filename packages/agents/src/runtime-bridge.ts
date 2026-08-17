@@ -32,6 +32,8 @@ export interface Phase1RuntimeBridgePort {
     summary?: string;
     question?: string;
     questionMessageId?: EntityId;
+    /** Başarısızlığın sebebi; yoksa düşen görev sessiz kalır. */
+    detail?: string;
   }>>;
   verify(input: Readonly<{ brief: TaskBriefV1; attempt: AssignmentAttemptV1; summary: string }>): Promise<Readonly<{
     verdict: import('@ww/shared').StructuredVerdictV1;
@@ -64,6 +66,7 @@ export function createPhase1RuntimeBridge(input: Readonly<{
         ...(result.summary === undefined ? {} : { summary: result.summary }),
         ...(result.question === undefined ? {} : { question: result.question }),
         ...(result.questionMessageId === undefined ? {} : { questionMessageId: result.questionMessageId }),
+        ...(result.detail === undefined ? {} : { detail: result.detail }),
       });
     },
     verify: async ({ brief, attempt, summary }: Readonly<{ brief: TaskBriefV1; attempt: AssignmentAttemptV1; summary: string }>) => {
