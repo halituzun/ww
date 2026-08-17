@@ -1,4 +1,5 @@
 import { Body, Controller, Get, Inject, Param, Patch, Req } from '@nestjs/common';
+import { effectiveRoutingChain } from './routing-chain.js';
 import { z } from 'zod';
 import { AGENT_ROLES } from '@ww/shared';
 import { getLatestRoleModel, listLatestRoleModels, upsertRoleModel } from '@ww/db';
@@ -40,7 +41,7 @@ export class RoleModelsController {
         fallbackRefs: row?.fallback_refs ?? [],
         // Fiilen kullanılacak zincir: pasif sağlayıcılar elenmiş, varsayılan
         // son durak eklenmiş hâli. Yazılan yedekle aynı olmayabilir.
-        effectiveChain: modelRef === '' ? [] : routing.fallbacks(modelRef),
+        effectiveChain: effectiveRoutingChain(modelRef, routing.fallbacks(modelRef)),
         configured: row !== undefined,
         updatedAt: row?.updated_at ?? '',
       };
