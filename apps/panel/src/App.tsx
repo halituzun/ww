@@ -1,5 +1,5 @@
 import { useHealth } from './viewmodels/useHealth.js';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { TaskCanvas } from './components/TaskCanvas.js';
 import { FileEditor } from './components/FileEditor.js';
 import { ProvidersPage } from './components/ProvidersPage.js';
@@ -12,6 +12,9 @@ import { fetchProviders, type Provider } from './services/providers.js';
 import {
   appendTimelineEvent, countTaskStatuses, pickSelectedFile, type TimelineEvent,
 } from './viewmodels/workspace-logic.js';
+import {
+  connectionLabel, nextReconnectDelay, resumeCursor, type ConnectionState,
+} from './viewmodels/live-connection.js';
 import {
   askNarrator as askNarratorService,
   createProject as createProjectService,
@@ -42,6 +45,8 @@ export default function App() {
   const [apiArtifacts, setApiArtifacts] = useState<ApiArtifact[]>([]);
   const [selectedFile, setSelectedFile] = useState<string | undefined>();
   const [events, setEvents] = useState<TimelineEvent[]>([]);
+  const [connection, setConnection] = useState<ConnectionState>('offline');
+  const eventsRef = useRef<TimelineEvent[]>([]);
   const [message, setMessage] = useState('');
   const [messageStatus, setMessageStatus] = useState('');
   const [apiPath, setApiPath] = useState('/health');
@@ -77,17 +82,57 @@ export default function App() {
     return () => { active = false; window.clearInterval(timer); };
   }, [projectId]);
 
+  // Kopan bağlantı sessizce ölmemeli: üstel geri çekilmeyle yeniden bağlanır
+  // ve görülen en yüksek seq'ten devam eder (baştan akıtmak çift kayıt üretir).
   useEffect(() => {
     if (!projectId || typeof WebSocket === 'undefined') return;
-    const socket = new WebSocket(`${apiBase.replace(/^http/, 'ws')}/events`);
-    socket.onopen = () => socket.send(JSON.stringify({ event: 'subscribe', data: { projectId, afterSeq: 0 } }));
-    socket.onmessage = (event) => {
-      try {
-        const next = JSON.parse(event.data) as TimelineEvent;
-        setEvents((current) => appendTimelineEvent(current, next));
-      } catch { /* malformed frames are ignored */ }
+    let active = true;
+    let socket: WebSocket | undefined;
+    let timer: number | undefined;
+    let attempt = 0;
+
+    const connect = () => {
+      if (!active) return;
+      setConnection(attempt === 0 ? 'connecting' : 'retrying');
+      socket = new WebSocket(`${apiBase.replace(/^http/, 'ws')}/events`);
+
+      socket.onopen = () => {
+        attempt = 0;
+        setConnection('open');
+        socket?.send(JSON.stringify({
+          event: 'subscribe',
+          data: { projectId, afterSeq: resumeCursor(eventsRef.current) },
+        }));
+      };
+
+      socket.onmessage = (message) => {
+        try {
+          const next = JSON.parse(message.data as string) as TimelineEvent;
+          setEvents((current) => {
+            const updated = appendTimelineEvent(current, next);
+            eventsRef.current = updated;
+            return updated;
+          });
+        } catch { /* bozuk çerçeveler yok sayılır */ }
+      };
+
+      const retry = () => {
+        if (!active) return;
+        setConnection('retrying');
+        timer = window.setTimeout(connect, nextReconnectDelay(attempt));
+        attempt += 1;
+      };
+      socket.onclose = retry;
+      socket.onerror = () => socket?.close();
     };
-    return () => socket.close();
+
+    connect();
+    return () => {
+      active = false;
+      if (timer !== undefined) window.clearTimeout(timer);
+      socket?.close();
+      setConnection('offline');
+    };
   }, [projectId]);
 
   // docs/08 bildirim kaynakları: bütçe, sağlayıcı sağlığı, bekleyen soru, tırmandırma.
@@ -161,7 +206,7 @@ export default function App() {
 
   return (
     <main className="shell">
-      <header className="topbar"><div><p className="eyebrow">ww / ORCHESTRATION</p><h1>Agent çalışma alanı</h1></div><div className="topbar-actions"><button type="button" onClick={() => setPage('providers')}>API'ler</button><NotificationBell signals={{ budget: budgetReport.budget, providers: providerList, tasks, escalations: auditReport.escalations }} /><input aria-label="Proje kimliği" placeholder="Proje UUID" value={projectId} onChange={(event) => setProjectId(event.target.value)} /></div></header>
+      <header className="topbar"><div><p className="eyebrow">ww / ORCHESTRATION</p><h1>Agent çalışma alanı</h1></div><div className="topbar-actions"><span className={`conn conn--${connection}`} title="Canlı olay bağlantısı"><span className="conn__dot" aria-hidden="true" />{connectionLabel(connection)}</span><button type="button" onClick={() => setPage('providers')}>API'ler</button><NotificationBell signals={{ budget: budgetReport.budget, providers: providerList, tasks, escalations: auditReport.escalations }} /><input aria-label="Proje kimliği" placeholder="Proje UUID" value={projectId} onChange={(event) => setProjectId(event.target.value)} /></div></header>
 
       <section className={`status-card status-card--${state}`} aria-live="polite">
         <div>

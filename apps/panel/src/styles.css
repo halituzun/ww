@@ -307,3 +307,12 @@ dd {
 .bell__item--warning { border-left-color: #c98500; }
 .bell__item span { color: #98a2b3; }
 .bell__item--seen { opacity: 0.55; }
+
+/* Canlı bağlantı göstergesi: ölü bağlantı sessiz kalmamalı */
+.conn { display: inline-flex; align-items: center; gap: 0.35rem; font-size: 0.75rem;
+  color: #98a2b3; padding: 0.25rem 0.5rem; border-radius: 999px;
+  background: rgba(29, 41, 57, 0.6); }
+.conn__dot { width: 7px; height: 7px; border-radius: 999px; background: #667085; }
+.conn--open .conn__dot { background: #199e70; }
+.conn--connecting .conn__dot, .conn--retrying .conn__dot { background: #c98500; }
+.conn--offline .conn__dot { background: #d95926; }
