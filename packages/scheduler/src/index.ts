@@ -15,5 +15,6 @@ export * from './brake-guard.js';
 export * from './brake-ports.js';
 export * from './escalation-recorder.js';
 export * from './transition-operation.js';
+export * from './assignment-operations.js';
 export * from './replanning-service.js';
 export * from './plan-approval-service.js';

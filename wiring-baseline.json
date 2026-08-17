@@ -61,5 +61,13 @@
   {
     "symbol": "packages/db/src/test-cleanup.ts:dropLeakedTestDatabases",
     "reason": "operasyonel arac; pnpm db:clean-tests scriptinden calisir"
+  },
+  {
+    "symbol": "packages/scheduler/src/assignment-operations.ts:createReassignOperation",
+    "reason": "schedulerOperations uretim karsiligi; bootstrap baglayacak"
+  },
+  {
+    "symbol": "packages/scheduler/src/assignment-operations.ts:createAwaitUserAnswerOperation",
+    "reason": "schedulerOperations uretim karsiligi; bootstrap baglayacak"
   }
 ]
