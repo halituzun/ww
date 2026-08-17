@@ -1,11 +1,8 @@
-import { useEffect, useState } from 'react';
 import {
   budgetTone,
-  fetchBudgetReport,
   formatUsd,
-  EMPTY_BUDGET_REPORT,
-  type BudgetReport,
 } from '../services/budget.js';
+import { useBudgetViewModel } from '../viewmodels/useBudgetViewModel.js';
 
 // Kategorik palet: dataviz referans paletinin koyu sütunu, panelin yüzeyine
 // (#0b1220) karşı validate_palette.js ile doğrulandı — 5 kontrolün beşi PASS.
@@ -16,18 +13,8 @@ const MAX_SERIES = SERIES.length;
 const pct = (value: number): string => `${Math.min(100, Math.max(0, value * 100)).toFixed(0)}%`;
 
 export function BudgetPanel({ projectId }: { projectId: string }) {
-  const [report, setReport] = useState<BudgetReport>(EMPTY_BUDGET_REPORT);
-
-  useEffect(() => {
-    if (!projectId) return;
-    let active = true;
-    const load = () => {
-      void fetchBudgetReport(projectId).then((next) => { if (active) setReport(next); });
-    };
-    load();
-    const timer = window.setInterval(load, 10_000);
-    return () => { active = false; window.clearInterval(timer); };
-  }, [projectId]);
+  // docs/09: View'da fetch yasak — yükleme ve yoklama ViewModel'de.
+  const { report } = useBudgetViewModel(projectId);
 
   const { totals, budget } = report;
   const tone = budgetTone(budget.state);

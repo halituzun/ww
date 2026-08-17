@@ -1,12 +1,5 @@
-import { useEffect, useState } from 'react';
-import {
-  brakeLabel,
-  fetchAuditReport,
-  resolveFinding,
-  severityTone,
-  EMPTY_AUDIT_REPORT,
-  type AuditReport,
-} from '../services/audit.js';
+import { brakeLabel, severityTone } from '../services/audit.js';
+import { useAuditViewModel } from '../viewmodels/useAuditViewModel.js';
 
 const STATUS_LABEL: Record<string, string> = {
   open: 'Açık',
@@ -17,39 +10,8 @@ const STATUS_LABEL: Record<string, string> = {
 
 // docs/08 → Denetim Ekranı: denetçi bulguları, tırmandırma geçmişi, fren olayları.
 export function AuditPanel({ projectId }: { projectId: string }) {
-  const [report, setReport] = useState<AuditReport>(EMPTY_AUDIT_REPORT);
-  // Karar kullanıcıdan gelir; gerekçesiz kapatmayı sunucu da reddeder.
-  const [notes, setNotes] = useState<Record<string, string>>({});
-  const [error, setError] = useState('');
-
-  const decide = async (findingId: string, status: 'resolved' | 'dismissed') => {
-    const resolution = (notes[findingId] ?? '').trim();
-    if (resolution === '') {
-      setError('Kapatma gerekçesi zorunludur.');
-      return;
-    }
-    try {
-      await resolveFinding(projectId, findingId, { status, resolution });
-      setError('');
-      setReport(await fetchAuditReport(projectId));
-    } catch (reason) {
-      // Hata yutulursa kullanıcı bulguyu kapattığını sanır.
-      setError(reason instanceof Error ? reason.message : 'Bulgu güncellenemedi');
-    }
-  };
-
-  useEffect(() => {
-    if (!projectId) return;
-    let active = true;
-    const load = () => {
-      void fetchAuditReport(projectId).then((next) => { if (active) setReport(next); });
-    };
-    load();
-    const timer = window.setInterval(load, 10_000);
-    return () => { active = false; window.clearInterval(timer); };
-  }, [projectId]);
-
-  const openCount = report.counts.open + report.counts.correction_pending;
+  // docs/09: View'da fetch/iş mantığı yasak — hepsi ViewModel'de.
+  const { report, error, openCount, noteFor, setNote, decide } = useAuditViewModel(projectId);
 
   return (
     <section className="audit-panel" aria-label="Denetim">
@@ -94,10 +56,8 @@ export function AuditPanel({ projectId }: { projectId: string }) {
                     <input
                       aria-label={`Gerekçe ${finding.findingId}`}
                       placeholder="Kapatma gerekçesi"
-                      value={notes[finding.findingId] ?? ''}
-                      onChange={(event) => setNotes((current) => ({
-                        ...current, [finding.findingId]: event.target.value,
-                      }))}
+                      value={noteFor(finding.findingId)}
+                      onChange={(event) => setNote(finding.findingId, event.target.value)}
                     />
                     <button type="button" onClick={() => void decide(finding.findingId, 'resolved')}>
                       Kapat

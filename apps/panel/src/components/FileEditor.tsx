@@ -3,9 +3,8 @@
 // Eskiden yer tutucu metin gösteriyordu: kullanıcı dosyayı gördüğünü sanıyor
 // ama içerik hiç okunmuyordu. Artık gerçek içerik yüklenir; okunamazsa bu
 // AÇIKÇA söylenir — sahte içerik gösterilmez.
-import { useEffect, useState } from 'react';
 import Editor from '@monaco-editor/react';
-import { fetchFileContent } from '../services/files.js';
+import { useFileContentViewModel } from '../viewmodels/useFileContentViewModel.js';
 
 const languageOf = (filePath: string): string => {
   if (/\.tsx?$/.test(filePath)) return 'typescript';
@@ -20,28 +19,8 @@ export function FileEditor({ projectId, filePath, summary }: {
   readonly filePath?: string | undefined;
   readonly summary?: string | undefined;
 }) {
-  const [content, setContent] = useState<string | null>(null);
-  const [state, setState] = useState<'idle' | 'loading' | 'missing'>('idle');
-
-  useEffect(() => {
-    if (projectId === undefined || filePath === undefined) {
-      setContent(null);
-      setState('idle');
-      return;
-    }
-    let active = true;
-    setState('loading');
-    void fetchFileContent(projectId, filePath).then((file) => {
-      if (!active) return;
-      setContent(file?.content ?? null);
-      setState(file === null ? 'missing' : 'idle');
-    });
-    return () => { active = false; };
-  }, [projectId, filePath]);
-
-  const value = filePath === undefined
-    ? '// Bir dosya seçin'
-    : content ?? (state === 'loading' ? '// Yükleniyor…' : `// ${filePath} okunamadı`);
+  // docs/09: View'da fetch yasak — içerik yükleme ViewModel'de.
+  const { value } = useFileContentViewModel(projectId, filePath);
 
   return (
     <div className="file-editor">
