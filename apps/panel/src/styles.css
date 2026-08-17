@@ -332,3 +332,10 @@ dd {
 .scrubber { margin-bottom: 12px; }
 .scrubber input[type="range"] { width: 100%; }
 .scrubber__meta { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; font-size: 13px; }
+
+
+/* Önizleme süreç yüzeyi (docs/10, docs/11 Faz 6). */
+.preview__error { color: var(--danger, #d95926); }
+.preview__logs { margin-top: 8px; }
+.preview__logs pre { max-height: 220px; overflow: auto; font-size: 12px; }
+.device-bar { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
