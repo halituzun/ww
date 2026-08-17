@@ -284,3 +284,26 @@ dd {
   font-size: 0.82rem; padding: 0.35rem 0.5rem; border-radius: 6px; }
 .audit-escalation--brake { background: rgba(217, 89, 38, 0.12); }
 .audit-escalation__reason { flex: 1 1 12rem; color: #d0d5dd; }
+
+/* Bildirim merkezi (docs/08 → Bildirimler) */
+.bell { position: relative; display: inline-block; }
+.bell__button { position: relative; background: none; border: 1px solid rgba(140,160,200,.28);
+  border-radius: 8px; padding: 0.35rem 0.55rem; cursor: pointer; font-size: 1rem; }
+.bell__badge { position: absolute; top: -6px; right: -6px; min-width: 18px; height: 18px;
+  border-radius: 999px; background: #d95926; color: #fff; font-size: 0.7rem; line-height: 18px;
+  text-align: center; padding: 0 4px; font-variant-numeric: tabular-nums; }
+.bell__menu { position: absolute; right: 0; top: calc(100% + 8px); width: min(22rem, 90vw);
+  background: #101828; border: 1px solid rgba(140,160,200,.28); border-radius: 10px;
+  padding: 0.75rem; z-index: 20; display: grid; gap: 0.5rem;
+  box-shadow: 0 12px 32px rgba(0,0,0,.45); }
+.bell__head { display: flex; justify-content: space-between; align-items: center; gap: 0.5rem; }
+.bell__head span { display: flex; gap: 0.35rem; }
+.bell__head button { font-size: 0.72rem; padding: 0.2rem 0.45rem; }
+.bell__list { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.4rem;
+  max-height: 60vh; overflow-y: auto; }
+.bell__item { display: grid; gap: 0.15rem; padding: 0.45rem 0.6rem; border-radius: 6px;
+  border-left: 3px solid #667085; background: rgba(29,41,57,.5); font-size: 0.82rem; }
+.bell__item--critical { border-left-color: #d95926; }
+.bell__item--warning { border-left-color: #c98500; }
+.bell__item span { color: #98a2b3; }
+.bell__item--seen { opacity: 0.55; }

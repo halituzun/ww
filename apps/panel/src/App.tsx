@@ -5,6 +5,10 @@ import { FileEditor } from './components/FileEditor.js';
 import { ProvidersPage } from './components/ProvidersPage.js';
 import { BudgetPanel } from './components/BudgetPanel.js';
 import { AuditPanel } from './components/AuditPanel.js';
+import { NotificationBell } from './components/NotificationBell.js';
+import { fetchBudgetReport, EMPTY_BUDGET_REPORT, type BudgetReport } from './services/budget.js';
+import { fetchAuditReport, EMPTY_AUDIT_REPORT, type AuditReport } from './services/audit.js';
+import { fetchProviders, type Provider } from './services/providers.js';
 import {
   askNarrator as askNarratorService,
   createProject as createProjectService,
@@ -21,6 +25,9 @@ const apiBase = import.meta.env.VITE_API_URL ?? 'http://localhost:4000';
 export default function App() {
   const { health, state, status } = useHealth();
   const [page, setPage] = useState<'workspace' | 'providers'>(() => new URLSearchParams(window.location.search).get('page') === 'providers' ? 'providers' : 'workspace');
+  const [budgetReport, setBudgetReport] = useState<BudgetReport>(EMPTY_BUDGET_REPORT);
+  const [auditReport, setAuditReport] = useState<AuditReport>(EMPTY_AUDIT_REPORT);
+  const [providerList, setProviderList] = useState<Provider[]>([]);
   const [projectId, setProjectId] = useState(() => new URLSearchParams(window.location.search).get('project') ?? '');
   const [tasks, setTasks] = useState<Task[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
@@ -76,12 +83,23 @@ export default function App() {
       try {
         const next = JSON.parse(event.data) as EventItem;
         setEvents((current) => [...current.slice(-99), next]);
-        if (document.visibilityState !== 'visible' && 'Notification' in window && Notification.permission === 'granted') {
-          new Notification(`ww · ${next.event}`, { body: 'Proje zaman çizelgesinde yeni bir olay var.' });
-        }
       } catch { /* malformed frames are ignored */ }
     };
     return () => socket.close();
+  }, [projectId]);
+
+  // docs/08 bildirim kaynakları: bütçe, sağlayıcı sağlığı, bekleyen soru, tırmandırma.
+  useEffect(() => {
+    let active = true;
+    const load = () => {
+      void fetchProviders().then((next) => { if (active) setProviderList(next); });
+      if (!projectId) return;
+      void fetchBudgetReport(projectId).then((next) => { if (active) setBudgetReport(next); });
+      void fetchAuditReport(projectId).then((next) => { if (active) setAuditReport(next); });
+    };
+    load();
+    const timer = window.setInterval(load, 15_000);
+    return () => { active = false; window.clearInterval(timer); };
   }, [projectId]);
 
   const statusCounts = useMemo(() => tasks.reduce<Record<string, number>>((counts, task) => ({ ...counts, [task.status]: (counts[task.status] ?? 0) + 1 }), {}), [tasks]);
@@ -108,9 +126,6 @@ export default function App() {
     } catch {
       setNarratorResult(null);
     }
-  };
-  const enableNotifications = async () => {
-    if ('Notification' in window && Notification.permission === 'default') await Notification.requestPermission();
   };
   const updateProjectStatus = async (status: 'paused' | 'running' | 'archived') => {
     try {
@@ -144,7 +159,7 @@ export default function App() {
 
   return (
     <main className="shell">
-      <header className="topbar"><div><p className="eyebrow">ww / ORCHESTRATION</p><h1>Agent çalışma alanı</h1></div><div className="topbar-actions"><button type="button" onClick={() => setPage('providers')}>API'ler</button><button type="button" onClick={() => void enableNotifications()}>Bildirimleri aç</button><input aria-label="Proje kimliği" placeholder="Proje UUID" value={projectId} onChange={(event) => setProjectId(event.target.value)} /></div></header>
+      <header className="topbar"><div><p className="eyebrow">ww / ORCHESTRATION</p><h1>Agent çalışma alanı</h1></div><div className="topbar-actions"><button type="button" onClick={() => setPage('providers')}>API'ler</button><NotificationBell signals={{ budget: budgetReport.budget, providers: providerList, tasks, escalations: auditReport.escalations }} /><input aria-label="Proje kimliği" placeholder="Proje UUID" value={projectId} onChange={(event) => setProjectId(event.target.value)} /></div></header>
 
       <section className={`status-card status-card--${state}`} aria-live="polite">
         <div>
