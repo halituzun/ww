@@ -49,6 +49,9 @@ import {
 } from '@ww/executor';
 import {
   runPhase1Orchestrator,
+  createBrakeGuard,
+  createClickHouseBrakePorts,
+  type Phase1BrakeCheck,
   resumePhase1Orchestrator,
   type Phase1OrchestratorInput,
   type Phase1ResumeInput,
@@ -76,6 +79,8 @@ export interface Phase8RuntimeComposition {
 }
 
 export interface Phase8RuntimeCompositionInput {
+  /** docs/07 güvenlik freni; verilmezse orkestratör eskisi gibi çalışır. */
+  readonly brakes?: Phase1BrakeCheck | undefined;
   readonly ch: ClickHouseClient;
   readonly redis: WwRedis;
   readonly providers: Map<string, LlmProvider>;
@@ -150,6 +155,7 @@ export function createPhase8RuntimeComposition(
     router: durable.router,
     effectRunner: durable.effectRunner,
     orchestrate: (orchestrationInput: Omit<Phase1OrchestratorInput, 'scheduler' | 'runtime'>) => runPhase1Orchestrator({
+      ...(input.brakes === undefined ? {} : { brakes: input.brakes }),
       ...orchestrationInput,
       scheduler: input.scheduler,
       runtime: input.orchestrationRuntime,
@@ -223,6 +229,16 @@ export function createPhase9RuntimeComposition(
   if (input.consumerId.trim().length === 0) {
     throw new Error('Phase9 consumerId bos olamaz');
   }
+
+  // Fren varsayılan olarak AÇIKTIR: docs/07 frenleri güvenlik sınırı sayar,
+  // kapatmak bilinçli bir karar olmalıdır.
+  const brakes: Phase1BrakeCheck | undefined = input.brakes
+    ?? (process.env['WW_DISABLE_BRAKES'] === '1'
+      ? undefined
+      : createBrakeGuard(createClickHouseBrakePorts(input.ch, {
+          onError: (taskId, reason) =>
+            console.warn(`[ww] fren verisi okunamadı (task ${taskId}): ${String(reason)}`),
+        })));
 
   const principalResolver = new PrincipalResolver(input.ch, {
     localSessionToken: input.localSessionToken,
@@ -392,12 +408,14 @@ export function createPhase9RuntimeComposition(
     inboxPollingModule,
     orchestrate: (orchestrationInput: Omit<Phase1OrchestratorInput, 'scheduler' | 'runtime'>) =>
       runPhase1Orchestrator({
+        ...(brakes === undefined ? {} : { brakes }),
         ...orchestrationInput,
         scheduler,
         runtime: orchestrationRuntime,
       }),
     resume: (orchestrationInput: Omit<Phase1ResumeInput, 'scheduler' | 'runtime'>) =>
       resumePhase1Orchestrator({
+        ...(brakes === undefined ? {} : { brakes }),
         ...orchestrationInput,
         scheduler,
         runtime: orchestrationRuntime,

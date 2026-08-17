@@ -1,5 +1,6 @@
 import { describe, expect, it, afterEach } from 'vitest';
 import { phase8RuntimeFromEnvironment, phase9RuntimeFromConfig } from './runtime-composition.js';
+import { readFile } from 'node:fs/promises';
 
 describe('Phase 8 runtime configuration', () => {
   const previous = process.env['WW_PHASE8_RUNTIME_ENABLED'];
@@ -21,5 +22,18 @@ describe('Phase 8 runtime configuration', () => {
   it('AppModule config provider yokken Phase9 compositioni sessizce başlatmaz', () => {
     process.env['WW_PHASE8_RUNTIME_ENABLED'] = '1';
     expect(() => phase9RuntimeFromConfig(null)).toThrow(/Phase9RuntimeConfig/);
+  });
+});
+
+describe('fren varsayılanı', () => {
+  // docs/07 frenleri güvenlik sınırı sayar. Varsayılanın AÇIK olması bir
+  // karardır: frensiz çalışmak bilinçli ve açıkça istenmelidir.
+  it('kaynak, freni yalnız WW_DISABLE_BRAKES=1 ile devre dışı bırakır', async () => {
+    const source = await readFile(
+      new URL('./runtime-composition.ts', import.meta.url), 'utf8',
+    );
+    expect(source).toContain("process.env['WW_DISABLE_BRAKES'] === '1'");
+    // Varsayılan dal guard'ı KURMALI; tersi sessiz bir güvenlik gerilemesidir.
+    expect(source).toMatch(/WW_DISABLE_BRAKES'\] === '1'\s*\?\s*undefined\s*:\s*createBrakeGuard/);
   });
 });
