@@ -102,8 +102,7 @@ export async function runHealthSweep(
           });
       next.set(provider.provider_id, evaluation.consecutiveFailures);
 
-      if (evaluation.status === provider.health_status) continue; // gürültü yazma
-
+      const changed = evaluation.status !== provider.health_status;
       const checkedAt = ports.now();
       await ports.persist({
         provider_id: provider.provider_id,
@@ -118,6 +117,10 @@ export async function runHealthSweep(
         last_health_check: checkedAt,
         updated_at: checkedAt,
       });
+      // Yayın SADECE değişimde: her dakika "hâlâ ok" bildirmek paneli boğar.
+      // Ama damga her taramada tazelenir (yukarıda), yoksa ölmüş bir tarayıcı
+      // sağlıklı olandan ayırt edilemez.
+      if (!changed) continue;
       await ports.publish({
         providerId: provider.provider_id,
         status: evaluation.status,

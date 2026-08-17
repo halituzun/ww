@@ -66,14 +66,48 @@ describe('runHealthSweep', () => {
     expect(state.get('deepseek')).toBe(0);
   });
 
-  it('durum değişmediyse gereksiz yazma ve yayın yapmaz', async () => {
-    const persist = vi.fn(async () => undefined);
+  it('durum değişmediyse panele yayın yapmaz', async () => {
     const publish = vi.fn(async () => undefined);
-    const stable = ports({ persist, publish, listProviders: async () => [provider({ health_status: 'ok' })] });
+    const stable = ports({ publish, listProviders: async () => [provider({ health_status: 'ok' })] });
 
     await runHealthSweep(stable, new Map());
-    expect(persist).not.toHaveBeenCalled();
     expect(publish).not.toHaveBeenCalled();
+  });
+
+  // ASIL KUSUR: damga yalnızca durum değişiminde yazılırsa panelde "son kontrol"
+  // saatlerce donuk kalır ve ÖLMÜŞ bir tarayıcı sağlıklı olandan ayırt edilemez.
+  it('durum değişmese de son kontrol damgasını tazeler', async () => {
+    const persist = vi.fn(async () => undefined);
+    const stable = ports({ persist, listProviders: async () => [provider({ health_status: 'ok' })] });
+
+    await runHealthSweep(stable, new Map());
+    expect(persist).toHaveBeenCalledTimes(1);
+    expect(persist.mock.calls[0]![0]).toMatchObject({
+      provider_id: 'deepseek',
+      health_status: 'ok',
+      last_health_check: '2026-08-17T00:00:00.000Z',
+    });
+  });
+
+  // Tazeleme mevcut durumu değiştirmemeli; yoksa kalp atışı veriyi bozar.
+  it('tazeleme sırasında durumu değiştirmez', async () => {
+    const persist = vi.fn(async () => undefined);
+    const degraded = ports({
+      persist,
+      errorRate: async () => 0.9,
+      listProviders: async () => [provider({ health_status: 'degraded' })],
+    });
+
+    await runHealthSweep(degraded, new Map());
+    expect(persist.mock.calls[0]![0]).toMatchObject({ health_status: 'degraded' });
+  });
+
+  it('pasif sağlayıcı için damga tazelemez', async () => {
+    const persist = vi.fn(async () => undefined);
+    const disabled = ports({ persist, listProviders: async () => [provider({ enabled: false })] });
+
+    await runHealthSweep(disabled, new Map());
+    expect(persist).not.toHaveBeenCalled();
   });
 
   it('durum değişiminde panele yayın yapar', async () => {
@@ -152,8 +186,8 @@ describe('runHealthSweep', () => {
       listProviders: async () => [provider({ health_status: 'ok' })],
     }), new Map());
 
-    expect(persist).not.toHaveBeenCalled();      // durum aynı, yazma yok
-    expect(recordUsage).toHaveBeenCalledTimes(1); // ama ping kaydedildi
+    expect(recordUsage).toHaveBeenCalledTimes(1); // ping kaydedildi
+    expect(persist).toHaveBeenCalledTimes(1);     // ve damga tazelendi
   });
 
   it('pasif sağlayıcı için kayıt üretmez', async () => {
