@@ -54,12 +54,17 @@ describe('analyzeWiring', () => {
     expect(result.unwired.sort()).toEqual(['a.ts:LIMIT', 'a.ts:Widget']);
   });
 
-  it('tanımlandığı dosyadaki kendi kullanımını bağlantı saymaz', () => {
+  // İlk sürümde bu beklenti tersineydi (kendi dosyasındaki kullanım bağlantı
+  // sayılmıyordu). Kapı gerçek bir kod üzerinde denenince yanlış olduğu
+  // görüldü: modülün kendi mantığı tarafından tüketilen sembol o mantık
+  // üzerinden bağlıdır ve onu işaretlemek gürültü üretir.
+  it('kendi modülünün mantığı tüketiyorsa bağlantısız saymaz', () => {
     const result = analyzeWiring([
-      file('a.ts', 'export function helper() {}\nfunction inner() { return helper(); }\nexport { inner };'),
+      file('a.ts', 'export function helper() {}\nexport function inner() { return helper(); }'),
+      file('b.ts', 'import { inner } from "./a.js"; inner();'),
       file('a.test.ts', 'import { helper } from "./a.js"; helper();'),
     ]);
-    expect(result.unwired).toContain('a.ts:helper');
+    expect(result.unwired).toEqual([]);
   });
 });
 
@@ -85,5 +90,28 @@ describe('diffAgainstBaseline', () => {
     const diff = diffAgainstBaseline(['b.ts:y'], ['a.ts:x']);
     expect(diff.added).toEqual(['b.ts:y']);
     expect(diff.resolved).toEqual(['a.ts:x']);
+  });
+});
+
+describe('modül içi tüketim', () => {
+  // Kendi modülünün mantığı tarafından kullanılan sabit "bağlantısız kod"
+  // değildir; o mantık üzerinden bağlıdır. Böyle sinyaller gürültü üretir ve
+  // gürültü kapıyı aşındırır.
+  it('kendi dosyasında kullanılan sabiti bağlantısız saymaz', () => {
+    const result = analyzeWiring([
+      file('a.ts', 'export const LIMIT = 3;\nexport function take(xs: number[]) { return xs.slice(0, LIMIT); }'),
+      file('b.ts', 'import { take } from "./a.js"; take([1]);'),
+      file('a.test.ts', 'import { LIMIT, take } from "./a.js"; LIMIT; take([]);'),
+    ]);
+    expect(result.unwired).toEqual([]);
+  });
+
+  // Ama hiç kullanılmayan bir özellik yalnız tanımıyla durur: yakalanmalı.
+  it('yalnız tanımlanıp hiç kullanılmayan özelliği yakalamaya devam eder', () => {
+    const result = analyzeWiring([
+      file('a.ts', 'export function lonely() { return 1; }'),
+      file('a.test.ts', 'import { lonely } from "./a.js"; lonely();'),
+    ]);
+    expect(result.unwired).toEqual(['a.ts:lonely']);
   });
 });

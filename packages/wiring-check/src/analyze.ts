@@ -66,6 +66,10 @@ export function analyzeWiring(files: readonly SourceFile[]): WiringReport {
     }
 
     if (production > 0) continue;                 // bağlı
+    // Kendi dosyasında tanımının ötesinde kullanılıyorsa (own > 1) o modülün
+    // mantığı tarafından tüketiliyor demektir: eşik/sabit gibi. Aranan desen
+    // "hiç çağrılmayan özellik"tir ve onun kendi dosyasındaki sayısı 1'dir.
+    if (own > 1) continue;
     if (testing > 0) unwired.push(key);           // aranan desen
     else if (own > 0) untested.push(key);         // ölü kod
   }

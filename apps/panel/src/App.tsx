@@ -10,6 +10,9 @@ import { fetchBudgetReport, EMPTY_BUDGET_REPORT, type BudgetReport } from './ser
 import { fetchAuditReport, EMPTY_AUDIT_REPORT, type AuditReport } from './services/audit.js';
 import { fetchProviders, type Provider } from './services/providers.js';
 import {
+  appendTimelineEvent, countTaskStatuses, pickSelectedFile, type TimelineEvent,
+} from './viewmodels/workspace-logic.js';
+import {
   askNarrator as askNarratorService,
   createProject as createProjectService,
   fetchApiArtifacts, fetchFiles, fetchProject, fetchProjects, fetchProviderHealth,
@@ -18,7 +21,6 @@ import {
   type ApiArtifact, type FileIndex, type Project, type ProviderHealth, type Task, type Usage,
 } from './services/projects.js';
 
-type EventItem = { event: string; seq: number; ts: string; data: unknown };
 
 const apiBase = import.meta.env.VITE_API_URL ?? 'http://localhost:4000';
 
@@ -39,7 +41,7 @@ export default function App() {
   const [providerHealth, setProviderHealth] = useState<ProviderHealth[]>([]);
   const [apiArtifacts, setApiArtifacts] = useState<ApiArtifact[]>([]);
   const [selectedFile, setSelectedFile] = useState<string | undefined>();
-  const [events, setEvents] = useState<EventItem[]>([]);
+  const [events, setEvents] = useState<TimelineEvent[]>([]);
   const [message, setMessage] = useState('');
   const [messageStatus, setMessageStatus] = useState('');
   const [apiPath, setApiPath] = useState('/health');
@@ -66,7 +68,7 @@ export default function App() {
       setTasks(nextTasks);
       setUsage(nextUsage);
       setFiles(nextFiles);
-      setSelectedFile((current) => current && nextFiles.some((file) => file.file_path === current) ? current : nextFiles[0]?.file_path);
+      setSelectedFile((current) => pickSelectedFile(current, nextFiles));
       setProviderHealth(health);
       setApiArtifacts(artifacts);
     };
@@ -81,8 +83,8 @@ export default function App() {
     socket.onopen = () => socket.send(JSON.stringify({ event: 'subscribe', data: { projectId, afterSeq: 0 } }));
     socket.onmessage = (event) => {
       try {
-        const next = JSON.parse(event.data) as EventItem;
-        setEvents((current) => [...current.slice(-99), next]);
+        const next = JSON.parse(event.data) as TimelineEvent;
+        setEvents((current) => appendTimelineEvent(current, next));
       } catch { /* malformed frames are ignored */ }
     };
     return () => socket.close();
@@ -102,7 +104,7 @@ export default function App() {
     return () => { active = false; window.clearInterval(timer); };
   }, [projectId]);
 
-  const statusCounts = useMemo(() => tasks.reduce<Record<string, number>>((counts, task) => ({ ...counts, [task.status]: (counts[task.status] ?? 0) + 1 }), {}), [tasks]);
+  const statusCounts = useMemo(() => countTaskStatuses(tasks), [tasks]);
   const sendCommand = async () => {
     if (!projectId || message.trim() === '') return;
     setMessageStatus('Gönderiliyor…');
