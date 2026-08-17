@@ -56,8 +56,12 @@ export class EventsGateway implements OnModuleDestroy {
   private async publish(client: WebSocket, state: ClientState): Promise<void> {
     const subscription = state.subscription;
     if (subscription === undefined || client.readyState !== client.OPEN) return;
-    const events = await listEvents(this.#ch, subscription.projectId, { limit: 200 });
+    // İmleç sorguya verilir. Aksi halde en ESKİ 200 olay gelir ve proje 200
+    // olayı geçtiğinde akış kalıcı olarak susardı (panel bağlı görünüp donardı).
     const after = subscription.afterSeq;
+    const events = await listEvents(this.#ch, subscription.projectId, {
+      limit: 200, afterSeq: after,
+    });
     for (const event of events) {
       const seq = BigInt(event.seq);
       if (seq <= after) continue;
