@@ -20,7 +20,8 @@ import { createGateOperations } from './gate-operations.js';
 import { createToolPortFactory } from './tool-factory.js';
 import { createRuntimeContextService } from './runtime-context-service.js';
 import { createExecutionErrorRecorder } from './execution-error-recorder.js';
-import { appendEvent, getActivePrompt } from '@ww/db';
+import { buildAgentCapabilities } from './agent-capabilities.js';
+import { appendEvent, getActivePrompt, getAssignmentAttempt, listLatestAgents } from '@ww/db';
 import type { RuntimeModels } from './runtime-context.js';
 import type { Phase9RuntimeCompositionInput } from './runtime-composition.js';
 import { createLateBoundPort, type LateBoundPort } from './late-binding.js';
@@ -49,8 +50,19 @@ export async function createOrchestrationComposition(
   input: AssemblyInput,
 ): Promise<AssemblyResult> {
   const auditStore = clickHouseExecutorEventStore(input.ch);
+  // Agent'lar kendi adlarına konuşabilmeli: yetenek haritası olmadan worker
+  // raporu 'system' kimliğine düşer ve politika onu reddeder.
+  const agents = await listLatestAgents(input.ch, input.projectId);
+  const capabilities = buildAgentCapabilities(input.projectId, agents as never);
   const sessionId = randomUUID() as EntityId;
-  const owningPmId = randomUUID() as EntityId;
+  // PM kimliği UYDURULAMAZ: mesajın alıcısı projenin gerçek PM agent'ıdır;
+  // rastgele bir kimlik politika kontrolünde 'alıcı PM değil' diye düşer.
+  const pmAgent = agents.find((agent) => agent.role === 'pm' && agent.status !== 'stopped')
+    ?? agents.find((agent) => agent.status !== 'stopped');
+  if (pmAgent === undefined) {
+    throw new Error('projede aktif agent yok — PM alıcısı belirlenemiyor');
+  }
+  const owningPmId = pmAgent.agent_id as EntityId;
 
   const executor = createExecutorComposition({
     sandbox: new DockerSandboxAdapter({
@@ -119,7 +131,21 @@ export async function createOrchestrationComposition(
       effectEscalation: { sessionId, owningPmId },
     }),
     // Köprü kendi kanalını composition içindeki gerçek CommunicationService'ten kurar.
-    runtimeSession: { sessionId, owningPmId },
+    agentCapabilities: capabilities.capabilities,
+    runtimeSession: {
+      sessionId,
+      owningPmId,
+      // Gönderen, denemenin worker agent'ıdır.
+      authenticateAs: async (attemptId: EntityId) => {
+        const attempt = await getAssignmentAttempt(input.ch, attemptId);
+        if (attempt === null) throw new Error(`deneme bulunamadı: ${attemptId}`);
+        const credential = capabilities.credentialFor(attempt.workerAgentId);
+        if (credential === undefined) {
+          throw new Error(`worker agent yetkisi yok: ${attempt.workerAgentId}`);
+        }
+        return { type: 'agent_capability' as const, credential, issuedAt: new Date().toISOString() };
+      },
+    },
     runtimeContext: createRuntimeContextService({
       prompts: {
         load: async (name) => (await getActivePrompt(input.ch, name))?.content ?? null,

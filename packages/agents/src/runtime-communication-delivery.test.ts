@@ -19,6 +19,7 @@ const delivery = (send = vi.fn(async () => ({ messageId: id(99) }) as never)) =>
   port: createRuntimeCommunicationDelivery({
     communication: { send } as never,
     authentication: auth,
+    authenticateAs: async () => auth,
     sessionId: id(10),
     owningPmId: id(11),
     now: () => '2026-08-17T09:00:00.000Z',
@@ -108,6 +109,7 @@ describe('createRuntimeCommunicationDelivery', () => {
     expect(() => createRuntimeCommunicationDelivery({
       communication: { send: vi.fn() } as never,
       authentication: { type: 'agent' } as never,
+      authenticateAs: async () => auth,
       sessionId: id(10),
       owningPmId: id(11),
       now: () => '2026-08-17T09:00:00.000Z',

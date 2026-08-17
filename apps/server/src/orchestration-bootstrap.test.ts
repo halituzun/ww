@@ -8,7 +8,25 @@ const id = (n: number): string => `00000000-0000-4000-8000-${n.toString().padSta
 
 function deps(over: Partial<BootstrapDeps> = {}): BootstrapDeps {
   return {
-    ch: {} as never,
+    // Assembly artık projenin agent'larını yükler: PM alıcısı ve agent
+    // yetenekleri uydurulamaz, gerçek satırlardan gelir.
+    ch: {
+      query: async () => ({
+        json: async () => [{
+          agent_id: '00000000-0000-4000-8000-0000000000a1',
+          project_id: '00000000-0000-4000-8000-000000000001',
+          role: 'pm', group: 'management', name: 'PM', model_ref: 'mock:pm',
+          parent_agent_id: '00000000-0000-0000-0000-000000000000',
+          clone_of: '00000000-0000-0000-0000-000000000000',
+          status: 'idle',
+          current_task_id: '00000000-0000-0000-0000-000000000000',
+          prompt_name: 'role.pm', prompt_version: 1,
+          tasks_done: 0, tasks_rejected: 0,
+          created_at: '2026-08-17T00:00:00.000Z', updated_at: '2026-08-17T00:00:00.000Z',
+          assignment_fence: '0', version: '1',
+        }],
+      }),
+    } as never,
     redis: {} as never,
     projectId: id(1),
     projectSlug: 'satranc',

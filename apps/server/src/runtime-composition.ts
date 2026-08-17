@@ -1,4 +1,4 @@
-import { CommunicationWakeupPublisher, getFencedLease, taskLockKey } from '@ww/db';
+import { CommunicationWakeupPublisher, getFencedLease, getTaskBrief, taskLockKey } from '@ww/db';
 import type { EntityId } from '@ww/shared';
 import { applyLateBinding, type LateBinder } from './late-bind-runtime.js';
 import { internalServiceTokenMap } from './internal-service-tokens.js';
@@ -212,7 +212,11 @@ export interface Phase9RuntimeCompositionInput extends Omit<Phase8RuntimeComposi
    * üzerinden kurulur. Çağıranın sahte bir port uydurmasına gerek kalmaz —
    * sahte port worker'a "soru iletildi" yalanı söylerdi.
    */
-  readonly runtimeSession?: Readonly<{ sessionId: EntityId; owningPmId: EntityId }>;
+  readonly runtimeSession?: Readonly<{
+    sessionId: EntityId;
+    owningPmId: EntityId;
+    authenticateAs: (attemptId: EntityId) => Promise<import('@ww/agents').PrincipalAuthentication>;
+  }>;
   readonly localSessionToken: string;
   /** Explicit agent credentials for server-owned worker/verifier communication. */
   readonly agentCapabilities?: ReadonlyMap<string, AgentCapabilityBinding>;
@@ -403,6 +407,7 @@ export function createPhase9RuntimeComposition(
       authentication: input.internalAuthentication,
       sessionId: input.runtimeSession.sessionId,
       owningPmId: input.runtimeSession.owningPmId,
+      authenticateAs: input.runtimeSession.authenticateAs,
       now: () => new Date().toISOString(),
     })
   );
@@ -438,6 +443,14 @@ export function createPhase9RuntimeComposition(
     inboxPollingModule,
     orchestrate: (orchestrationInput: Omit<Phase1OrchestratorInput, 'scheduler' | 'runtime'>) =>
       runPhase1Orchestrator({
+        // Bağlayıcı brief atamanın mühürlediğidir; çağıranınki değil.
+        loadBrief: async (attempt) => {
+          const bound = await getTaskBrief(input.ch, attempt.taskBriefId);
+          if (bound === null) {
+            throw new Error(`atamanın brief'i bulunamadı: ${attempt.taskBriefId}`);
+          }
+          return bound;
+        },
         ...(brakes === undefined ? {} : { brakes }),
         ...orchestrationInput,
         scheduler,

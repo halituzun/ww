@@ -19,7 +19,21 @@ export interface Phase1SchedulerPort {
   commit(input: Readonly<{ taskId: EntityId; attempt: AssignmentAttemptV1 }>): Promise<Readonly<{ commitHash: string }>>;
 }
 
-export interface Phase1OrchestratorInput { readonly brakes?: Phase1BrakeCheck | undefined; readonly taskId: EntityId; readonly brief: TaskBriefV1; readonly scheduler: Phase1SchedulerPort; readonly runtime: Phase1RuntimePort; readonly maxAttempts?: number; }
+export interface Phase1OrchestratorInput {
+  readonly brakes?: Phase1BrakeCheck | undefined;
+  readonly taskId: EntityId;
+  readonly brief: TaskBriefV1;
+  /**
+   * Atamanın FİİLEN bağladığı brief'i yükler. İlk atama brief'i kendi
+   * mühürler (agent prompt sürümleri + kendi cutoff'u); çağıranın ayrıca
+   * mühürlediği brief onunla asla eşleşmez ve worker raporu
+   * "task brief uyusmuyor" ile reddedilir.
+   */
+  readonly loadBrief?: (attempt: AssignmentAttemptV1) => Promise<TaskBriefV1>;
+  readonly scheduler: Phase1SchedulerPort;
+  readonly runtime: Phase1RuntimePort;
+  readonly maxAttempts?: number;
+}
 /**
  * Denemeye başlamadan önce çalışan güvenlik freni (docs/07 → Frenler).
  * Fren tetiklenirse BrakeError fırlatır; orkestratör işi başlatmadan tırmandırır.
@@ -103,7 +117,11 @@ export async function runPhase1Orchestrator(input: Phase1OrchestratorInput): Pro
   const maxAttempts = boundedAttempts(input.maxAttempts);
   const attempt = await input.scheduler.assign(input.taskId);
   try {
-    return await runAssignedLifecycle(input, attempt, maxAttempts, 1);
+    // Brief atamadan sonra çözülür: bağlayıcı olan atamanınkidir.
+    const effective = input.loadBrief === undefined
+      ? input
+      : { ...input, brief: await input.loadBrief(attempt) };
+    return await runAssignedLifecycle(effective, attempt, maxAttempts, 1);
   } catch (error) {
     const status = await input.scheduler.handleExecutionError({ taskId: input.taskId, attempt, phase: 'working', error });
     return { status, attempts: 1 };

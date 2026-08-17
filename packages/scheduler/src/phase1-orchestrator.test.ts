@@ -146,3 +146,79 @@ describe('güvenlik frenleri', () => {
     expect(result.status).toBe('escalated');
   });
 });
+
+// ASIL KUSUR: çağıran taraf brief'i kendi mühürlüyordu ama İLK ATAMA kendi
+// brief'ini mühürler (agent'ların prompt sürümleri + kendi cutoff'u ile).
+// İkisi asla aynı olamaz; worker raporu "task brief uyusmuyor" ile
+// reddediliyor ve HİÇBİR görev çalışamıyordu.
+describe('runPhase1Orchestrator brief kaynağı', () => {
+  const attempt = {
+    assignmentAttemptId: '00000000-0000-4000-8000-000000000009',
+    projectId: '00000000-0000-4000-8000-000000000001',
+    taskId: '00000000-0000-4000-8000-000000000002',
+    taskBriefId: '00000000-0000-4000-8000-00000000000b',
+  } as never;
+
+  const scheduler = (over: Record<string, unknown> = {}) => ({
+    assign: async () => attempt,
+    transition: async () => ({ status: 'working' }),
+    handleExecutionError: async () => 'failed',
+    escalate: async () => undefined,
+    gate: async () => ({ passed: true, evidenceRefs: [] }),
+    commit: async () => ({ commitHash: 'abc1234' }),
+    awaitUserAnswer: async () => undefined,
+    reassign: async () => attempt,
+    resumeUserAnswer: async () => attempt,
+    ...over,
+  }) as never;
+
+  it('loadBrief verilirse atamanın brief’ini kullanır', async () => {
+    const bound = { taskId: '00000000-0000-4000-8000-000000000002', marker: 'atamanın' } as never;
+    const seen: unknown[] = [];
+
+    await runPhase1Orchestrator({
+      taskId: '00000000-0000-4000-8000-000000000002' as never,
+      brief: { taskId: 'çağıranın', marker: 'çağıranın' } as never,
+      loadBrief: async () => bound,
+      scheduler: scheduler(),
+      runtime: {
+        work: async (input: { brief: unknown }) => { seen.push(input.brief); return { kind: 'report', summary: 'ok' }; },
+        verify: async () => ({ verdict: { approved: true, evidenceRefs: [] }, diff: '' }),
+      } as never,
+      maxAttempts: 1,
+    });
+
+    expect(seen[0]).toBe(bound);
+  });
+
+  it('loadBrief yoksa çağıranın brief’i kullanılır', async () => {
+    const caller = { taskId: '00000000-0000-4000-8000-000000000002' } as never;
+    const seen: unknown[] = [];
+
+    await runPhase1Orchestrator({
+      taskId: '00000000-0000-4000-8000-000000000002' as never,
+      brief: caller,
+      scheduler: scheduler(),
+      runtime: {
+        work: async (input: { brief: unknown }) => { seen.push(input.brief); return { kind: 'report', summary: 'ok' }; },
+        verify: async () => ({ verdict: { approved: true, evidenceRefs: [] }, diff: '' }),
+      } as never,
+      maxAttempts: 1,
+    });
+
+    expect(seen[0]).toBe(caller);
+  });
+
+  // Brief yüklenemezse sessizce çağıranınkine düşmek, uyuşmazlığı geri getirir.
+  it('loadBrief düşerse hata yutulmaz', async () => {
+    const result = await runPhase1Orchestrator({
+      taskId: '00000000-0000-4000-8000-000000000002' as never,
+      brief: {} as never,
+      loadBrief: async () => { throw new Error('brief okunamadı'); },
+      scheduler: scheduler(),
+      runtime: { work: async () => ({ kind: 'report', summary: 'ok' }), verify: async () => ({}) } as never,
+      maxAttempts: 1,
+    });
+    expect(result.status).toBe('failed');
+  });
+});

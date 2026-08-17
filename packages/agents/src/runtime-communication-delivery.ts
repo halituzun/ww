@@ -19,6 +19,12 @@ export interface RuntimeTaskScope {
 
 export interface RuntimeCommunicationDeliveryInput {
   readonly communication: CommunicationService;
+  /**
+   * Gönderen KİMLİĞİ denemeye göre çözülür: worker kendi adına konuşmalıdır.
+   * 'system' kimliği yalnızca kod-kaynaklı tırmandırma içindir; worker
+   * raporunu system olarak göndermek politika tarafından reddedilir.
+   */
+  readonly authenticateAs: (attemptId: EntityId) => Promise<PrincipalAuthentication>;
   readonly authentication: PrincipalAuthentication;
   readonly sessionId: EntityId;
   /** Soruların ilk düştüğü yer: projenin PM agent'ı (docs/03 tırmandırma zinciri). */
@@ -71,7 +77,8 @@ export function createRuntimeCommunicationDelivery(
         createdAt: input.now(),
       };
       // Kimlik kanonik boru hattından gelir; burada üretmek "yazıldı" yalanıdır.
-      const envelope = await input.communication.send(input.authentication, send);
+      const sender = await input.authenticateAs(call.assignmentAttemptId);
+      const envelope = await input.communication.send(sender, send);
       return Object.freeze({ messageId: envelope.messageId });
     },
 
@@ -91,7 +98,8 @@ export function createRuntimeCommunicationDelivery(
         priority: 'normal',
         createdAt: input.now(),
       };
-      await input.communication.send(input.authentication, send);
+      const sender = await input.authenticateAs(provenance.assignmentAttemptId);
+      await input.communication.send(sender, send);
     },
   };
   return Object.freeze(port);
