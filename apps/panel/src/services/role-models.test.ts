@@ -103,3 +103,28 @@ describe('crossCheckWarnings', () => {
     expect(warnings.some((warning) => /konsey/i.test(warning))).toBe(true);
   });
 });
+
+describe('kayıp yedek uyarısı', () => {
+  const at = '2026-08-17T00:00:00.000Z';
+  const row = (over: Partial<RoleModel>): RoleModel =>
+    ({ role: 'worker', modelRef: 'deepseek:chat', fallbackRefs: [], configured: true, updatedAt: at, ...over });
+
+  it('yazılan yedek fiili zincirde yoksa uyarır', () => {
+    const warnings = crossCheckWarnings([
+      row({ fallbackRefs: ['openai:mini'], effectiveChain: [] }),
+    ]);
+    expect(warnings.some((w) => /fiilen kullanılmıyor/.test(w))).toBe(true);
+    expect(warnings.some((w) => w.includes('openai:mini'))).toBe(true);
+  });
+
+  it('yedek fiili zincirdeyse uyarmaz', () => {
+    expect(crossCheckWarnings([
+      row({ fallbackRefs: ['openai:mini'], effectiveChain: ['openai:mini'] }),
+    ])).toEqual([]);
+  });
+
+  // Eski sunucu effectiveChain göndermezse uyarı üretilmemeli.
+  it('effectiveChain yoksa uyarı üretmez', () => {
+    expect(crossCheckWarnings([row({ fallbackRefs: ['openai:mini'] })])).toEqual([]);
+  });
+});

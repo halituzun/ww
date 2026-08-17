@@ -5,6 +5,8 @@ export interface RoleModel {
   role: string;
   modelRef: string;
   fallbackRefs: string[];
+  /** Sunucunun fiilen kuracağı zincir: pasif/kayıtsız sağlayıcılar elenmiş. */
+  effectiveChain?: string[];
   configured: boolean;
   updatedAt: string;
 }
@@ -57,6 +59,18 @@ export function crossCheckWarnings(rows: readonly RoleModel[]): string[] {
     warnings.push(
       `verifier ile worker aynı sağlayıcıda (${providerOf(worker.modelRef)}) — çapraz kontrol için farklı sağlayıcı önerilir.`,
     );
+  }
+
+  // Yazılan yedek fiilen kullanılmıyorsa sessizce kaybolur: sağlayıcı kayıtlı
+  // değil ya da pasif demektir. Bu, fallback'in hiç devreye girmemesi demek.
+  for (const row of configured) {
+    if (row.effectiveChain === undefined) continue;
+    const dropped = row.fallbackRefs.filter((ref) => !row.effectiveChain!.includes(ref));
+    if (dropped.length > 0) {
+      warnings.push(
+        `${row.role} için yazılan yedek fiilen kullanılmıyor (${dropped.join(', ')}) — sağlayıcı kayıtlı değil veya pasif.`,
+      );
+    }
   }
 
   const council = configured.filter((row) => row.role === 'council_member');
