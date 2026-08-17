@@ -33,6 +33,17 @@ async function bootstrap(): Promise<void> {
   // "sunucu bozuldu"yu ayırt edebilsin.
   const { ZodExceptionFilter } = await import('./zod-exception.filter.js');
   app.useGlobalFilters(new ZodExceptionFilter());
+  // Sessiz devre dışılık en tehlikeli hata türüdür: /health yeşil olur ama
+  // görev kuyruğunu tüketen kimse yoktur. Durumu açılışta yüksek sesle söyle.
+  const { runtimeStatus } = await import('./runtime-status.js');
+  const { phase9RuntimeConfigFromEnvironment } = await import('./runtime-composition.js');
+  const runtime = runtimeStatus(phase9RuntimeConfigFromEnvironment);
+  if (runtime.orchestration === 'enabled') {
+    console.log('[ww] orkestrasyon runtime: ETKİN — görevler işlenecek');
+  } else {
+    console.warn(`[ww] UYARI orkestrasyon runtime: ${runtime.orchestration.toUpperCase()} — ${runtime.reason}`);
+  }
+
   const port = serverPort();
   await app.listen(port);
   console.log(`[ww] server hazır: http://localhost:${port}`);

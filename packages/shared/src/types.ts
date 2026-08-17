@@ -10,6 +10,13 @@ export interface WsEnvelope<T = unknown> {
   data: T;
 }
 
+/** Orkestrasyon runtime durumu; kapalıysa görev kuyruğu tüketilmez. */
+export interface RuntimeHealth {
+  readonly orchestration: 'enabled' | 'disabled' | 'misconfigured';
+  readonly tasksProcessed: boolean;
+  readonly reason: string;
+}
+
 export interface HealthReport {
   ok: boolean;
   clickhouse: boolean;

@@ -64,6 +64,10 @@ checkpoint oluştur ve push edilmemiş commit bırakma nedenini açıkça yaz.
   `secrets/` yok, `api_providers`'ta yalnız `mock` kayıtlı, `api_usage`'da sıfır
   gerçek çağrı. Her doğrulama `MockProvider` üzerinden yapıldı. Yani ww henüz bir kez
   bile asıl işini (gerçek modellerle uygulama üretmek) yapmadı.
+- **En kritik açık:** Orkestrasyon runtime'ı çalışan sunucuda hiç başlamıyor
+  (`WW_PHASE8_RUNTIME_ENABLED` ayarlanmıyor, `registerPhase9RuntimeConfig`
+  çağrılmıyor, `SchedulerWorker` kurulmuyor). `GET /runtime` bunu raporlar.
+  Gerçek uçtan uca koşu için önce bu bağlanmalıdır.
 - **Sıradaki iş:** Faz 3'ün kabul senaryosu — panelden gerçek sağlayıcı anahtarı
   girip küçük bir gerçek senaryo koşturmak, kontör panosunda gerçek maliyeti görmek,
   bozuk anahtarla fallback/sağlık rozetini doğrulamak. Faz 4, 5 ve 6 bu koşuya

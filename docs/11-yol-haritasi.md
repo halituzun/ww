@@ -42,6 +42,16 @@
 | 5 — Tuval ve Dosya Gezgini | **Kod tamam ⏳** | Kabul senaryosu Faz 4'ün canlı koşusuna bağlı |
 | 6 — Test Ortamları ve Cila | **Kod tamam ⏳** | Canlı sandbox kapısı geçti; üç gerçek proje koşusu eksik |
 
+**EN KRİTİK AÇIK (2026-08-17 keşfi):** Agent orkestrasyon runtime'ı **hiç
+başlatılmıyor.** `registerPhase9RuntimeConfig` hiçbir üretim kodundan
+çağrılmıyor ve `WW_PHASE8_RUNTIME_ENABLED` hiçbir yerde ayarlanmıyor; ayrıca
+`SchedulerWorker` hiç kurulmuyor. Server REST, WebSocket, migration, recovery
+ve sağlayıcı sağlık taramasını koşar — ama görev kuyruğunu tüketen kimse
+yoktur, yani panelden açılan bir projenin görevleri sonsuza dek `queued`
+kalır. Durum artık açılış logunda ve `GET /runtime` ucunda görünür.
+Faz 1'in kabul senaryosu testlerde geçer (orkestratör doğrudan çağrılır);
+eksik olan, çalışan sunucunun bu döngüyü başlatmasıdır.
+
 **Bu özeti okuyan ajan için tek kritik gerçek:** Platform bugüne kadar **hiç gerçek
 LLM API'sine bağlanmadı.** `secrets/` dizini yok, `api_providers`'ta kayıtlı tek
 sağlayıcı `mock`, `api_usage` tablosunda sıfır gerçek çağrı var. Tüm doğrulama
