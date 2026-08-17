@@ -74,6 +74,17 @@ export function assemblePromptMessages(input: AssembleInput): PromptMessage[] {
     active_plan: '(brief planVersion ile mühürlendi)',
   });
 
+  // GÖREV, şablondan BAĞIMSIZ olarak iletilir. Şablon değişkenleri yalnızca
+  // sistem metnine konur ve bootstrap şablonlarında hiç yer tutucu yoktur:
+  // hedef sessizce düşüyordu. Canlı koşuda worker "bana görev verilmemiş"
+  // diye soru sordu ve hiçbir iş ilerlemedi. Hedefi burada yazmak, şablon ne
+  // olursa olsun görevin ulaşmasını garanti eder.
+  const goal = brief.goal.trim();
+  const task = [
+    `Görev:\n${goal === '' ? '(belirtilmedi)' : goal}`,
+    `Kabul kriterleri:\n${list(brief.acceptanceCriteria, '- (belirtilmedi)')}`,
+  ].join('\n\n');
+
   // Kapsam bilgisi ayrı bir user mesajında: worker'ın hedef dosya ve araç
   // sınırını görmesi, sandbox reddine düşmeden doğru davranması için gerekir.
   const scope = [
@@ -84,6 +95,7 @@ export function assemblePromptMessages(input: AssembleInput): PromptMessage[] {
 
   return [
     { role: 'system', content: system },
+    { role: 'user', content: task },
     { role: 'user', content: scope },
   ];
 }

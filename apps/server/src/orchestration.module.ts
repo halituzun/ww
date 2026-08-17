@@ -14,12 +14,14 @@ import {
   appendProjectVersion,
   createAgent,
   createCh,
+  createPlan,
   createProject,
   createTask,
   enqueueTask,
   getLatestProject,
   listLatestProjects,
   getLatestTask,
+  listLatestPlansByStatus,
   listLatestTasksByStatus,
   listLatestAgents,
   getMessage,
@@ -41,6 +43,8 @@ import { BOOTSTRAP_AGENTS, planBootstrapPrompts } from './agent-bootstrap.js';
 import { writeProjectScaffold } from './project-scaffold-writer.js';
 import { resolveWorkspaceRoot } from './runtime-context.js';
 import { isResumableStatus, resumeAnsweredTask } from './resume-answered-task.js';
+import { buildBootstrapPlan } from './bootstrap-plan.js';
+import { isConcretePlanId, resolveTaskPlanId } from './task-plan-id.js';
 import {
   PHASE8_RUNTIME,
   PHASE9_RUNTIME_CONFIG,
@@ -132,6 +136,7 @@ export class ProjectApplicationService implements ProjectApplication {
         await createAgent(this.database.ch, { agent_id: randomUUID(), project_id: projectId, role: agent.role, group: agent.group, name: agent.name, model_ref: agent.model, parent_agent_id: NIL_UUID, clone_of: NIL_UUID, status: 'idle', current_task_id: NIL_UUID, prompt_name: `bootstrap.${projectId}.${agent.role}`, prompt_version: 1, tasks_done: 0, tasks_rejected: 0, created_at: now, updated_at: now });
       }
     }
+
     return project;
   }
   get(projectId: string): Promise<ProjectRow | null> { return getLatestProject(this.database.ch, projectId); }
@@ -159,7 +164,30 @@ export class TaskApplicationService implements TaskApplication {
     if (!issuer) throw new Error('project icin aktif issuer agent bulunamadi');
     const taskId = randomUUID() as EntityId;
     const now = new Date().toISOString();
-    const task = await createTask(this.database.ch, { task_id: taskId, project_id: project.project_id, plan_id: input.planId ?? NIL_UUID, parent_task_id: NIL_UUID, title: input.title, description: input.description, acceptance_criteria: input.acceptanceCriteria, status: 'queued', priority: 5, issuer_agent_id: issuer.agent_id, worker_agent_id: NIL_UUID, verifier_agent_id: NIL_UUID, group: 'coding' as AgentGroup, depends_on: input.dependencies, target_files: input.files, attempt: 0, max_attempts: input.maxAttempts, delegation_depth: 0, token_budget: input.budget, tokens_spent: '0', commit_hash: '', result_summary: '', reject_reason: '', task_brief_id: NIL_UUID, assignment_attempt_id: NIL_UUID, created_at: now, updated_at: now });
+    // Plansız görev atanamaz ve sessizce hiç çalışmaz (bkz. task-plan-id.ts).
+    // Plan görev açılışında çözülür: issuer agent burada GARANTİDİR, oysa
+    // proje oluşturulurken (bootstrapAgents=false) hiç agent olmayabilir ve
+    // plan kaydı yaratıcı agent kimliği ister.
+    let planId: EntityId;
+    const known = {
+      approved: await listLatestPlansByStatus(this.database.ch, project.project_id, 'approved'),
+      proposed: await listLatestPlansByStatus(this.database.ch, project.project_id, 'proposed'),
+    };
+    if (isConcretePlanId(input.planId) || known.approved.length > 0 || known.proposed.length > 0) {
+      planId = resolveTaskPlanId(input.planId, known);
+    } else {
+      // Plansız projede her görev "task plan kimligi tasimiyor" ile reddedilir
+      // ve kullanıcıya "queued" görünürken hiç çalışmaz.
+      const seeded = await createPlan(this.database.ch, buildBootstrapPlan({
+        projectId: project.project_id as EntityId,
+        projectName: project.name,
+        planId: randomUUID() as EntityId,
+        createdByAgentId: issuer.agent_id as EntityId,
+        createdAt: new Date().toISOString(),
+      }) as never);
+      planId = seeded.plan_id as EntityId;
+    }
+    const task = await createTask(this.database.ch, { task_id: taskId, project_id: project.project_id, plan_id: planId, parent_task_id: NIL_UUID, title: input.title, description: input.description, acceptance_criteria: input.acceptanceCriteria, status: 'queued', priority: 5, issuer_agent_id: issuer.agent_id, worker_agent_id: NIL_UUID, verifier_agent_id: NIL_UUID, group: 'coding' as AgentGroup, depends_on: input.dependencies, target_files: input.files, attempt: 0, max_attempts: input.maxAttempts, delegation_depth: 0, token_budget: input.budget, tokens_spent: '0', commit_hash: '', result_summary: '', reject_reason: '', task_brief_id: NIL_UUID, assignment_attempt_id: NIL_UUID, created_at: now, updated_at: now });
     this.#redis ??= createRedis();
     await enqueueTask(await this.#redis, `ww:queue:${project.project_id}`, task.task_id);
     return task;
