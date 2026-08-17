@@ -63,14 +63,15 @@ koşusu istediğinden **kod bitmiş olsa da faz kapanmamıştır**.
 
 ```bash
 docker compose up -d
-WW_REQUIRE_INTEGRATION=1 pnpm test          # 709 test, 9 paket
+WW_REQUIRE_INTEGRATION=1 pnpm test          # 912 test, 10 paket
 pnpm --filter @ww/executor test:live        # +4 canlı Docker sandbox testi (opt-in)
 pnpm build && pnpm lint
 ```
 
 Varsayılan `pnpm test` koşusunda executor'ın 4 canlı Docker testi atlanır
 (`WW_DOCKER_LIVE=1` ister). Depo kuralı gereği atlanan test kapı sayılmadığından
-faz kapatırken `test:live` ayrıca koşulmalıdır. Toplam kapı: **713 test**.
+faz kapatırken `test:live` ayrıca koşulmalıdır. Toplam kapı: **916 test**
+(2026-08-17 ölçümü). Ayrıca `pnpm wiring:check` — bağlanmamış kod kapısı.
 
 ## Faz 0 — Temel Altyapı {#faz-0}
 

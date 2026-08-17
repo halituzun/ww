@@ -53,32 +53,49 @@ checkpoint oluştur ve push edilmemiş commit bırakma nedenini açıkça yaz.
 > yerden başlar — 2026-08-12 → 2026-08-16 arasında tam olarak bu oldu: Codex 72
 > commit ekledi, bu bölüm "sıradaki iş Faz 1" demeye devam etti.
 
-**Son doğrulama: 2026-08-16, dal `agent/agent-communication-contract`
-(main'in 72 commit önünde, remote ile senkron).**
+**Son doğrulama: 2026-08-17, dal `agent/agent-communication-contract`
+(remote ile senkron).**
 
-- **Kapı durumu:** `WW_REQUIRE_INTEGRATION=1 pnpm test` → 709 test, 9 paket, hata yok.
-  `pnpm --filter @ww/executor test:live` → 4/4 (opt-in canlı Docker sandbox; varsayılan
-  koşuda atlanır, faz kapatırken ayrıca koşulmalı). `pnpm build` ve `pnpm lint` yeşil.
-  Çalışma ağacı temiz.
-- **Faz durumu:** Faz 0, 1 ve 2 tamamlandı ✅. Faz 3-6'nın kodu yazıldı ve testleri
-  yeşil, ancak kabul senaryoları **açık** — ayrıntı ve kanıt eşlemesi için
-  `docs/11-yol-haritasi.md` içindeki "Durum Özeti" tablosu.
-- **En kritik gerçek:** Platform bugüne dek **hiç gerçek LLM API'sine bağlanmadı.**
-  `secrets/` yok, `api_providers`'ta yalnız `mock` kayıtlı, `api_usage`'da sıfır
-  gerçek çağrı. Her doğrulama `MockProvider` üzerinden yapıldı. Yani ww henüz bir kez
-  bile asıl işini (gerçek modellerle uygulama üretmek) yapmadı.
-- **En kritik açık:** Orkestrasyon runtime'ı çalışan sunucuda hiç başlamıyor
+- **Kapı durumu:** `WW_REQUIRE_INTEGRATION=1 pnpm test` → **912 test**, 10 paket,
+  hata yok. `pnpm --filter @ww/executor test:live` → 4/4 (opt-in canlı Docker
+  sandbox; varsayılan koşuda atlanır). `pnpm build`, `pnpm lint` ve
+  `pnpm wiring:check` yeşil. Çalışma ağacı temiz.
+- **Faz durumu:** Faz 0, 1 ve 2 tamamlandı ✅. Faz 3-6 kod tamam, kabul
+  senaryoları açık — ayrıntı `docs/11-yol-haritasi.md` "Durum Özeti".
+- **En kritik gerçek:** Platform hâlâ **hiç gerçek LLM API'sine bağlanmadı**;
+  `api_usage`'da gerçek çağrı yok. Sebebi yalnız anahtar eksikliği değil:
+  orkestrasyon runtime'ı çalışan sunucuda hiç başlamıyor (aşağı bakın).
+- **En kritik açık:** Orkestrasyon runtime'ı başlamıyor
   (`WW_PHASE8_RUNTIME_ENABLED` ayarlanmıyor, `registerPhase9RuntimeConfig`
-  çağrılmıyor, `SchedulerWorker` kurulmuyor). `GET /runtime` bunu raporlar.
-  Gerçek uçtan uca koşu için önce bu bağlanmalıdır.
-- **Sıradaki iş:** Faz 3'ün kabul senaryosu — panelden gerçek sağlayıcı anahtarı
-  girip küçük bir gerçek senaryo koşturmak, kontör panosunda gerçek maliyeti görmek,
-  bozuk anahtarla fallback/sağlık rozetini doğrulamak. Faz 4, 5 ve 6 bu koşuya
-  zincirleme bağlıdır; sırayı atlamak faz kapatmaz.
-- **Terminoloji uyarısı:** "Faz" ile "Phase" aynı şey değildir. Yol haritasında
-  **Faz 0-6** (ürün kilometre taşları) vardır; `docs/superpowers/plans/2026-08-14-faz-1-*`
-  planının kendi içinde **Phase 0-9** (uygulama adımları) vardır. Koddaki
-  `phase9.runtime.integration.test.ts` gibi adlar bu ikinci numaralandırmadandır.
+  çağrılmıyor, `SchedulerWorker` kurulmuyor). Artık açılış logunda ve
+  `GET /runtime` ucunda görünür. Bağlamak için gereken parçalardan ikisi
+  2026-08-17 gecesinde tamamlandı: sağlayıcı adaptör kaydı
+  (`buildProviderRegistry`) ve rol→model yönlendirme indeksi
+  (`buildRoutingIndex` + `loadRoutingIndex`). Kalan: `schedulerOperations`
+  (gate/commit/transition/escalate/reassign üretim karşılıkları) ve executor
+  kompozisyonu.
+
+### 2026-08-17 gecesinde yapılanlar (21 commit)
+
+Tekrar eden hata deseni: **yazılmış, testli, ama hiçbir üretim kodu çağırmıyor.**
+Bir gecede beş ayrı yerde bulundu ve artık `pnpm wiring:check` kapısıyla
+korunuyor (`wiring-baseline.json` mevcut 43 ihlali dondurur, yenileri düşer).
+
+- Güvenlik frenleri (token/maliyet/duvar-saati/kaçak döngü) hiç çağrılmıyordu;
+  mekanizma, ClickHouse portları ve üretim yolu bağlandı. Varsayılan AÇIK,
+  kapatmak için `WW_DISABLE_BRAKES=1` gerekir.
+- Periyodik sağlayıcı sağlık kontrolü yoktu; kuruldu ve gerçek 1 token'lık
+  ping'e bağlandı. Anahtarsız sağlayıcı `unknown` değil `down` yazar.
+- `role_models` tablosu ölüydü; repository, REST ucu, panel tablosu ve
+  yönlendirme indeksi eklendi.
+- Panel: ayrı API sayfası, kontör panosu, denetim ekranı, bildirim merkezi.
+- Panel MVVM'e taşındı (15 ham fetch → 1; saf mantık ViewModel katmanında).
+
+**Sessiz hata sınıfı (en tehlikelisi):** "bağlı görünen ama ölü sistem".
+İki örnek bulunup düzeltildi — `listEvents` en eski N olayı döndürdüğü için
+canlı besleme 200 olaydan sonra kalıcı susuyordu; panel WebSocket'i kopunca
+hiç yeniden bağlanmıyordu. İkisi de hata vermeden çalışıyor görünüyordu.
+
 - Redis istemcisi `5.12.1`; health ve pub/sub istemcileri timeout sonrası koşulsuz
   `destroy()` ile kapanır. Bu cleanup davranışını geriye götürme.
 - Yerel servis portları: ClickHouse `8124`, Redis `6380`, API `4000`, panel `5173`.

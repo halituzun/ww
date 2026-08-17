@@ -8,7 +8,7 @@ Product-agent work must also read the normative communication contract in
 
 ## Current State
 
-Verified 2026-08-16 on branch `agent/agent-communication-contract` (72 commits
+Verified 2026-08-17 on branch `agent/agent-communication-contract` (97 commits
 ahead of `main`, in sync with its remote). Keep this section current: when it goes
 stale, the next session starts from the wrong place.
 
@@ -23,9 +23,13 @@ stale, the next session starts from the wrong place.
   the panel, run a small real scenario, confirm the kontör panel shows real cost,
   then add a deliberately broken key and confirm health goes red and fallback
   engages. Faz 4, 5 and 6 chain onto that run; do not skip ahead.
-- Gate as of that date: 709 tests across 9 packages, plus 4 opt-in live Docker
-  sandbox tests via `pnpm --filter @ww/executor test:live` (these are skipped by a
-  plain `pnpm test`). Build and lint green.
+- Gate as of 2026-08-17: **912 tests across 10 packages**, plus 4 opt-in live
+  Docker sandbox tests via `pnpm --filter @ww/executor test:live` (skipped by a
+  plain `pnpm test`). Build, lint and `pnpm wiring:check` green.
+- `pnpm wiring:check` guards this repo's most expensive recurring defect:
+  code that is written and tested but never called by any production path. It
+  was found in five separate places in one night. `wiring-baseline.json` freezes
+  the known cases; the gate fails only on new ones.
 - "Faz" and "Phase" are different scales: the roadmap has **Faz 0-6** (product
   milestones), while `docs/superpowers/plans/2026-08-14-faz-1-*` has its own
   internal **Phase 0-9** (implementation steps). Code names like
