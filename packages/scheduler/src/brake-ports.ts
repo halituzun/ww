@@ -6,6 +6,7 @@ import type {
   ProjectSpendSnapshot,
   TaskBudgetSnapshot,
 } from './brake-guard.js';
+import { pausedWaitingMs } from './paused-waiting.js';
 
 /** docs/07: görev duvar-saati tavanı (settings.task_wall_clock_min varsayılanı 60 dk). */
 export const DEFAULT_WALL_CLOCK_LIMIT_MS = 60 * 60_000;
@@ -34,18 +35,30 @@ export function createClickHouseBrakePorts(
   ch: ClickHouseClient,
   options: ClickHouseBrakePortOptions = {},
 ): BrakeGuardPorts {
+  const nowMs = options.nowMs ?? ((): number => Date.now());
   async function readTaskBudget(taskId: string): Promise<TaskBudgetSnapshot> {
     const result = await ch.query({
-      query: `SELECT token_budget, tokens_spent, created_at
+      query: `SELECT token_budget, tokens_spent, created_at, status, updated_at, version
         FROM tasks WHERE task_id = {taskId:UUID}
-        ORDER BY version DESC LIMIT 1`,
+        ORDER BY version DESC LIMIT 1024`,
       query_params: { taskId },
       format: 'JSONEachRow',
     });
-    const row = (await result.json<Record<string, unknown>>())[0];
+    const rows = await result.json<Record<string, unknown>>();
+    const row = rows[0];
     // Bilinmeyen görev: tavan 0 = sınırsız, fren atmaz.
-    if (!row) return { tokensSpent: 0, tokenBudget: 0, startedAtMs: Date.now() };
+    if (!row) return { tokensSpent: 0, tokenBudget: 0, startedAtMs: Date.now(), pausedMs: 0 };
+    // Duraklama TÜM sürüm geçmişinden hesaplanır: görev kullanıcı cevabı
+    // beklerken geçen süre "iş" değildir ve duvar saatine sayılmamalıdır.
+    const pausedMs = pausedWaitingMs(
+      rows.map((versionRow) => ({
+        status: String(versionRow['status'] ?? ''),
+        atMs: parseUtc(versionRow['updated_at']),
+      })),
+      nowMs(),
+    );
     return {
+      pausedMs,
       tokensSpent: num(row['tokens_spent']),
       tokenBudget: num(row['token_budget']),
       startedAtMs: parseUtc(row['created_at']) || Date.now(),

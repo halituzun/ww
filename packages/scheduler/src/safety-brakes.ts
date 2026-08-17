@@ -21,8 +21,22 @@ export function assertCostBudget(input: { readonly spentUsd: number; readonly re
   }
 }
 
-export function assertWallClock(input: { readonly startedAtMs: number; readonly nowMs: number; readonly deadlineAtMs: number }): void {
-  if (!Number.isFinite(input.startedAtMs) || !Number.isFinite(input.nowMs) || !Number.isFinite(input.deadlineAtMs) || input.nowMs < input.startedAtMs || input.nowMs > input.deadlineAtMs) {
+/**
+ * `pausedMs`: görevin ÇALIŞMADAN, kullanıcı cevabı bekleyerek geçirdiği süre.
+ *
+ * NEDEN VAR: fren docs/07'de "sonsuz sürünme önleme" olarak tanımlıdır, yani
+ * İŞİN süresini sınırlar. Bekleme süresi de sayılınca soru soran her görev,
+ * kullanıcı bir saatten geç cevap verdiğinde cevabın hemen ardından fren
+ * yiyordu — soru sorma özelliği kendi kendini öldürüyordu. Canlı satranç
+ * koşusunda tam olarak bu oldu.
+ *
+ * Bozuk/negatif/sonsuz duraklama sessizce SIFIR sayılır: fren, hatalı bir
+ * ölçüm yüzünden devre dışı kalmamalıdır.
+ */
+export function assertWallClock(input: { readonly startedAtMs: number; readonly nowMs: number; readonly deadlineAtMs: number; readonly pausedMs?: number }): void {
+  const paused = Number.isFinite(input.pausedMs) && (input.pausedMs ?? 0) >= 0 ? (input.pausedMs ?? 0) : 0;
+  const effectiveNowMs = input.nowMs - paused;
+  if (!Number.isFinite(input.startedAtMs) || !Number.isFinite(input.nowMs) || !Number.isFinite(input.deadlineAtMs) || effectiveNowMs < input.startedAtMs || effectiveNowMs > input.deadlineAtMs) {
     throw new BrakeError('wall_clock', 'duvar saati limiti asildi');
   }
 }

@@ -13,6 +13,7 @@ export * from './agent-clone-service.js';
 export * from './safety-brakes.js';
 export * from './brake-guard.js';
 export * from './brake-ports.js';
+export * from './paused-waiting.js';
 export * from './escalation-recorder.js';
 export * from './transition-operation.js';
 export * from './assignment-operations.js';

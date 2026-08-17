@@ -19,6 +19,8 @@ export interface TaskBudgetSnapshot {
   /** 0 = görev başına tavan yok. */
   tokenBudget: number;
   startedAtMs: number;
+  /** Kullanıcı cevabı beklenerek geçen, işe sayılmayan süre (bkz. paused-waiting.ts). */
+  pausedMs?: number;
 }
 
 export interface ProjectSpendSnapshot {
@@ -59,6 +61,9 @@ export function createBrakeGuard(ports: BrakeGuardPorts): Phase1BrakeCheck {
         startedAtMs: budget.startedAtMs,
         nowMs: ports.nowMs(),
         deadlineAtMs: budget.startedAtMs + ports.wallClockLimitMs,
+        // Bekleme süresi işe sayılmaz: sayılırsa soru soran görev, kullanıcı
+        // tavandan geç cevap verdiğinde cevabın hemen ardından fren yer.
+        ...(budget.pausedMs === undefined ? {} : { pausedMs: budget.pausedMs }),
       });
       assertLoopSimilarity(failures);
     } catch (reason) {
