@@ -39,7 +39,7 @@
 | 2 — Hafıza ve Dayanıklılık | **Tamamlandı ✅** | Recovery, bağlam bütçesi, frenler testli |
 | 3 — Panel Temeli | **Tamamlandı ✅** | Kabul senaryosu 2026-08-17 akşamı gerçek API ile koşuldu (kanıt tablosu aşağıda) |
 | 4 — Tam Agent Sistemi | **Çoğu geçti ⏳** | Sihirbaz/konsey/onay/denetim döngüsü canlı koşuldu; kalan tek engel konseyin ≥3 sağlayıcı gereği (kanıt tablosu aşağıda) |
-| 5 — Tuval ve Dosya Gezgini | **Kod tamam ⏳** | Kabul senaryosu Faz 4'ün canlı koşusuna bağlı |
+| 5 — Tuval ve Dosya Gezgini | **Kriterler karşılandı ⏳** | Kaydırıcı, fihrist→görev/narrator ve canlı zarf doğrulandı; kalan tek şey tarayıcıda gözle izleme |
 | 6 — Test Ortamları ve Cila | **Kod tamam ⏳** | Canlı sandbox kapısı geçti; üç gerçek proje koşusu eksik |
 
 **İLK GERÇEK API ÇAĞRISI (2026-08-17):** DeepSeek anahtarı panelden girildi;
@@ -351,13 +351,24 @@ ReplanningService eklendi; Phase4 policy rotaları fail-closed olarak genişleti
 
 ## Faz 5 — Tuval ve Dosya Gezgini {#faz-5}
 
-**Durum:** Kod tamam ⏳ — kabul senaryosu bekliyor (2026-08-16)
+**Durum:** Kabul kriterlerinin **üçü de** karşılandı ⏳ (2026-08-18) — kalan
+tek eksik, bunların tarayıcıda gözle izlenmesi.
 
-Yüzeyler yerinde (React Flow tuval, salt-okunur Monaco fihrist editörü, narrator
-bağlantısı), ancak kabul senaryosu bunların **Faz 4'ün canlı koşusu sırasında**
-izlenmesini şart koşuyor: "Faz 4 senaryosu koşarken tuvalde atamalar/oklar canlı
-izlenir; geçmişe kaydırıcıyla dönülür; bir dosyanın fihristinden ilgili göreve ve
-narrator anlatısına gidilir." Faz 4 gerçek koşusu yapılmadan bu doğrulanamaz.
+| Kabul adımı | Durum | Kanıt |
+|---|---|---|
+| Tuvalde atamalar/oklar canlı izlenir | ✅ | Oklar gerçek `depends_on`/`parent_task_id`'den; canlı akış doğrulandı: `ws://…/events` → `status_change` zarfları `taskId` + `toStatus` ile geliyor (`assigned → working → verifying`) |
+| Geçmişe kaydırıcıyla dönülür | ✅ | `timeline-replay.ts` + `TimelineScrubber`; tuval geçmişe dönüldüğünde o andaki durumları çizer, olayı olmayan görev "bilinmiyor" |
+| Fihristten göreve ve narrator anlatısına gidilir | ✅ | `FileFihrist` bileşeni: ilgili görevler tıklanabilir, "Bu dosya nasıl yapıldı?" narrator'a dosyaya bağlı soruyu sorar |
+
+**Bu koşuların ortaya çıkardığı ve düzeltilen kusurlar:** fihrist bağları
+(`related_task_ids`) veride vardı ve REST onları döndürüyordu ama panel hiç
+göstermiyordu; zaman çizelgesi yalnızca canlı listeydi (geçmişe dönüş yoktu);
+WebSocket zarfı `taskId` taşımıyordu — kaydırıcı her görevi "bilinmiyor"
+gösterecekti.
+
+**Kalan:** bu üç yüzeyin canlı bir Faz 4 koşusu sırasında TARAYICIDA gözle
+izlenmesi. Bu oturumda Chrome eklentisi bağlı olmadığı için gözle doğrulama
+yapılamadı; çizim jsdom testleriyle doğrulandı.
 
 **İlerleme (2026-08-16):** Panelde canlı event timeline yanında React Flow görev
 tuvali, salt-okunur Monaco fihrist editörü, API test/maliyet konsolu ve sandbox
