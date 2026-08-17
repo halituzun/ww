@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { readFile, readdir } from 'node:fs/promises';
 import { join, relative } from 'node:path';
-import { analyzeWiring, diffAgainstBaseline, type SourceFile } from './analyze.js';
+import { analyzeWiring, diffAgainstBaseline, type BaselineEntry, type SourceFile } from './analyze.js';
 
 const ROOT = process.cwd();
 const SCAN_DIRS = ['packages', 'apps'];
@@ -25,8 +25,8 @@ const files: SourceFile[] = [];
 for (const dir of SCAN_DIRS) await collect(join(ROOT, dir), files);
 
 const report = analyzeWiring(files);
-let baseline: string[] = [];
-try { baseline = JSON.parse(await readFile(BASELINE, 'utf8')) as string[]; } catch { /* ilk koşu */ }
+let baseline: BaselineEntry[] = [];
+try { baseline = JSON.parse(await readFile(BASELINE, 'utf8')) as BaselineEntry[]; } catch { /* ilk koşu */ }
 
 const diff = diffAgainstBaseline(report.unwired, baseline);
 

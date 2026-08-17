@@ -41,5 +41,13 @@
   "packages/scheduler/src/delegation-service.ts:DelegationService",
   "packages/scheduler/src/plan-approval-service.ts:PlanApprovalService",
   "packages/scheduler/src/replanning-service.ts:ReplanningService",
-  "packages/scheduler/src/scheduler-worker.ts:SchedulerWorker"
+  "packages/scheduler/src/scheduler-worker.ts:SchedulerWorker",
+  {
+    "symbol": "apps/server/src/runtime-context.ts:resolveRuntimeModels",
+    "reason": "orkestrasyon bootstrap temeli; cagiran sonraki turda gelecek"
+  },
+  {
+    "symbol": "apps/server/src/runtime-context.ts:resolveWorkspaceRoot",
+    "reason": "orkestrasyon bootstrap temeli; cagiran sonraki turda gelecek"
+  }
 ]

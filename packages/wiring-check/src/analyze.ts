@@ -28,6 +28,22 @@ export interface BaselineDiff {
   resolved: string[];
 }
 
+/**
+ * Temel liste girişi. Çıplak metin geriye uyumluluk içindir; yeni istisnalar
+ * GEREKÇE taşımalıdır — gerekçesiz liste sessizce büyür ve kapı anlamını yitirir.
+ */
+export type BaselineEntry = string | { symbol: string; reason: string };
+
+function baselineSymbols(baseline: readonly BaselineEntry[]): string[] {
+  const out: string[] = [];
+  for (const entry of baseline) {
+    if (typeof entry === 'string') { out.push(entry); continue; }
+    // Gerekçesiz nesne girişi yok sayılır: istisna bilinçli olmalıdır.
+    if (typeof entry.reason === 'string' && entry.reason.trim().length > 0) out.push(entry.symbol);
+  }
+  return out;
+}
+
 const EXPORT_PATTERN = /^export (?:async )?(?:function|class|const) ([A-Za-z_][A-Za-z0-9_]*)/gm;
 
 const isTest = (path: string): boolean => /\.test\.tsx?$/.test(path);
@@ -79,12 +95,13 @@ export function analyzeWiring(files: readonly SourceFile[]): WiringReport {
 
 export function diffAgainstBaseline(
   current: readonly string[],
-  baseline: readonly string[],
+  baseline: readonly BaselineEntry[],
 ): BaselineDiff {
-  const known = new Set(baseline);
+  const symbols = baselineSymbols(baseline);
+  const known = new Set(symbols);
   const now = new Set(current);
   return {
     added: current.filter((entry) => !known.has(entry)).sort(),
-    resolved: baseline.filter((entry) => !now.has(entry)).sort(),
+    resolved: symbols.filter((entry) => !now.has(entry)).sort(),
   };
 }

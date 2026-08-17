@@ -115,3 +115,25 @@ describe('modül içi tüketim', () => {
     expect(result.unwired).toEqual(['a.ts:lonely']);
   });
 });
+
+describe('gerekçeli istisna', () => {
+  // Çıplak liste sessizce büyür. Gerekçe zorunluluğu, her istisnayı bilinçli
+  // bir karar hâline getirir.
+  it('metin ve gerekçeli girişleri birlikte okur', () => {
+    const diff = diffAgainstBaseline(['a.ts:x', 'b.ts:y'], [
+      'a.ts:x',
+      { symbol: 'b.ts:y', reason: 'bootstrap sonraki turda bağlayacak' },
+    ]);
+    expect(diff.added).toEqual([]);
+  });
+
+  it('gerekçeli girişi de çözülmüş sayabilir', () => {
+    const diff = diffAgainstBaseline([], [{ symbol: 'a.ts:x', reason: 'bekliyor' }]);
+    expect(diff.resolved).toEqual(['a.ts:x']);
+  });
+
+  it('gerekçesiz nesne girişini yok sayar (sessiz istisna olmasın)', () => {
+    const diff = diffAgainstBaseline(['a.ts:x'], [{ symbol: 'a.ts:x', reason: '' } as never]);
+    expect(diff.added).toEqual(['a.ts:x']);
+  });
+});

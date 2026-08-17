@@ -19,6 +19,9 @@ Bu depo, pnpm ve Turborepo kullanan bir TypeScript monorepo'sudur. Çalıştır�
   kullanılan ama hiçbir üretim kodundan çağrılmayan sembolleri bulur. Mevcut
   durum `wiring-baseline.json` içinde dondurulmuştur; kapı yalnız YENİ
   ihlallerde düşer. Bir sembolü bağladığınızda temel listeden düşürün.
+  Yeni istisna eklerken GEREKÇE zorunludur:
+  `{"symbol": "path.ts:name", "reason": "neden"}`. Gerekçesiz giriş yok
+  sayılır ve kapı yine düşer — çıplak liste sessizce büyür.
 
 ## Kod Stili ve Adlandırma
 
