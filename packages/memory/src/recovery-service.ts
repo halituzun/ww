@@ -9,8 +9,11 @@ import {
   type ClickHouseClient,
   type TaskRow,
   type WwRedis,
+  listLatestTasksByStatus,
+  listStreamTaskIds,
 } from '@ww/db';
 import { NIL_UUID, canonicalSha256V1, type EntityId } from '@ww/shared';
+import { planQueueRefill } from './queue-refill.js';
 
 export interface RecoveryClock { now(): string; }
 
@@ -100,6 +103,16 @@ export class RecoveryService {
         streamRepairedTaskIds.push(task.task_id);
       }
     }
+    // docs/07 adım 3: ClickHouse'da 'queued' ama stream'de OLMAYAN görevleri
+    // geri doldur. Bunlar aksi halde sonsuza dek bekler — kuyruğu tüketen
+    // kimse onları görmez (Redis temizlenince/budanınca gerçekten oluyor).
+    const queuedTasks = await listLatestTasksByStatus(this.#ch, projectId, 'queued');
+    const inStream = await listStreamTaskIds(this.#redis, `ww:queue:${projectId}`);
+    for (const taskId of planQueueRefill(queuedTasks.map((task) => task.task_id), inStream)) {
+      await enqueueTask(this.#redis, `ww:queue:${projectId}`, taskId);
+      streamRepairedTaskIds.push(taskId as EntityId);
+    }
+
     const eventId = (`${canonicalSha256V1({ projectId, now, requeuedTaskIds, idledAgentIds }).slice(0, 8)}-${canonicalSha256V1({ projectId, now }).slice(8, 12)}-5${canonicalSha256V1({ projectId, now }).slice(13, 16)}-8${canonicalSha256V1({ projectId, now }).slice(17, 20)}-${canonicalSha256V1({ projectId, now }).slice(20, 32)}`) as EntityId;
     await appendEvent(this.#ch, {
       event_id: eventId,

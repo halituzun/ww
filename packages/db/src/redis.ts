@@ -121,6 +121,26 @@ export async function ensureGroup(r: WwRedis, stream: QueueKey, group: string): 
   }
 }
 
+/**
+ * Stream'de bekleyen görev kimlikleri (tüketmeden). Kurtarma, ClickHouse'da
+ * `queued` olup burada OLMAYAN görevleri geri doldurmak için kullanır.
+ */
+export async function listStreamTaskIds(
+  r: WwRedis,
+  stream: QueueKey,
+  limit = 1_000,
+): Promise<readonly string[]> {
+  const key = canonicalQueueKey(stream);
+  const entries = await r.xRange(key, '-', '+', { COUNT: limit });
+  const ids: string[] = [];
+  for (const entry of entries) {
+    const taskId = entry.message['task_id'];
+    // Bozuk çerçeve sessizce görev gibi sayılmamalı.
+    if (typeof taskId === 'string' && taskId.length > 0) ids.push(taskId);
+  }
+  return Object.freeze(ids);
+}
+
 export async function enqueueTask(
   r: WwRedis,
   stream: QueueKey,
