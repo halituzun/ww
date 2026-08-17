@@ -44,6 +44,7 @@ import { writeProjectScaffold } from './project-scaffold-writer.js';
 import { resolveWorkspaceRoot } from './runtime-context.js';
 import { isResumableStatus, resumeAnsweredTask } from './resume-answered-task.js';
 import { buildBootstrapPlan } from './bootstrap-plan.js';
+import { NO_TARGET_NOTE, buildCommandTask } from './command-task.js';
 import { isConcretePlanId, resolveTaskPlanId } from './task-plan-id.js';
 import {
   PHASE8_RUNTIME,
@@ -203,10 +204,16 @@ export class MessageApplicationService implements MessageApplication {
 
   readonly #runtime: ResumeRuntime | null;
 
+  readonly #tasks: TaskApplicationService;
+
   constructor(
     @Inject(SERVER_DATABASE) private readonly database: ServerDatabase,
     @Optional() @Inject(PHASE8_RUNTIME) runtime?: ResumeRuntime | null,
+    tasks?: TaskApplicationService,
   ) {
+    // Emirden görev açmak için görev servisi gerekir; enjekte edilmezse
+    // aynı veritabanıyla kurulur (birim testlerde DI yoktur).
+    this.#tasks = tasks ?? new TaskApplicationService(database);
     // Redis is connected lazily so health-only and unit-test boots do not require
     // infrastructure, while every real message still uses the durable service.
     this.#redis = database.redis === undefined ? createRedis() : Promise.resolve(database.redis);
@@ -308,6 +315,27 @@ export class MessageApplicationService implements MessageApplication {
           },
         });
       }
+    }
+    // EMİR İŞE DÖNÜŞÜR: `user_command` mesajı yazılıyor ve PM'in gelen
+    // kutusuna düşüyordu ama hiçbir şey onu göreve çevirmiyordu — canlı
+    // koşuda emir gönderildi, görev sayısı değişmedi (bkz. command-task.ts).
+    // Göreve bağlı bir emir (çalışan işe müdahale) burada yeni görev AÇMAZ:
+    // o mesaj zaten ilgili agent'ın gelen kutusuna gider.
+    if (input.kind === 'user_command' && taskId === undefined) {
+      const spec = buildCommandTask(input.text);
+      // Dosya adı geçmiyorsa görev AÇILMAZ ama emir reddedilmez: sohbet de
+      // meşru bir kullanım. Kullanıcıya iş açılmadığı AÇIKÇA söylenir.
+      if (spec === null) return { ...sent, note: NO_TARGET_NOTE };
+      const created = await this.#tasks.create(input.projectId, {
+        title: spec.title,
+        description: spec.description,
+        acceptanceCriteria: [...spec.acceptanceCriteria],
+        dependencies: [],
+        files: [...spec.targetFiles],
+        budget: 0,
+        maxAttempts: 3,
+      } as never);
+      return { ...sent, taskId: created.task_id };
     }
     return sent;
   }

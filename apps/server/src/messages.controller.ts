@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { EntityIdSchema } from '@ww/shared';
 import { parseLocalSession, type LocalSessionRequest } from './auth/local-session.js';
 import { listLatestAgents, listPendingInboxMessages, listRecentMessages } from '@ww/db';
+import { CommandTaskError } from './command-task.js';
 import { MESSAGE_APPLICATION, MessageInputError, SERVER_DATABASE, type MessageApplication, type ServerDatabase } from './orchestration.module.js';
 
 const MessageInput = z.strictObject({ kind: z.enum(['user_command', 'answer']), text: z.string().trim().min(1), taskId: EntityIdSchema.optional(), replyToMessageId: EntityIdSchema.optional() }).superRefine((value, context) => {
@@ -104,7 +105,10 @@ export class MessagesController {
     }
     const input = parsed.data;
     return this.messages.send({ projectId, principal, kind: input.kind, text: input.text, ...(input.taskId === undefined ? {} : { taskId: input.taskId }), ...(input.replyToMessageId === undefined ? {} : { replyToMessageId: input.replyToMessageId }) }).catch((error: unknown) => {
-      if (error instanceof MessageInputError) throw new BadRequestException(error.message);
+      // Boş emir kullanıcı hatasıdır; 500 vermek "sunucu bozuk" yalanı olurdu.
+      if (error instanceof MessageInputError || error instanceof CommandTaskError) {
+        throw new BadRequestException(error.message);
+      }
       throw error;
     });
   }
