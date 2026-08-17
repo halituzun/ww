@@ -8,24 +8,32 @@ Product-agent work must also read the normative communication contract in
 
 ## Current State
 
-Verified 2026-08-17 on branch `agent/agent-communication-contract` (97 commits
-ahead of `main`, in sync with its remote). Keep this section current: when it goes
-stale, the next session starts from the wrong place.
+Verified 2026-08-17 (evening) on branch `agent/agent-communication-contract`
+(155 commits ahead of `main`, in sync with its remote). Keep this section current:
+when it goes stale, the next session starts from the wrong place.
 
 - **Faz 0, 1 and 2 are complete ✅.** Faz 3-6 are code-complete with green tests,
   but their acceptance scenarios are still open. The authoritative per-phase status
   and evidence mapping live in the "Durum Özeti" table of `docs/11-yol-haritasi.md`.
-- **The platform has never called a real LLM API.** There is no `secrets/`
-  directory, the only registered provider is `mock`, and `api_usage` holds zero
-  real calls. Everything has been verified through `MockProvider`, which is exactly
-  what Faz 0-2 specify — but Faz 3-6 cannot close without real runs.
-- **Next milestone: Faz 3's acceptance scenario** — add a real provider key through
-  the panel, run a small real scenario, confirm the kontör panel shows real cost,
-  then add a deliberately broken key and confirm health goes red and fallback
-  engages. Faz 4, 5 and 6 chain onto that run; do not skip ahead.
-- Gate as of 2026-08-17: **912 tests across 10 packages**, plus 4 opt-in live
+- **Real LLM calls now happen.** `deepseek` is registered with a real key,
+  `api_usage` holds 180+ non-health calls, periodic health checks write real
+  statuses (`deepseek=ok`, `mock=down`), and one task has reached a real commit
+  (`affa20b`). What is still NOT verified end-to-end: a task reaching commit and
+  writing `artifacts` + `file_index` in one uninterrupted run.
+- **Run the live loop this way**: `WW_PHASE8_RUNTIME_ENABLED=1
+  WW_RUNTIME_PROJECT_ID=<uuid> node apps/server/dist/main.js`. Without those the
+  task pump logs "görev pompası açılmadı" and nothing is consumed.
+- **Read the live run through the logs, not the task status alone.** The pump
+  reports each rejection as `görev <id> işlenemedi: <reason>`; a task sitting in
+  `queued`/`working` with no progress almost always has one of those lines behind
+  it. `ANSWERED_TASK_RESUMED` confirms a user answer reached the engine.
+- Gate as of 2026-08-17: **1000+ tests across 10 packages**, plus 4 opt-in live
   Docker sandbox tests via `pnpm --filter @ww/executor test:live` (skipped by a
   plain `pnpm test`). Build, lint and `pnpm wiring:check` green.
+- Two tests are known to flake **only under full-gate load** and pass in isolation:
+  `packages/db effects.test.ts` (primary-key pruning) and
+  `packages/agents communication.integration.test.ts`. Re-run the gate before
+  treating either as a real failure — and never push on a red gate.
 - `pnpm wiring:check` guards this repo's most expensive recurring defect:
   code that is written and tested but never called by any production path. It
   was found in five separate places in one night. `wiring-baseline.json` freezes

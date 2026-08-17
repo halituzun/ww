@@ -1,4 +1,6 @@
 import {
+  listLatestTaskEffectsByStates,
+  appendEffectVersion,
   appendAgentVersion,
   appendEvent,
   appendTaskVersion,
@@ -15,6 +17,7 @@ import {
 import { NIL_UUID, canonicalSha256V1, type EntityId } from '@ww/shared';
 import { planQueueRefill } from './queue-refill.js';
 import { DEFAULT_RECOVERY_GRACE_MS, isRecoverableStale } from './recovery-staleness.js';
+import { planEffectReconciliation } from './abandoned-effects.js';
 
 export interface RecoveryClock { now(): string; }
 
@@ -117,6 +120,11 @@ export class RecoveryService {
         if (!workerStale && !verifierStale && !taskStale) continue;
         const next = { ...task, status: 'queued' as const, worker_agent_id: NIL_UUID, verifier_agent_id: NIL_UUID, task_brief_id: NIL_UUID, assignment_attempt_id: NIL_UUID, updated_at: now };
         await appendTaskVersion(this.#ch, { expectedVersion: task.version, next });
+        // Yarıda kalan etkiler uzlaştırılmazsa görev KALICI olarak atanamaz:
+        // "task icin baska assignment command uzlastirilmamis". Yalnızca
+        // replay-safe olanlar kapatılır; tekrarı güvenli olmayan etki
+        // otomatik çözülmez (bkz. abandoned-effects.ts).
+        await this.#reconcileAbandonedEffects(task.task_id, now);
         await enqueueTask(this.#redis, `ww:queue:${projectId}`, task.task_id);
         requeuedTaskIds.push(task.task_id);
         streamRepairedTaskIds.push(task.task_id);
@@ -155,4 +163,33 @@ export class RecoveryService {
     for (const project of projects) results.push(await this.recoverProject(project.project_id));
     return results;
   }
+
+  /**
+   * Ölü bırakılmış etkileri uzlaştırır. Replay-safe olanlar 'failed' yazılır ki
+   * yeni deneme yolu açılsın; tekrarı güvenli OLMAYAN etkiler dokunulmadan
+   * bırakılır ve sayısı raporlanır — onları otomatik kapatmak yan etkiyi iki
+   * kez uygulamak olurdu.
+   */
+  async #reconcileAbandonedEffects(taskId: EntityId, now: string): Promise<number> {
+    const effects = await listLatestTaskEffectsByStates(this.#ch, taskId, ['pending', 'uncertain']);
+    const plan = planEffectReconciliation(effects as never);
+    for (const effect of plan.abandon) {
+      const row = effects.find((candidate) =>
+        candidate.causation_id === effect.causation_id
+        && candidate.stable_effect_id === effect.stable_effect_id);
+      if (row === undefined) continue;
+      await appendEffectVersion(this.#ch, {
+        causation_id: row.causation_id,
+        stable_effect_id: row.stable_effect_id,
+        expectedVersion: row.effect_version,
+        state: 'failed',
+        result: {},
+        error: 'kurtarma: surec olurken yarida kaldi',
+        lease_fence: row.lease_fence,
+        created_at: now,
+      });
+    }
+    return plan.escalate.length;
+  }
+
 }
