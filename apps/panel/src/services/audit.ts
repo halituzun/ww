@@ -1,0 +1,68 @@
+// Denetim ekranı IO (docs/08 → Denetim Ekranı).
+import { getJsonOr, type RequestOptions } from './http.js';
+
+export type AuditFindingStatus = 'open' | 'correction_pending' | 'resolved' | 'dismissed';
+
+export interface AuditFinding {
+  findingId: string;
+  taskId?: string;
+  profile: string;
+  severity: string;
+  summary: string;
+  status: AuditFindingStatus;
+  correctiveTaskId?: string;
+  resolution?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface EscalationEntry {
+  eventId: string;
+  taskId: string;
+  reason: string;
+  /** brake:<kind> ise fren tetiklenmesi; boşsa normal tırmandırma. */
+  brakeKind: string;
+  createdAt: string;
+}
+
+export interface AuditReport {
+  projectId: string;
+  findings: AuditFinding[];
+  counts: Record<AuditFindingStatus, number>;
+  escalations: EscalationEntry[];
+  brakeTrips: number;
+}
+
+export const EMPTY_AUDIT_REPORT: AuditReport = {
+  projectId: '',
+  findings: [],
+  counts: { open: 0, correction_pending: 0, resolved: 0, dismissed: 0 },
+  escalations: [],
+  brakeTrips: 0,
+};
+
+export const fetchAuditReport = (
+  projectId: string,
+  options: RequestOptions = {},
+): Promise<AuditReport> =>
+  getJsonOr<AuditReport>(`/projects/${encodeURIComponent(projectId)}/audit`, EMPTY_AUDIT_REPORT, options);
+
+/** Fren türünü kullanıcıya anlaşılır Türkçeye çevirir. */
+export function brakeLabel(kind: string): string {
+  switch (kind) {
+    case 'cost_budget': return 'Bütçe freni';
+    case 'token_budget': return 'Token freni';
+    case 'wall_clock': return 'Süre freni';
+    case 'loop_similarity': return 'Kaçak döngü freni';
+    case '': return 'Tırmandırma';
+    default: return `Fren (${kind})`;
+  }
+}
+
+export type Severity = 'critical' | 'warning' | 'neutral';
+
+export function severityTone(severity: string): Severity {
+  if (severity === 'critical' || severity === 'high') return 'critical';
+  if (severity === 'medium' || severity === 'warning') return 'warning';
+  return 'neutral';
+}

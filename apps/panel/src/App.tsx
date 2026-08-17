@@ -4,6 +4,7 @@ import { TaskCanvas } from './components/TaskCanvas.js';
 import { FileEditor } from './components/FileEditor.js';
 import { ProvidersPage } from './components/ProvidersPage.js';
 import { BudgetPanel } from './components/BudgetPanel.js';
+import { AuditPanel } from './components/AuditPanel.js';
 import {
   askNarrator as askNarratorService,
   createProject as createProjectService,
@@ -173,6 +174,7 @@ export default function App() {
       {projectId ? <section className="workspace-card">
         <div className="project-controls"><span className={`pill pill--${projectStatus}`}>{projectStatus || 'yükleniyor'}</span><button type="button" onClick={() => void updateProjectStatus(projectStatus === 'paused' ? 'running' : 'paused')}>{projectStatus === 'paused' ? 'Devam et' : 'Duraklat'}</button><button type="button" onClick={() => void updateProjectStatus('archived')}>Arşivle</button></div>
         <BudgetPanel projectId={projectId} />
+        <AuditPanel projectId={projectId} />
         {usage ? <div className="metrics usage-metrics"><div><strong>${usage.costUsd.toFixed(4)}</strong><span>Maliyet</span></div><div><strong>{usage.calls}</strong><span>Çağrı</span></div><div><strong>{usage.promptTokens + usage.completionTokens}</strong><span>Token</span></div></div> : null}
         {providerHealth.length > 0 ? <div className="provider-health" aria-label="Sağlayıcı sağlığı">{providerHealth.map((provider) => <span key={provider.provider_id} className={`provider-badge provider-badge--${provider.health_status}`}><i aria-hidden="true" />{provider.provider_id}: {provider.health_status}</span>)}</div> : null}
         <p className="hint">API sağlayıcıları ve anahtarlar <button type="button" className="linklike" onClick={() => setPage('providers')}>API'ler sayfasında</button> yönetilir.</p>

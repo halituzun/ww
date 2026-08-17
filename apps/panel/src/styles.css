@@ -268,3 +268,19 @@ dd {
   align-items: baseline; font-size: 0.82rem; }
 .budget-tasks code { color: #98a2b3; }
 .budget-tasks small { color: #667085; }
+
+/* Denetim ekranı (docs/08 → Denetim Ekranı) */
+.audit-panel { display: grid; gap: 1rem; }
+.audit-findings, .audit-escalations { list-style: none; margin: 0; padding: 0;
+  display: grid; gap: 0.4rem; }
+.audit-finding { border-left: 3px solid #667085; padding: 0.5rem 0.7rem;
+  background: rgba(29, 41, 57, 0.4); border-radius: 0 6px 6px 0; display: grid; gap: 0.3rem; }
+.audit-finding--critical { border-left-color: #d95926; }
+.audit-finding--warning { border-left-color: #c98500; }
+.audit-finding__head { display: flex; gap: 0.5rem; align-items: baseline; flex-wrap: wrap; }
+.audit-finding__meta { display: flex; gap: 0.75rem; font-size: 0.78rem; color: #98a2b3;
+  flex-wrap: wrap; }
+.audit-escalations li { display: flex; gap: 0.6rem; align-items: baseline; flex-wrap: wrap;
+  font-size: 0.82rem; padding: 0.35rem 0.5rem; border-radius: 6px; }
+.audit-escalation--brake { background: rgba(217, 89, 38, 0.12); }
+.audit-escalation__reason { flex: 1 1 12rem; color: #d0d5dd; }
