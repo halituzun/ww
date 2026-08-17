@@ -54,6 +54,19 @@ export interface TaskCommitDetails {
 export interface GateOperationsInput {
   workspaceRoot: string;
   taskDetails: (taskId: EntityId) => Promise<TaskCommitDetails>;
+  /**
+   * Commit sonrası üretilen çıktıları ve dosya fihristini kaydeder.
+   * Verilmezse artifact yazılmaz — bu, `artifacts` tablosunun boş kalma
+   * sebebiydi.
+   */
+  recordArtifacts?: (input: Readonly<{
+    projectId: EntityId;
+    taskId: EntityId;
+    agentId: EntityId;
+    commitHash: string;
+    summary: string;
+    targetFiles: readonly string[];
+  }>) => Promise<readonly string[]>;
   /** Kapı geçmeden commit'i engeller (docs/05 → çalıştırma/test kapısı). */
   requireGatePass?: boolean;
 }
@@ -141,7 +154,20 @@ export function createGateOperations(input: GateOperationsInput) {
           requireFileLock: true,
         })),
       });
-      return { commitHash: result.commitHash };
+
+      // Commit tarihe yazıldı; ÜRETİLEN ÇIKTI da kaydedilmeli. Bunlar
+      // yazılmadığı için `artifacts` boş kalıyor ve panelin fihristi
+      // ("bu dosyayı kim, neden değiştirdi") kalıcı olarak boş görünüyordu.
+      const artifactIds = await input.recordArtifacts?.({
+        projectId: attempt.projectId,
+        taskId,
+        agentId: (attempt as unknown as { workerAgentId: EntityId }).workerAgentId,
+        commitHash: result.commitHash,
+        summary: details.summary,
+        targetFiles: details.targetFiles,
+      }) ?? [];
+
+      return { commitHash: result.commitHash, artifactIds };
     },
   };
 }

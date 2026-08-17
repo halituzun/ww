@@ -64,7 +64,10 @@ describe('createGateOperations', () => {
     const { gateRunner, git } = fakes();
     const ops = createGateOperations({ workspaceRoot: '/w', taskDetails: details });
     ops.bind({ gateRunner, git, workspace: { initialize: async () => undefined } as never });
-    expect(await ops.commit({ taskId: id(2), attempt })).toEqual({ commitHash: 'abc1234def' });
+    // Commit artık ÜRETİLEN ÇIKTIYI da bildirir; kayıt kancası verilmezse
+    // artifact yazılmaz ve liste boş kalır (eski davranış).
+    expect(await ops.commit({ taskId: id(2), attempt }))
+      .toEqual({ commitHash: 'abc1234def', artifactIds: [] });
   });
 
   it('commit görev ayrıntılarını ve erişim kapsamını taşır', async () => {
@@ -103,5 +106,22 @@ describe('createGateOperations', () => {
 
     await ops.gate({ taskId: id(2), attempt });
     await expect(ops.commit({ taskId: id(2), attempt })).resolves.toMatchObject({ commitHash: 'abc1234def' });
+  });
+
+  // Kayıt kancası verilince commit ürettiği çıktıların kimliklerini döner:
+  // aksi halde `artifacts` boş kalır ve fihrist hiç dolmaz.
+  it('kayıt kancası verilince artifact kimliklerini döner', async () => {
+    const { gateRunner, git } = fakes();
+    const seen: unknown[] = [];
+    const ops = createGateOperations({
+      workspaceRoot: '/w',
+      taskDetails: details,
+      recordArtifacts: async (input) => { seen.push(input); return ['art-1']; },
+    });
+    ops.bind({ gateRunner, git, workspace: { initialize: async () => undefined } as never });
+
+    const result = await ops.commit({ taskId: id(2), attempt });
+    expect(result).toEqual({ commitHash: 'abc1234def', artifactIds: ['art-1'] });
+    expect(seen[0]).toMatchObject({ commitHash: 'abc1234def' });
   });
 });

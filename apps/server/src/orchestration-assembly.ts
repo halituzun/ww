@@ -22,8 +22,9 @@ import { createToolPortFactory } from './tool-factory.js';
 import { createRuntimeContextService } from './runtime-context-service.js';
 import { createExecutionErrorRecorder } from './execution-error-recorder.js';
 import { renderContextPack } from './context-pack-render.js';
+import { classifyArtifact, classifyLayer } from './artifact-classify.js';
 import { buildAgentCapabilities } from './agent-capabilities.js';
-import { appendEvent, getActivePrompt, getAssignmentAttempt, getLatestTask, listLatestAgents } from '@ww/db';
+import { appendArtifact, appendEvent, getActivePrompt, getAssignmentAttempt, getLatestTask, listLatestAgents } from '@ww/db';
 import type { RuntimeModels } from './runtime-context.js';
 import type { Phase9RuntimeCompositionInput } from './runtime-composition.js';
 import { createLateBoundPort, type LateBoundPort } from './late-binding.js';
@@ -86,6 +87,40 @@ export async function createOrchestrationComposition(
   // Kapı/commit geç bağlanır: gateRunner ve gitWorkspace composition'ın
   // İÇİNDE kurulur, dolayısıyla girdi hazırlanırken henüz yoktur.
   const gateOps = createGateOperations({
+    // Üretilen çıktı ve fihrist commit ile birlikte yazılır: aksi halde
+    // "agent ne üretti" ve "bu dosyayı kim, neden değiştirdi" sorularının
+    // cevabı hiçbir yerde durmaz (docs/02 artifacts, docs/08 fihrist).
+    recordArtifacts: async ({ projectId, taskId, agentId, commitHash, summary, targetFiles }) => {
+      const now = new Date().toISOString();
+      const ids: string[] = [];
+      for (const filePath of targetFiles) {
+        const artifactId = randomUUID() as EntityId;
+        await appendArtifact(input.ch, {
+          artifact_id: artifactId,
+          project_id: projectId,
+          task_id: taskId,
+          agent_id: agentId,
+          artifact_type: classifyArtifact(filePath) as never,
+          name: filePath.split('/').pop() ?? filePath,
+          path: filePath,
+          summary,
+          commit_hash: commitHash,
+          created_at: now,
+        } as never);
+        ids.push(artifactId);
+        await memory.updateFileIndex({
+          projectId,
+          filePath,
+          summary,
+          layer: classifyLayer(filePath),
+          relatedTaskIds: [taskId],
+          relatedArtifactIds: [artifactId],
+          lastCommitHash: commitHash,
+          updatedAt: now,
+        } as never);
+      }
+      return ids;
+    },
     workspaceRoot: input.projectRoot,
     requireGatePass: true,
     // Commit ayrıntıları GERÇEK görevden okunur. Sabit metinler ve BOŞ hedef
