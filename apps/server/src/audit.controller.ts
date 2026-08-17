@@ -1,9 +1,10 @@
-import { BadRequestException, Body, Controller, Get, Inject, Param, Post, Req } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Get, Inject, NotFoundException, Param, Patch, Post, Req } from '@nestjs/common';
 import { z } from 'zod';
 import { AUDIT_FINDING_STATUSES } from '@ww/shared';
-import { createAuditFinding, listLatestAuditFindingsByStatus } from '@ww/db';
+import { appendAuditFindingVersion, createAuditFinding, getLatestAuditFinding, listLatestAuditFindingsByStatus } from '@ww/db';
 import { parseLocalSession, type LocalSessionRequest } from './auth/local-session.js';
 import { buildAuditFinding, parseFindingInput } from './audit-finding.service.js';
+import { applyResolution, parseResolutionInput } from './audit-resolution.service.js';
 import { SERVER_DATABASE, type ServerDatabase } from './orchestration.module.js';
 
 const ProjectId = z.string().uuid();
@@ -59,6 +60,37 @@ export class AuditController {
    * Bulguyu YARATAN hiçbir üretim yolu yoktu: ekran kalıcı olarak boştu ve
    * boş bir denetim ekranı "ihlal yok" der — oysa denetim hiç çalışmamıştır.
    */
+  /**
+   * Bulguyu kapatır/yeniden açar. Açılıp hiç kapanmayan bulgu listesi zamanla
+   * anlamını yitirir: "açık" sayısı gerçek borç değil birikmiş gürültü olur.
+   */
+  @Patch('findings/:findingId')
+  async resolve(
+    @Req() request: LocalSessionRequest,
+    @Param('projectId') projectId: string,
+    @Param('findingId') findingId: string,
+    @Body() body: unknown,
+  ) {
+    parseLocalSession(request);
+    const id = ProjectId.parse(projectId);
+    const current = await getLatestAuditFinding(this.#database.ch, id as never, findingId as never);
+    if (current === null) throw new NotFoundException(`bulgu bulunamadı: ${findingId}`);
+    const next = applyResolution(
+      current.finding as unknown as Record<string, unknown>,
+      parseResolutionInput(body),
+    );
+    try {
+      return await appendAuditFindingVersion(this.#database.ch, {
+        finding: next as never,
+        // Beklenen sürüm: eşzamanlı bir güncelleme sessizce ezilmemeli.
+        expectedVersion: current.finding_version,
+        updated_at: new Date().toISOString(),
+      });
+    } catch (reason) {
+      throw new BadRequestException(reason instanceof Error ? reason.message : String(reason));
+    }
+  }
+
   @Post('findings')
   async record(
     @Req() request: LocalSessionRequest,

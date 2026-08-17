@@ -15,7 +15,6 @@
   "packages/db/src/redis.ts:subscribeEvents",
   "packages/db/src/redis.ts:transferFileLocks",
   "packages/db/src/repositories/artifacts.ts:getArtifact",
-  "packages/db/src/repositories/audit-findings.ts:appendAuditFindingVersion",
   "packages/db/src/repositories/briefs.ts:getPromptInputSnapshot",
   "packages/db/src/repositories/causal-entries.ts:getTaskCausalCursor",
   "packages/db/src/repositories/effects.ts:listLatestEffectsByState",
