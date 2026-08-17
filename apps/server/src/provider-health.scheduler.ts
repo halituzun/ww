@@ -1,4 +1,6 @@
+import { randomUUID } from 'node:crypto';
 import { Inject, Injectable, Logger, type OnModuleDestroy, type OnModuleInit } from '@nestjs/common';
+import { NIL_UUID } from '@ww/shared';
 import { getLatestApiProvider, listLatestApiProviders, upsertApiProvider } from '@ww/db';
 import { Keystore, buildProviderRegistry } from '@ww/providers';
 import { SERVER_DATABASE, type ServerDatabase } from './orchestration.module.js';
@@ -7,6 +9,7 @@ import {
   runHealthSweep,
   type HealthChangeEvent,
   type HealthSweepPorts,
+  type HealthUsageRecord,
   type PingResult,
 } from './provider-health.service.js';
 
@@ -52,6 +55,7 @@ export class ProviderHealthScheduler implements OnModuleInit, OnModuleDestroy {
       ping: (providerId) => this.#pingProvider(providerId),
       errorRate: (providerId) => this.#recentErrorRate(providerId),
       persist: (row) => upsertApiProvider(ch, row),
+      recordUsage: (record) => this.#recordUsage(record),
       publish: (event) => this.#publish(event),
       onError: (providerId, reason) =>
         this.#logger.warn(`sağlayıcı ${providerId} kontrol edilemedi: ${String(reason)}`),
@@ -87,6 +91,32 @@ export class ProviderHealthScheduler implements OnModuleInit, OnModuleDestroy {
     return health.ok
       ? { ok: true, latencyMs: health.latencyMs }
       : { ok: false, latencyMs: health.latencyMs, error: health.error ?? 'ping başarısız' };
+  }
+
+  // docs/04: ping api_usage'a purpose='health_check' olarak yazılır. Bu kayıt
+  // mv_provider_errors'ı besler; hata-oranı sinyali oradan gelir.
+  async #recordUsage(record: HealthUsageRecord): Promise<void> {
+    await this.#database.ch.insert({
+      table: 'api_usage',
+      values: [{
+        usage_id: randomUUID(),
+        project_id: NIL_UUID,
+        agent_id: NIL_UUID,
+        task_id: NIL_UUID,
+        provider_id: record.providerId,
+        model: '',
+        purpose: record.purpose,
+        prompt_tokens: 0,
+        completion_tokens: 0,
+        // Sağlık ping'i 1 token'lıktır; maliyeti ölçülebilir değil, 0 yazılır.
+        cost_usd: 0,
+        latency_ms: record.latencyMs,
+        status: record.status,
+        error_kind: record.errorKind,
+        created_at: record.checkedAt,
+      }],
+      format: 'JSONEachRow',
+    });
   }
 
   async #recentErrorRate(providerId: string): Promise<number | undefined> {

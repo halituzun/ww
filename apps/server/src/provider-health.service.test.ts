@@ -15,6 +15,7 @@ function ports(over: Partial<HealthSweepPorts> = {}): HealthSweepPorts {
     ping: async () => ({ ok: true, latencyMs: 5 }),
     errorRate: async () => undefined,
     persist: vi.fn(async () => undefined),
+    recordUsage: vi.fn(async () => undefined),
     publish: vi.fn(async () => undefined),
     now: () => '2026-08-17T00:00:00.000Z',
     ...over,
@@ -117,5 +118,60 @@ describe('runHealthSweep', () => {
     expect(onError).toHaveBeenCalledTimes(1);
     expect(onError.mock.calls[0]![0]).toBe('deepseek');
     expect((onError.mock.calls[0]![1] as Error).message).toMatch(/adapter yok/);
+  });
+
+  // docs/04: periyodik ping purpose='health_check' olarak kaydedilir.
+  // Kayıt yoksa iki şey birden kaybolur: kontör panosunda ping maliyeti ve
+  // mv_provider_errors'tan beslenen hata-oranı sinyali (degraded yolu ölü kalır).
+  it('başarılı ping health_check olarak kaydedilir', async () => {
+    const recordUsage = vi.fn(async () => undefined);
+    await runHealthSweep(ports({ recordUsage }), new Map());
+
+    expect(recordUsage).toHaveBeenCalledTimes(1);
+    expect(recordUsage.mock.calls[0]![0]).toMatchObject({
+      providerId: 'deepseek', purpose: 'health_check', status: 'ok',
+    });
+  });
+
+  it('başarısız ping hata olarak kaydedilir', async () => {
+    const recordUsage = vi.fn(async () => undefined);
+    await runHealthSweep(ports({
+      recordUsage,
+      ping: async () => ({ ok: false, latencyMs: 12, error: 'timeout' }),
+    }), new Map());
+
+    expect(recordUsage.mock.calls[0]![0]).toMatchObject({ status: 'error', latencyMs: 12 });
+  });
+
+  // Durum değişmese bile ping YAPILDI: kaydı düşmek hata oranını çarpıtır.
+  it('durum değişmese de ping kaydedilir', async () => {
+    const recordUsage = vi.fn(async () => undefined);
+    const persist = vi.fn(async () => undefined);
+    await runHealthSweep(ports({
+      recordUsage, persist,
+      listProviders: async () => [provider({ health_status: 'ok' })],
+    }), new Map());
+
+    expect(persist).not.toHaveBeenCalled();      // durum aynı, yazma yok
+    expect(recordUsage).toHaveBeenCalledTimes(1); // ama ping kaydedildi
+  });
+
+  it('pasif sağlayıcı için kayıt üretmez', async () => {
+    const recordUsage = vi.fn(async () => undefined);
+    await runHealthSweep(ports({
+      recordUsage,
+      listProviders: async () => [provider({ enabled: false })],
+    }), new Map());
+    expect(recordUsage).not.toHaveBeenCalled();
+  });
+
+  it('kayıt hatası taramayı düşürmez', async () => {
+    const persist = vi.fn(async () => undefined);
+    await runHealthSweep(ports({
+      persist,
+      recordUsage: async () => { throw new Error('clickhouse düştü'); },
+    }), new Map());
+    // Kayıt patlasa da sağlık durumu yazılmaya devam etmeli.
+    expect(persist).toHaveBeenCalled();
   });
 });

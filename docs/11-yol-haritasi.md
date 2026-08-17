@@ -42,6 +42,13 @@
 | 5 — Tuval ve Dosya Gezgini | **Kod tamam ⏳** | Kabul senaryosu Faz 4'ün canlı koşusuna bağlı |
 | 6 — Test Ortamları ve Cila | **Kod tamam ⏳** | Canlı sandbox kapısı geçti; üç gerçek proje koşusu eksik |
 
+**İLK GERÇEK API ÇAĞRISI (2026-08-17):** DeepSeek anahtarı panelden girildi;
+periyodik sağlık kontrolü gerçek ping atıp `down → ok` geçişi yazdı ve çağrı
+`api_usage`'a `purpose='health_check'` olarak kaydedildi (gecikme ~1.8 sn =
+gerçek ağ gidiş-dönüşü). Yani sağlayıcı zinciri uçtan uca çalışıyor. Faz 3'ün
+kabul senaryosu hâlâ açık: gerçek bir PROJE koşusu için orkestrasyon runtime'ı
+gerekiyor (aşağı bakın).
+
 **EN KRİTİK AÇIK (2026-08-17 keşfi):** Agent orkestrasyon runtime'ı **hiç
 başlatılmıyor.** `registerPhase9RuntimeConfig` hiçbir üretim kodundan
 çağrılmıyor ve `WW_PHASE8_RUNTIME_ENABLED` hiçbir yerde ayarlanmıyor; ayrıca

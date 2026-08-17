@@ -15,6 +15,16 @@ export interface PingResult {
   fatal?: boolean;
 }
 
+/** docs/04: periyodik ping api_usage'a purpose='health_check' olarak yazılır. */
+export interface HealthUsageRecord {
+  providerId: string;
+  purpose: 'health_check';
+  status: 'ok' | 'error';
+  latencyMs: number;
+  errorKind: string;
+  checkedAt: string;
+}
+
 export interface HealthChangeEvent {
   providerId: string;
   status: HealthStatus;
@@ -30,6 +40,12 @@ export interface HealthSweepPorts {
   /** Son 5 dk hata oranı (0..1) — mv_provider_errors. Bilinmiyorsa undefined. */
   errorRate: (providerId: string) => Promise<number | undefined>;
   persist: (row: UpsertApiProviderInput) => Promise<unknown>;
+  /**
+   * Ping'i api_usage'a yazar. Kayıt yoksa iki sinyal birden kaybolur:
+   * kontör panosunda ping maliyeti ve mv_provider_errors'tan beslenen
+   * hata-oranı (yani `degraded` yolu hiç tetiklenmez).
+   */
+  recordUsage?: ((record: HealthUsageRecord) => Promise<unknown>) | undefined;
   /** Tek sağlayıcının hatası taramayı düşürmez ama sessizce kaybolmaz. */
   onError?: ((providerId: string, reason: unknown) => void) | undefined;
   publish: (event: HealthChangeEvent) => Promise<unknown>;
@@ -57,6 +73,25 @@ export async function runHealthSweep(
 
     try {
       const ping = await ports.ping(provider.provider_id);
+      const pingedAt = ports.now();
+
+      // Durum değişmese bile ping YAPILDI; kaydı düşmek hata oranını çarpıtır.
+      // Kayıt hatası taramayı düşürmemeli: sağlık durumu yine yazılmalı.
+      if (ports.recordUsage !== undefined) {
+        try {
+          await ports.recordUsage({
+            providerId: provider.provider_id,
+            purpose: 'health_check',
+            status: ping.ok ? 'ok' : 'error',
+            latencyMs: ping.latencyMs,
+            errorKind: ping.ok ? '' : (ping.error ?? 'unknown'),
+            checkedAt: pingedAt,
+          });
+        } catch (reason) {
+          ports.onError?.(provider.provider_id, reason);
+        }
+      }
+
       const errorRate = await ports.errorRate(provider.provider_id);
       const evaluation = ping.fatal === true
         ? { status: 'down' as const, consecutiveFailures: next.get(provider.provider_id) ?? 0 }
