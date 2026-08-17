@@ -7,7 +7,7 @@ import { mkdir, writeFile } from 'node:fs/promises';
 import { mkdtemp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import {
   createAgent,
   createCh,
@@ -39,7 +39,7 @@ import {
   dbRedisExecutorAccess,
   WorkspacePaths,
 } from '@ww/executor';
-import { createPhase9RuntimeComposition } from './runtime-composition.js';
+import { PHASE8_RUNTIME, createPhase9RuntimeComposition } from './runtime-composition.js';
 import { AppModule } from './app.module.js';
 import { SERVER_DATABASE } from './orchestration.module.js';
 
@@ -515,9 +515,37 @@ describe.skipIf(probe === undefined || probeRedis === undefined)('Phase 9 runtim
     const question = await getMessage(ch, projectId, questionMessageId!);
     expect(question).toBeDefined();
     process.env['WW_LOCAL_SESSION_TOKEN'] = 'phase9-test-token';
+    // Cevap yolu artık motorun DEVAM YAŞAM DÖNGÜSÜNÜ çağırır. Önceden yalnız
+    // zamanlayıcı yarısı çağrılıyordu: görev 'working' olur, kimse yürütmez ve
+    // canlıda sonsuza dek asılı kalırdı. Burada motor yerine, çağrıldığını
+    // kaydeden ve aynı zamanlayıcı yarısını koşturan bir çift kullanılır;
+    // böylece testin kalan adımları yarışmadan sürebilir.
+    const questionTaskBefore = await getLatestTask(ch, projectId, questionTaskId);
+    const resumedBriefId = questionTaskBefore!.task_brief_id;
+    const resumeCalls: { taskId: string }[] = [];
     const restModule = await Test.createTestingModule({ imports: [AppModule] })
       .overrideProvider(SERVER_DATABASE)
       .useValue({ ch, redis })
+      .overrideProvider(PHASE8_RUNTIME)
+      .useValue({
+        resume: async (resumeInput: {
+          taskId: string; previousAttemptId: string;
+          questionMessageId: string; replyMessageId: string; answer: string;
+        }) => {
+          await composition.assignmentService.resumeUserAnswer({
+            taskId: resumeInput.taskId as never,
+            taskBriefId: resumedBriefId as never,
+            previousAttemptId: resumeInput.previousAttemptId as never,
+            questionMessageId: resumeInput.questionMessageId as never,
+            replyMessageId: resumeInput.replyMessageId as never,
+            answer: resumeInput.answer,
+          });
+          // Kayıt devam BİTİNCE düşer: testin sonraki adımı yarı yazılmış
+          // durumu okumasın.
+          resumeCalls.push({ taskId: resumeInput.taskId });
+          return { status: 'working' };
+        },
+      })
       .compile();
     const restApp: INestApplication = restModule.createNestApplication();
     await restApp.init();
@@ -526,9 +554,13 @@ describe.skipIf(probe === undefined || probeRedis === undefined)('Phase 9 runtim
       .set('Authorization', 'Bearer phase9-test-token')
       .send({ kind: 'answer', text: 'src', replyToMessageId: questionMessageId })
       .expect(201);
+    // Devam AYRI koşar; HTTP cevabı onu beklemez.
+    await vi.waitFor(() => expect(resumeCalls).toHaveLength(1), { timeout: 5_000 });
     await restApp.close();
     const answer = await getMessage(ch, projectId, answerResponse.body.messageId as string);
     expect(answer?.envelope.payload.type).toBe('answer');
+    // ASIL KUSUR: cevap motora HİÇ ULAŞMIYORDU.
+    expect(resumeCalls[0]!.taskId).toBe(questionTaskId);
     askQuestion = false;
     const resumedTask = await getLatestTask(ch, projectId, questionTaskId);
     expect(resumedTask?.status).toBe('working');

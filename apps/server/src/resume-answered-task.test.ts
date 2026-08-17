@@ -4,58 +4,50 @@ import { isResumableStatus, resumeAnsweredTask } from './resume-answered-task.js
 
 const taskId = '00000000-0000-4000-8000-000000000001' as EntityId;
 
-const ports = (over: Partial<Parameters<typeof resumeAnsweredTask>[1]> = {}) => ({
-  resume: vi.fn(async () => undefined),
-  enqueue: vi.fn(async () => undefined),
-  ...over,
-});
-
 describe('resumeAnsweredTask', () => {
-  // ASIL KUSUR: cevap görevi 'working'e döndürüyor ama kuyruğa KOYMUYORDU.
-  // Görev hiçbir tüketicinin görmediği bir durumda sonsuza dek asılı kalıyordu.
-  it('sürdürdükten sonra görevi kuyruğa geri koyar', async () => {
-    const p = ports();
-    expect(await resumeAnsweredTask(taskId, p)).toBe(true);
-
-    expect(p.resume).toHaveBeenCalledTimes(1);
-    expect(p.enqueue).toHaveBeenCalledWith(taskId);
+  // ASIL KUSUR: cevap yalnızca zamanlayıcı yarısını çağırıyordu; görev
+  // 'working'e geçip atanmış kalıyor ama kimse YÜRÜTMÜYORDU.
+  it('tam devam yaşam döngüsünü çalıştırır', async () => {
+    const resume = vi.fn(async () => ({ status: 'done' }));
+    expect(await resumeAnsweredTask(taskId, { resume })).toBe(true);
+    expect(resume).toHaveBeenCalledTimes(1);
   });
 
-  // Sıra önemlidir: kuyruğa önce koymak, henüz 'waiting_user' olan görevi
-  // tüketiciye verir ve tüketici onu geçersiz durumda bulur.
-  it('önce sürdürür, sonra kuyruğa koyar', async () => {
-    const order: string[] = [];
-    await resumeAnsweredTask(taskId, {
-      resume: async () => { order.push('resume'); },
-      enqueue: async () => { order.push('enqueue'); },
-    });
-
-    expect(order).toEqual(['resume', 'enqueue']);
+  it('sonuç durumunu bildirir', async () => {
+    const onDone = vi.fn();
+    await resumeAnsweredTask(taskId, { resume: async () => ({ status: 'escalated' }), onDone });
+    expect(onDone).toHaveBeenCalledWith('escalated');
   });
 
-  // Sürdürme düşerse kuyruğa koymak, geçersiz durumdaki görevi tüketiciye verir.
-  it('sürdürme hatasında kuyruğa KOYMAZ ve hatayı yutmaz', async () => {
-    const enqueue = vi.fn(async () => undefined);
-    await expect(resumeAnsweredTask(taskId, {
-      resume: async () => { throw new Error('gecis reddedildi'); },
-      enqueue,
-    })).rejects.toThrow(/gecis reddedildi/);
-
-    expect(enqueue).not.toHaveBeenCalled();
-  });
-
-  // Kuyruk hatası cevabı geçersiz kılmaz (kullanıcının yazdığı kaydedilmiştir),
-  // ama sessiz kalmak görevi görünmez biçimde asardı.
-  it('kuyruk hatasında patlamaz ama bildirir', async () => {
-    const onError = vi.fn();
+  // Yaşam döngüsü HTTP cevabından ayrı koşar: buradan sızan hata yakalanmamış
+  // promise reddi olur ve süreci düşürebilir. Cevap ise zaten yazılmıştır.
+  it('yaşam döngüsü hatasını dışarı sızdırmaz', async () => {
     const result = await resumeAnsweredTask(taskId, {
-      resume: async () => undefined,
-      enqueue: async () => { throw new Error('redis düştü'); },
+      resume: async () => { throw new Error('model düştü'); },
+    });
+    expect(result).toBe(false);
+  });
+
+  // Yutulan hata görevi görünmez biçimde asar — canlı koşuda tam olarak
+  // bu oldu: panel "çalışıyor" gösterdi, hiçbir şey ilerlemedi.
+  it('hatayı bildirir', async () => {
+    const onError = vi.fn();
+    await resumeAnsweredTask(taskId, {
+      resume: async () => { throw new Error('model düştü'); },
       onError,
     });
+    expect(String(onError.mock.calls[0]![0])).toMatch(/model düştü/);
+    expect(onError).toHaveBeenCalledTimes(1);
+  });
 
-    expect(result).toBe(false);
-    expect(String(onError.mock.calls[0]![0])).toMatch(/redis düştü/);
+  it('hata durumunda sonuç bildirmez', async () => {
+    const onDone = vi.fn();
+    await resumeAnsweredTask(taskId, {
+      resume: async () => { throw new Error('düştü'); },
+      onDone,
+      onError: () => undefined,
+    });
+    expect(onDone).not.toHaveBeenCalled();
   });
 });
 
@@ -65,10 +57,10 @@ describe('isResumableStatus', () => {
     expect(isResumableStatus('escalated')).toBe(true);
   });
 
-  // Zaten çalışan bir görevi cevapla yeniden kuyruğa koymak onu İKİ KEZ
-  // koşturur; biten görevi diriltmek ise tamamlanmış işi bozar.
+  // Zaten çalışan bir görevi cevapla yeniden başlatmak onu İKİ KEZ koşturur;
+  // biteni diriltmek tamamlanmış işi bozar.
   it('çalışan veya kapanmış görevi sürdürülebilir saymaz', () => {
-    for (const status of ['working', 'queued', 'done', 'failed', 'cancelled']) {
+    for (const status of ['working', 'queued', 'verifying', 'done', 'failed', 'cancelled']) {
       expect(isResumableStatus(status)).toBe(false);
     }
   });

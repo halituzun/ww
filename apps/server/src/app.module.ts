@@ -42,10 +42,6 @@ import {
   HealthService,
 } from './health.service.js';
 import {
-  PHASE8_RUNTIME,
-  PHASE9_RUNTIME_CONFIG,
-  phase9RuntimeConfigFromEnvironment,
-  phase9RuntimeFromConfig,
 } from './runtime-composition.js';
 
 @Module({
@@ -69,12 +65,8 @@ import {
     { provide: PROJECT_APPLICATION, useExisting: ProjectApplicationService },
     { provide: TASK_APPLICATION, useExisting: TaskApplicationService },
     { provide: MESSAGE_APPLICATION, useExisting: MessageApplicationService },
-    { provide: PHASE9_RUNTIME_CONFIG, useFactory: phase9RuntimeConfigFromEnvironment },
-    {
-      provide: PHASE8_RUNTIME,
-      inject: [PHASE9_RUNTIME_CONFIG],
-      useFactory: phase9RuntimeFromConfig,
-    },
+    // PHASE8_RUNTIME/PHASE9_RUNTIME_CONFIG artık OrchestrationModule'den gelir
+    // (bkz. oradaki not): ebeveynde durduklarında çocuk modül onları göremiyordu.
   ],
 })
 export class AppModule {}

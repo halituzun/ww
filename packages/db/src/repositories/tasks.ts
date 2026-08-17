@@ -257,7 +257,14 @@ export async function getTaskAsOf(
   });
   const rows = (await result.json<unknown>()).map(parseTaskRow);
   if (rows.length === 0) return null;
-  const maximum = rows.reduce((max, row) => row.version > max ? row.version : max, rows[0]!.version);
+  // UInt64 JSON'da STRING döner: metinsel karşılaştırma "15" < "9" der ve
+  // görev 9. sürümü aşar aşmaz eski bir satır seçilirdi. Mühürleme bu satırı
+  // getLatestTask'ınkiyle hash üzerinden karşılaştırdığı için görev
+  // atanamaz hale geliyordu. Sayısal karşılaştırma zorunludur.
+  const maximum = rows.reduce(
+    (max, row) => (BigInt(row.version) > BigInt(max) ? row.version : max),
+    rows[0]!.version,
+  );
   return reconcileVersionedWrite(
     `task:${task}:asOf:${cutoffAt}`,
     rows.find((row) => row.version === maximum)!,

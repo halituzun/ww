@@ -1,4 +1,4 @@
-import { Inject, Injectable, Module } from '@nestjs/common';
+import { Inject, Injectable, Module, Optional } from '@nestjs/common';
 import { z } from 'zod';
 import {
   EntityIdSchema,
@@ -29,23 +29,36 @@ import {
   type TaskRow,
   type WwRedis,
 } from '@ww/db';
-import { TaskContextSnapshotBuilder } from '@ww/memory';
 import {
   CommunicationService,
   PrincipalResolver,
   type PrincipalAuthentication,
 } from '@ww/agents';
 import {
-  AssignmentService,
-  TaskBriefService,
-  TaskCausalLog,
-  TaskTransitionService,
 } from '@ww/scheduler';
 import { CommunicationWakeupPublisher, appendPromptVersion, createRedis, getActivePrompt } from '@ww/db';
 import { BOOTSTRAP_AGENTS, planBootstrapPrompts } from './agent-bootstrap.js';
 import { writeProjectScaffold } from './project-scaffold-writer.js';
 import { resolveWorkspaceRoot } from './runtime-context.js';
 import { isResumableStatus, resumeAnsweredTask } from './resume-answered-task.js';
+import {
+  PHASE8_RUNTIME,
+  PHASE9_RUNTIME_CONFIG,
+  phase9RuntimeConfigFromEnvironment,
+  phase9RuntimeFromConfig,
+} from './runtime-composition.js';
+
+/** Cevaplanan görevi yürüten tam yaşam döngüsü (composition'ın `resume`'u). */
+interface ResumeRuntime {
+  resume(input: Readonly<{
+    taskId: EntityId;
+    previousAttemptId: EntityId;
+    questionMessageId: EntityId;
+    replyMessageId: EntityId;
+    answer: string;
+    brief: unknown;
+  }>): Promise<Readonly<{ status: string }>>;
+}
 
 function observeWakeupPublishError(error: Error, wakeup: { readonly recipient: unknown; readonly messageId: string }): void {
   // Redis is only a wakeup optimisation; the durable inbox poll repairs a
@@ -159,12 +172,17 @@ export class TaskApplicationService implements TaskApplication {
 export class MessageApplicationService implements MessageApplication {
   readonly #redis: Promise<WwRedis>;
   #communication: CommunicationService | undefined;
-  readonly #assignments = new Map<string, AssignmentService>();
 
-  constructor(@Inject(SERVER_DATABASE) private readonly database: ServerDatabase) {
+  readonly #runtime: ResumeRuntime | null;
+
+  constructor(
+    @Inject(SERVER_DATABASE) private readonly database: ServerDatabase,
+    @Optional() @Inject(PHASE8_RUNTIME) runtime?: ResumeRuntime | null,
+  ) {
     // Redis is connected lazily so health-only and unit-test boots do not require
     // infrastructure, while every real message still uses the durable service.
     this.#redis = database.redis === undefined ? createRedis() : Promise.resolve(database.redis);
+    this.#runtime = runtime ?? null;
   }
 
   async send(input: MessageApplicationInput): Promise<unknown> {
@@ -226,38 +244,36 @@ export class MessageApplicationService implements MessageApplication {
       if (task !== null && isResumableStatus(task.status)) {
         const brief = await getTaskBrief(this.database.ch, taskBriefId);
         if (brief === null) throw new MessageInputError('cevap task brief kaydi bulunamadi');
-        let assignment = this.#assignments.get(input.projectId);
-        if (assignment === undefined) {
-          const snapshotBuilder = new TaskContextSnapshotBuilder(this.database.ch);
-          const taskBriefService = new TaskBriefService(input.projectId, this.database.ch, snapshotBuilder, { redis });
-          const transitionService = new TaskTransitionService(this.database.ch, redis);
-          assignment = new AssignmentService(
-            input.projectId,
-            `rest-answer-${input.projectId}`,
-            this.database.ch,
-            redis,
-            taskBriefService,
-            transitionService,
-            new TaskCausalLog(this.database.ch, redis),
-          );
-          this.#assignments.set(input.projectId, assignment);
+        // NOT: burada AYRI bir AssignmentService kurulurdu. Motorun kendi
+        // zamanlayıcısı varken ikinci bir sahip kurmak, aynı görev üzerinde
+        // iki fence kaynağı demekti; devam artık motorun kendi yolundan geçer.
+        const runtime = this.#runtime;
+        if (runtime === null) {
+          // Motor kayıtlı değilken cevabı sessizce kaydedip "devam ediyor"
+          // izlenimi vermek, görevi görünmez biçimde asardı.
+          throw new MessageInputError('cevap alindi ama orkestrasyon motoru kayitli degil');
         }
         const resumeInput = {
           taskId,
-          taskBriefId,
           previousAttemptId: assignmentAttemptId,
           questionMessageId: input.replyToMessageId,
           replyMessageId: sent.messageId,
           answer: input.text,
+          brief,
         };
-        const resumingAssignment = assignment;
-        await resumeAnsweredTask(taskId, {
-          resume: async () => { await resumingAssignment.resumeUserAnswer(resumeInput); },
-          enqueue: async (id) => { await enqueueTask(redis, `ww:queue:${input.projectId}`, id); },
+        // AYRI KOŞAR: yaşam döngüsü dakikalarca sürebilir, HTTP cevabı
+        // kullanıcının yazdığının kaydedildiğini hemen bildirmelidir.
+        void resumeAnsweredTask(taskId, {
+          resume: async () => runtime.resume(resumeInput),
+          onDone: (status) => {
+            console.log(JSON.stringify({
+              level: 'log', code: 'ANSWERED_TASK_RESUMED', taskId, status,
+            }));
+          },
           onError: (reason) => {
             console.error(JSON.stringify({
               level: 'error',
-              code: 'ANSWERED_TASK_ENQUEUE_FAILED',
+              code: 'ANSWERED_TASK_RESUME_FAILED',
               message: reason instanceof Error ? reason.message : String(reason),
               taskId,
             }));
@@ -273,5 +289,27 @@ export class MessageApplicationService implements MessageApplication {
   }
 }
 
-@Module({ providers: [{ provide: SERVER_DATABASE, useFactory: (): ServerDatabase => ({ ch: createCh() }) }, ProjectApplicationService, TaskApplicationService, MessageApplicationService], exports: [SERVER_DATABASE, ProjectApplicationService, TaskApplicationService, MessageApplicationService] })
+// PHASE8_RUNTIME burada sağlanır, AppModule'de DEĞİL: çocuk modül ebeveynin
+// sağlayıcısını göremez. Motor AppModule'de kaldığı sürece bu modüldeki
+// MessageApplicationService onu @Optional() üzerinden hep `undefined` görür ve
+// cevaplanan görev sessizce hiçbir yere gitmez. Buradan export edilmesi
+// AppModule'deki TaskPumpService'in aynı örneği almasını da sürdürür.
+@Module({
+  providers: [
+    { provide: SERVER_DATABASE, useFactory: (): ServerDatabase => ({ ch: createCh() }) },
+    { provide: PHASE9_RUNTIME_CONFIG, useFactory: phase9RuntimeConfigFromEnvironment },
+    { provide: PHASE8_RUNTIME, inject: [PHASE9_RUNTIME_CONFIG], useFactory: phase9RuntimeFromConfig },
+    ProjectApplicationService,
+    TaskApplicationService,
+    MessageApplicationService,
+  ],
+  exports: [
+    SERVER_DATABASE,
+    PHASE9_RUNTIME_CONFIG,
+    PHASE8_RUNTIME,
+    ProjectApplicationService,
+    TaskApplicationService,
+    MessageApplicationService,
+  ],
+})
 export class OrchestrationModule {}

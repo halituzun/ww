@@ -7,6 +7,7 @@ import { clickhouseUp } from '../testutil.js';
 import {
   appendTaskVersion,
   createTask,
+  getTaskAsOf,
   getLatestTask,
   listLatestTasksByStatus,
   type CreateTaskInput,
@@ -15,6 +16,11 @@ import {
 import { RepositoryConflictError } from './types.js';
 
 const up = await clickhouseUp();
+
+/** Tüm sürümleri kapsayan kesim noktası: testler zamana bağlı olmamalıdır. */
+function futureCutoff(): string {
+  return '2099-01-01T00:00:00.000Z';
+}
 
 describe.skipIf(!up)('tasks repository', () => {
   const db = `ww_test_tasks_${Date.now()}_${process.pid}`;
@@ -117,5 +123,39 @@ describe.skipIf(!up)('tasks repository', () => {
       .rejects.toBeInstanceOf(RepositoryConflictError);
     await expect(listLatestTasksByStatus(ch, initial.project_id, initial.status))
       .rejects.toBeInstanceOf(RepositoryConflictError);
+  });
+
+  // ASIL KUSUR: en büyük sürüm METİNSEL karşılaştırmayla seçiliyordu.
+  // UInt64 JSON'da string döner ve "15" > "9" YANLIŞTIR; görev 9. sürümü
+  // aşar aşmaz getTaskAsOf eski bir satır döndürüyordu. Brief mühürlemesi
+  // bunu getLatestTask ile karşılaştırdığı için görev atanamaz oluyordu.
+  it('9. surumu asan gorevde en buyuk surumu sayisal secer', async () => {
+    let row = await createTask(ch, task());
+    for (let index = 0; index < 10; index += 1) {
+      row = await appendTaskVersion(ch, {
+        expectedVersion: row.version,
+        next: { ...row, title: `surum-${index}` },
+      });
+    }
+    expect(Number(row.version)).toBeGreaterThan(9);
+
+    const asOf = await getTaskAsOf(ch, row.project_id, row.task_id, futureCutoff());
+    expect(asOf?.version).toBe(row.version);
+  });
+
+  // Mühürleme iki okuyucuyu HASH ile karşılaştırır; aynı satır iki yoldan
+  // birebir aynı nesne olarak dönmezse hiçbir görev atanamaz.
+  it('getTaskAsOf ve getLatestTask ayni satir icin ayni hash uretir', async () => {
+    let row = await createTask(ch, task());
+    for (let index = 0; index < 10; index += 1) {
+      row = await appendTaskVersion(ch, {
+        expectedVersion: row.version,
+        next: { ...row, title: `hash-${index}` },
+      });
+    }
+
+    const latest = await getLatestTask(ch, row.project_id, row.task_id);
+    const asOf = await getTaskAsOf(ch, row.project_id, row.task_id, futureCutoff());
+    expect(canonicalSha256V1(asOf)).toBe(canonicalSha256V1(latest));
   });
 });
