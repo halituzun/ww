@@ -5,7 +5,7 @@
 // mock'lamak zorunda kalmaz.
 import { randomUUID } from 'node:crypto';
 import { CommandRunner, DockerSandboxAdapter, WorkspacePaths, clickHouseExecutorEventStore, dbRedisExecutorAccess } from '@ww/executor';
-import { TaskContextSnapshotBuilder } from '@ww/memory';
+import { MemoryService, TaskContextSnapshotBuilder } from '@ww/memory';
 import {
   createAwaitUserAnswerOperation,
   createEscalationRecorder,
@@ -21,6 +21,7 @@ import { createGateOperations } from './gate-operations.js';
 import { createToolPortFactory } from './tool-factory.js';
 import { createRuntimeContextService } from './runtime-context-service.js';
 import { createExecutionErrorRecorder } from './execution-error-recorder.js';
+import { renderContextPack } from './context-pack-render.js';
 import { buildAgentCapabilities } from './agent-capabilities.js';
 import { appendEvent, getActivePrompt, getAssignmentAttempt, getLatestTask, listLatestAgents } from '@ww/db';
 import type { RuntimeModels } from './runtime-context.js';
@@ -51,6 +52,7 @@ export async function createOrchestrationComposition(
   input: AssemblyInput,
 ): Promise<AssemblyResult> {
   const auditStore = clickHouseExecutorEventStore(input.ch);
+  const memory = new MemoryService(input.ch);
   // Agent'lar kendi adlarına konuşabilmeli: yetenek haritası olmadan worker
   // raporu 'system' kimliğine düşer ve politika onu reddeder.
   const agents = await listLatestAgents(input.ch, input.projectId);
@@ -176,7 +178,31 @@ export async function createOrchestrationComposition(
       workspaceRoot: input.projectRoot,
       models: input.models,
       // Context Builder bağlantısı ayrı bir adım; şimdilik boş bağlam.
-      loadContextPack: async () => '',
+      // docs/06 Context Builder: geçmiş kararlar, özetler, fihrist ve ilgili
+      // yazışmalar modele girer. Boş dize dönmek hafıza katmanını yazıp
+      // kullanmamaktı — agent'lar sıfır proje bağlamıyla çalışıyordu.
+      loadContextPack: async ({ brief }) => {
+        const scope = brief as unknown as {
+          projectId: EntityId; taskId: EntityId; goal?: string; tokenBudget?: number;
+        };
+        try {
+          const pack = await memory.buildContextPack({
+            projectId: scope.projectId,
+            taskId: scope.taskId,
+            cutoffAt: new Date().toISOString(),
+            // Bağlam bütçesi görevin toplam bütçesinin küçük bir dilimidir;
+            // tamamını bağlama harcamak işe yer bırakmaz.
+            tokenBudget: Math.max(500, Math.floor((scope.tokenBudget ?? 4_000) / 4)),
+            ...(scope.goal === undefined ? {} : { query: scope.goal }),
+          });
+          return renderContextPack(pack.chunks as never);
+        } catch (reason) {
+          // Bağlam kurulamazsa iş DURMAZ ama sessiz de kalmaz: bağlamsız
+          // çalışan agent daha kötü sonuç üretir, bunu bilmek gerekir.
+          console.warn(`[ww] bağlam paketi kurulamadı: ${String(reason)}`);
+          return '';
+        }
+      },
     }),
     schedulerOperations: (() => {
       const transition = createTransitionOperation({
