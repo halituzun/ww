@@ -16,6 +16,9 @@ export interface Task {
   priority: number;
   updated_at: string;
   target_files?: string[];
+  /** Tuval oklarının gerçek kaynağı: bağımlılık ve delegasyon (docs/08). */
+  depends_on?: string[];
+  parent_task_id?: string;
 }
 
 export interface Usage {
