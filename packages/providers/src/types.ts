@@ -24,7 +24,12 @@ export interface CompletionMeta extends Partial<ProviderInvocationProvenanceV1> 
   projectId: string;
   agentId: string;
   taskId?: string;
-  purpose: 'completion' | 'embedding' | 'health_check';
+  /**
+   * 'council': konsey turu. Gerçek ve paralı bir çağrıdır, api_usage'a yazılır;
+   * ama göreve bağlı DEĞİLDİR (brief/attempt provenance'ı yoktur), bu yüzden
+   * 'completion'ın dayanıklı etki sınırını gerektirmez.
+   */
+  purpose: 'completion' | 'embedding' | 'health_check' | 'council';
 }
 
 /** Durable boundary supplied by the orchestration layer. Providers must not

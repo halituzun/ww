@@ -146,6 +146,28 @@ describe('ModelRouter', () => {
     expect(rows.map((r) => r.status)).toEqual(['error', 'error']);
   });
 
+
+  // Konsey turu GERÇEK, paralı bir çağrıdır ve api_usage'a yazılmalıdır; ama
+  // göreve bağlı değildir: brief/attempt provenance'ı yoktur. 'completion'
+  // sayılırsa dayanıklı etki sınırı zorunlu olur ve konsey hiç koşamaz.
+  it('council amacli cagri gorev provenance istemez ve usage yazar', async () => {
+    const mock = new MockProvider({ script: [{ content: 'öneri', toolCalls: [] }] });
+    const rows: unknown[] = [];
+    const router = new ModelRouter(new Map([['mock', mock]]), {
+      fallbacks: () => [],
+      usageSink: async (row) => { rows.push(row); },
+    });
+
+    const res = await router.complete('mock:mock-model', {
+      messages: [],
+      meta: { purpose: 'council', projectId: meta.projectId, agentId: meta.agentId },
+    } as never);
+
+    expect(res.result.content).toBe('öneri');
+    expect(rows).toHaveLength(1);
+    expect((rows[0] as { purpose: string }).purpose).toBe('council');
+  });
+
   it('bad_request fallback tetiklemez, hata fırlar', async () => {
     const bad = new MockProvider({ script: [], failFirst: 99, failKind: 'bad_request' });
     const good = new MockProvider({ script: [{ content: 'yedek', toolCalls: [] }] });

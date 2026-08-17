@@ -31,7 +31,8 @@ export interface ApiUsageRow {
   task_id: string;
   provider_id: string;
   model: string;
-  purpose: 'completion' | 'embedding' | 'health_check';
+  /** 'council': konsey turu — gerçek çağrı, ama göreve bağlı provenance yok. */
+  purpose: 'completion' | 'embedding' | 'health_check' | 'council';
   prompt_tokens: number;
   completion_tokens: number;
   cost_usd: number;
