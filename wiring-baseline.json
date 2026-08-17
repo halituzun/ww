@@ -30,7 +30,6 @@
   "packages/db/src/repositories/briefs.ts:getPromptInputSnapshot",
   "packages/db/src/repositories/causal-entries.ts:getTaskCausalCursor",
   "packages/db/src/repositories/messages.ts:listMessagesBySession",
-  "packages/db/src/repositories/messages.ts:listPendingInboxMessages",
   "packages/db/src/repositories/messages.ts:listProtocolV1AnswerRepliesToMessage",
   "packages/db/src/repositories/prompts.ts:getActivePromptAsOf",
   {
