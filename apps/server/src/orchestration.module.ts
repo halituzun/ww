@@ -45,6 +45,7 @@ import { CommunicationWakeupPublisher, appendPromptVersion, createRedis, getActi
 import { BOOTSTRAP_AGENTS, planBootstrapPrompts } from './agent-bootstrap.js';
 import { writeProjectScaffold } from './project-scaffold-writer.js';
 import { resolveWorkspaceRoot } from './runtime-context.js';
+import { isResumableStatus, resumeAnsweredTask } from './resume-answered-task.js';
 
 function observeWakeupPublishError(error: Error, wakeup: { readonly recipient: unknown; readonly messageId: string }): void {
   // Redis is only a wakeup optimisation; the durable inbox poll repairs a
@@ -222,7 +223,7 @@ export class MessageApplicationService implements MessageApplication {
     });
     if (input.kind === 'answer' && taskId !== undefined && taskBriefId !== undefined && assignmentAttemptId !== undefined && input.replyToMessageId !== undefined) {
       const task = await getLatestTask(this.database.ch, input.projectId, taskId);
-      if (task !== null && (task.status === 'waiting_user' || task.status === 'escalated')) {
+      if (task !== null && isResumableStatus(task.status)) {
         const brief = await getTaskBrief(this.database.ch, taskBriefId);
         if (brief === null) throw new MessageInputError('cevap task brief kaydi bulunamadi');
         let assignment = this.#assignments.get(input.projectId);
@@ -241,13 +242,26 @@ export class MessageApplicationService implements MessageApplication {
           );
           this.#assignments.set(input.projectId, assignment);
         }
-        await assignment.resumeUserAnswer({
+        const resumeInput = {
           taskId,
           taskBriefId,
           previousAttemptId: assignmentAttemptId,
           questionMessageId: input.replyToMessageId,
           replyMessageId: sent.messageId,
           answer: input.text,
+        };
+        const resumingAssignment = assignment;
+        await resumeAnsweredTask(taskId, {
+          resume: async () => { await resumingAssignment.resumeUserAnswer(resumeInput); },
+          enqueue: async (id) => { await enqueueTask(redis, `ww:queue:${input.projectId}`, id); },
+          onError: (reason) => {
+            console.error(JSON.stringify({
+              level: 'error',
+              code: 'ANSWERED_TASK_ENQUEUE_FAILED',
+              message: reason instanceof Error ? reason.message : String(reason),
+              taskId,
+            }));
+          },
         });
       }
     }
