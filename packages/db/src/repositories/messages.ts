@@ -813,6 +813,46 @@ export async function findAuthoritativeAnswerWinner(
   return answer;
 }
 
+/**
+ * Projenin son mesajları (tüm oturumlar).
+ *
+ * NEDEN VAR: panelin PM sohbeti SALT-YAZMA idi — kullanıcı mesaj gönderiyor
+ * ama konuşmayı okuyamıyordu. Oturuma göre listeleme burada işe yaramaz:
+ * her kullanıcı komutu (yanıt değilse) YENİ oturum açar, dolayısıyla
+ * oturum bazlı sorgu tek mesaj gösterir. Sohbetin okunabilmesi için proje
+ * geneli, SINIRLI ve en yeniden eskiye bir görünüm gerekir.
+ */
+export async function listRecentMessages(
+  ch: ClickHouseClient,
+  projectId: string,
+  limit = 100,
+): Promise<MessageRecord[]> {
+  const project = concreteEntityId(projectId, 'projectId');
+  if (!Number.isSafeInteger(limit) || limit < 1 || limit > 1_000) {
+    throw new Error('listRecentMessages limiti 1-1000 araliginda olmalidir');
+  }
+  const result = await ch.query({
+    query: `SELECT ${MESSAGE_COLUMNS} FROM messages
+      WHERE project_id = {projectId:UUID}
+      ORDER BY created_at DESC, message_id
+      LIMIT {limit:UInt32}`,
+    query_params: { projectId: project, limit },
+    format: 'JSONEachRow',
+  });
+  const grouped = new Map<string, MessageRecord[]>();
+  for (const record of (await result.json<unknown>()).map(parseMessageRow)) {
+    const messageId = record.protocolVersion === 1
+      ? record.envelope.messageId
+      : record.messageId;
+    const rows = grouped.get(messageId) ?? [];
+    rows.push(record);
+    grouped.set(messageId, rows);
+  }
+  return [...grouped.entries()].map(([messageId, records]) => (
+    reconcileStoredMessages(records, `message:${messageId}`)
+  ));
+}
+
 export async function listPendingInboxMessages(
   ch: ClickHouseClient,
   projectId: string,

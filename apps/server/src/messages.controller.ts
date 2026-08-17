@@ -2,7 +2,7 @@ import { BadRequestException, Body, Controller, Get, Inject, Param, Post, Query,
 import { z } from 'zod';
 import { EntityIdSchema } from '@ww/shared';
 import { parseLocalSession, type LocalSessionRequest } from './auth/local-session.js';
-import { listLatestAgents, listPendingInboxMessages } from '@ww/db';
+import { listLatestAgents, listPendingInboxMessages, listRecentMessages } from '@ww/db';
 import { MESSAGE_APPLICATION, MessageInputError, SERVER_DATABASE, type MessageApplication, type ServerDatabase } from './orchestration.module.js';
 
 const MessageInput = z.strictObject({ kind: z.enum(['user_command', 'answer']), text: z.string().trim().min(1), taskId: EntityIdSchema.optional(), replyToMessageId: EntityIdSchema.optional() }).superRefine((value, context) => {
@@ -26,6 +26,37 @@ export class MessagesController {
    * görev sonsuza dek cevap bekliyordu. Soru sorma akışı kullanıcı açısından
    * kör bir sokakta bitiyordu.
    */
+  /**
+   * Sohbet geçmişi (docs/08 → PM ile sohbet).
+   *
+   * Panel mesaj GÖNDEREBİLİYOR ama okuyamıyordu: sohbet salt-yazmaydı ve
+   * kullanıcı hiçbir cevabı göremiyordu.
+   */
+  @Get()
+  async list(
+    @Param('projectId') projectId: string,
+    @Query('limit') limit?: string,
+  ) {
+    const id = EntityIdSchema.parse(projectId);
+    const parsed = limit === undefined ? 100 : Number(limit);
+    if (!Number.isSafeInteger(parsed) || parsed < 1 || parsed > 1_000) {
+      throw new BadRequestException('mesaj limiti 1-1000 arasında olmalıdır');
+    }
+    const records = await listRecentMessages(this.#ch(), id, parsed);
+    return records.map((record) => {
+      const envelope = 'envelope' in record
+        ? (record.envelope as unknown as Record<string, unknown>)
+        : (record as unknown as Record<string, unknown>);
+      return {
+        messageId: envelope['messageId'],
+        kind: envelope['kind'],
+        taskId: envelope['taskId'],
+        payload: envelope['payload'],
+        createdAt: envelope['createdAt'],
+      };
+    });
+  }
+
   @Get('pending')
   async pending(
     @Param('projectId') projectId: string,
