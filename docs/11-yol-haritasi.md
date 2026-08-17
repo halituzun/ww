@@ -68,10 +68,23 @@ tasarım boşluğudur:
 
 Yani iş, kirayı elinde tutan biri tarafından koşulmalıdır; `SchedulerWorker`
 bunun için tasarlanmıştı ama yalnızca ATAMA yapıyor, yaşam döngüsünü
-koşturmuyor. Karar verilmesi gereken: (a) kirayı `assign` sonrası koşucuya
-devretmek, (b) yaşam döngüsünü kiranın içinde koşturmak, (c) executor'ın
-kontrolünü "attempt hâlâ current" invaryantına dayandırmak. Bu seçim
-yapılmadan hiçbir görev dosya yazamaz.
+koşturmuyor.
+
+**Denenen ve GERİ ALINAN çözüm (2026-08-17):** `#stopGuards(taskGuards, !taskActivated)`
+ile başarılı atamada kirayı bırakmamak. Kira canlı kalıyor ama bu kez sonraki
+adımlar düşüyor: `fail`/`report_result` geçişleri kendi görev kirasını almaya
+çalışıp `task lease mesgul` hatası veriyor. Yarım tasarım, bilinen engelden
+daha kötü — geri alındı.
+
+Doğru çözüm bu üç parçayı BİRLİKTE ele almalı:
+1. Kirayı kim tutar: koşucu (pompa) yaşam döngüsü boyunca tutmalı.
+2. Yaşam döngüsü içindeki geçişler kirayı YENİDEN ALMAMALI; mevcut kirayı
+   devralmalı (`acquireFencedLease` fence'i her çağrıda artırdığı için
+   yeniden alma attempt'in fence'ini bayatlatır).
+3. Terminal durumda (ya da `waiting_user`) kira açıkça bırakılmalı; koşucu
+   ölürse TTL (10 dk) devralmayı zaten mümkün kılar.
+
+Bu seçim yapılmadan hiçbir görev dosya yazamaz.
 
 **Kapı güvenilirliği (2026-08-17):** `pnpm test` artık `--concurrency=1` ile
 koşar. Paralel koşumda ClickHouse yükü altında zamanlama duyarlı entegrasyon
