@@ -89,5 +89,13 @@
   {
     "symbol": "apps/server/src/tool-factory.ts:createToolPortFactory",
     "reason": "runtimeContext toolFactory; bootstrap baglayacak"
+  },
+  {
+    "symbol": "apps/server/src/executor-composition.ts:createExecutorComposition",
+    "reason": "bootstrap parcasi; nihai birlestirme baglayacak"
+  },
+  {
+    "symbol": "apps/server/src/executor-composition.ts:createResumeUserAnswerOperation",
+    "reason": "bootstrap parcasi; nihai birlestirme baglayacak"
   }
 ]
