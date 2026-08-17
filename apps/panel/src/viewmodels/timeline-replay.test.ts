@@ -68,3 +68,21 @@ describe('replayAt', () => {
     expect(state.statusByTask.size).toBe(0);
   });
 });
+
+describe('replayAt — zarf alanları', () => {
+  // ASIL KUSUR: taskId payload'da değil, olay KOLONUNDA. Yalnızca payload'a
+  // bakmak her görevi "bilinmiyor" gösteriyordu.
+  it('gorev kimligini zarftan okur', () => {
+    const state = replayAt([
+      { event: 'status_change', seq: 1, ts: 'x', taskId: 't9', data: { toStatus: 'working' } },
+    ], 1);
+    expect(state.statusByTask.get('t9')).toBe('working');
+  });
+
+  it('zarf kimligi bos ise payloada duser', () => {
+    const state = replayAt([
+      { event: 'status_change', seq: 1, ts: 'x', taskId: '', data: { taskId: 't5', status: 'done' } },
+    ], 1);
+    expect(state.statusByTask.get('t5')).toBe('done');
+  });
+});

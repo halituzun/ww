@@ -5,6 +5,13 @@ import { EntityIdSchema } from './identity.js';
 export interface WsEnvelope<T = unknown> {
   event: string;
   projectId: string;
+  /**
+   * Olayın ait olduğu görev. `events.task_id` bir KOLONDUR, payload'ın içinde
+   * değildir: zarfa konmayınca panel bir olayı hangi görevin ürettiğini
+   * bilemiyordu ve tuvalin zaman çizelgesi her görevi "bilinmiyor" gösterirdi.
+   * Görevle ilgisi olmayan olaylarda boş dizedir.
+   */
+  taskId: string;
   seq: number;
   ts: string;
   data: T;

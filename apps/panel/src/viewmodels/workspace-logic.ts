@@ -6,6 +6,8 @@ export interface TimelineEvent {
   event: string;
   seq: number;
   ts: string;
+  /** Olayı üreten görev; sunucu zarfında kolon olarak gelir, payload'da değil. */
+  taskId?: string;
   data: unknown;
 }
 

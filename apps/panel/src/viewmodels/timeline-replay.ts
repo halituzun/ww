@@ -14,6 +14,8 @@ export interface ReplayEvent {
   readonly event: string;
   readonly seq: number;
   readonly ts: string;
+  /** Sunucu zarfındaki görev kimliği; `events.task_id` KOLONUNDAN gelir. */
+  readonly taskId?: string | undefined;
   readonly data: unknown;
 }
 
@@ -53,7 +55,10 @@ export function replayAt(
   const statusByTask = new Map<string, string>();
   for (const event of visible) {
     if (event.event !== 'status_change') continue;
-    const taskId = readString(event.data, 'taskId') ?? readString(event.data, 'task_id');
+    // Görev kimliği ZARFTAN okunur: payload'da yoktur (kolondur). Yalnızca
+    // payload'a bakmak her görevi "bilinmiyor" gösterirdi.
+    const taskId = (event.taskId !== undefined && event.taskId !== '' ? event.taskId : undefined)
+      ?? readString(event.data, 'taskId') ?? readString(event.data, 'task_id');
     const status = readString(event.data, 'status') ?? readString(event.data, 'toStatus');
     if (taskId === undefined || status === undefined) continue;
     statusByTask.set(taskId, status);
