@@ -18,11 +18,12 @@ const call = (over: Record<string, unknown> = {}) => ({
 
 const recorder = (over: Partial<Parameters<typeof createExecutionErrorRecorder>[0]> = {}) => {
   const appendEvent = vi.fn(async () => undefined);
+  const transition = vi.fn(async () => undefined);
   const log = vi.fn();
   return {
-    appendEvent, log,
+    appendEvent, transition, log,
     handle: createExecutionErrorRecorder({
-      appendEvent, log, now: () => '2026-08-17T09:00:00.000Z', ...over,
+      appendEvent, transition, log, now: () => '2026-08-17T09:00:00.000Z', ...over,
     }),
   };
 };
@@ -87,9 +88,49 @@ describe('createExecutionErrorRecorder', () => {
     const log = vi.fn();
     const handle = createExecutionErrorRecorder({
       appendEvent: async () => { throw new Error('clickhouse kapalı'); },
+      transition: async () => undefined,
       log, now: () => '2026-08-17T09:00:00.000Z',
     });
     await handle(call());
     expect(log.mock.calls.some((entry) => String(entry[0]).includes('clickhouse kapalı'))).toBe(true);
+  });
+  // ASIL KUSUR: kaydedici yalnızca 'failed' STRING'i dönüyordu; hiçbir geçiş
+  // yapılmadığı için görev satırı 'assigned' kalıyor ve DOSYA KİLİDİ
+  // bırakılmıyordu. Sonuç: aynı dosyayı hedefleyen sonraki görev TTL dolana
+  // dek çakışıyordu.
+  it('görevi fail durumuna geçirir', async () => {
+    const { transition, handle } = recorder();
+    await handle(call());
+
+    expect(transition).toHaveBeenCalledTimes(1);
+    const sent = transition.mock.calls[0]![0] as never as Record<string, unknown>;
+    expect(sent['action']).toBe('fail');
+    expect(sent['taskId']).toBe(id(2));
+    expect(String(sent['resultSummary'])).toContain('deepseek 429 rate limit');
+  });
+
+  it('geçiş düşse bile failed döner ve bildirilir', async () => {
+    const { log, handle } = recorder({
+      transition: async () => { throw new Error('geçiş reddedildi'); },
+    });
+
+    expect(await handle(call())).toBe('failed');
+    expect(log.mock.calls.some((entry) => String(entry[0]).includes('geçiş reddedildi'))).toBe(true);
+  });
+
+  it('geçiş düşse bile hata olayı yazılır', async () => {
+    const { appendEvent, handle } = recorder({
+      transition: async () => { throw new Error('geçiş reddedildi'); },
+    });
+    await handle(call());
+    expect(appendEvent).toHaveBeenCalledTimes(1);
+  });
+
+  // Yığın izi olmadan hatanın nerede oluştuğu koda bakarak aranır.
+  it('Error ise yığın izini de kaydeder', async () => {
+    const { appendEvent, handle } = recorder();
+    await handle(call());
+    const payload = String((appendEvent.mock.calls[0]![0] as never as Record<string, unknown>)['payload']);
+    expect(JSON.parse(payload).stack).toContain('execution-error-recorder.test');
   });
 });

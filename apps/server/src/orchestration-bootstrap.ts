@@ -26,7 +26,10 @@ export interface BootstrapDeps {
     skipped: readonly SkippedProvider[];
   }>;
   loadRouting: () => Promise<RoutingIndex>;
-  register: (config: { composition: AssemblyResult['composition'] }) => void;
+  register: (config: {
+    composition: AssemblyResult['composition'];
+    bindLate: AssemblyResult['bindLate'];
+  }) => void;
 }
 
 export interface BootstrapResult {
@@ -87,7 +90,9 @@ export async function bootstrapOrchestrationRuntime(deps: BootstrapDeps): Promis
   });
 
   // Kayıt hatası yutulmaz: motor kayıtlı sanılıp çalışmıyor olamaz.
-  deps.register({ composition: assembly.composition });
+  // bindLate kaydın PARÇASIDIR: ayrı bırakıldığında hiç çağrılmadı ve
+  // her görev ilk geçişte 'henüz bağlanmadı' ile düştü.
+  deps.register({ composition: assembly.composition, bindLate: assembly.bindLate });
 
   return {
     registered: true,

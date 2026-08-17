@@ -17,6 +17,17 @@ export interface ExecutionErrorInput {
 
 export interface ExecutionErrorRecorderInput {
   appendEvent(row: unknown): Promise<unknown>;
+  /**
+   * Görevi fiilen 'failed'e geçirir. Yalnızca durum STRING'i döndürmek
+   * yetmez: geçiş olmadan görev satırı 'assigned' kalır ve DOSYA KİLİDİ
+   * bırakılmaz — aynı dosyayı hedefleyen sonraki görev TTL dolana dek çakışır.
+   */
+  transition(call: Readonly<{
+    taskId: EntityId;
+    attempt: AssignmentAttemptV1;
+    action: string;
+    resultSummary?: string;
+  }>): Promise<unknown>;
   log(message: string): void;
   now(): string;
 }
@@ -47,6 +58,8 @@ export function createExecutionErrorRecorder(input: ExecutionErrorRecorderInput)
         payload: JSON.stringify({
           phase: call.phase,
           reason,
+          // Yığın izi olmadan "nerede patladı" sorusu koda bakarak aranıyor.
+          stack: call.error instanceof Error ? (call.error.stack ?? '') : '',
           assignmentAttemptId: attempt.assignmentAttemptId,
         }),
         duration_ms: 0,
@@ -56,6 +69,19 @@ export function createExecutionErrorRecorder(input: ExecutionErrorRecorderInput)
       // Kaydedici, hata yolunu ikinci bir hatayla kırmamalı: görev yine de
       // 'failed' olmalı ki durum belirsiz kalmasın. Ama sessiz de kalmaz.
       input.log(`hata olayı yazılamadı: ${reasonText(writeError)}`);
+    }
+
+    try {
+      await input.transition({
+        taskId: call.taskId,
+        attempt: call.attempt,
+        action: 'fail',
+        resultSummary: reason,
+      });
+    } catch (transitionError) {
+      // Geçiş reddedilse bile çağıranın gördüğü sonuç 'failed' olmalı;
+      // sessizce başarılı görünmek durumu belirsiz bırakırdı.
+      input.log(`görev ${call.taskId} 'failed' durumuna geçirilemedi: ${reasonText(transitionError)}`);
     }
 
     return 'failed';

@@ -4,7 +4,7 @@
 // düşen görevler sonsuza dek 'queued' kalıyordu — kuyruğu tüketip
 // `orchestrate` çağıran hiçbir üretim kodu yoktu. Kayıt ≠ tüketim.
 import { Inject, Injectable, Logger, Optional, type OnModuleDestroy, type OnModuleInit } from '@nestjs/common';
-import { ackQueue, createRedis, ensureGroup, queueKey, readQueue, reclaimQueue } from '@ww/db';
+import { ackQueue, createRedis, ensureGroup, getLatestTask, queueKey, readQueue, reclaimQueue } from '@ww/db';
 import { getActivePrompt } from '@ww/db';
 import { EntityIdSchema, type EntityId } from '@ww/shared';
 import type { WwRedis } from '@ww/db';
@@ -96,7 +96,7 @@ export class TaskPumpService implements OnModuleInit, OnModuleDestroy {
       const result = await pumpOnce({
         claim: async () => this.#claim(projectId),
         ack: async (msgId) => { await ackQueue(redis, stream, PUMP_GROUP, msgId); },
-        seal: async (taskId) => this.#seal(runtime, taskId) as never,
+        seal: async (taskId) => this.#seal(runtime, projectId, taskId) as never,
         orchestrate: (input) => runtime.orchestrate(input),
         onResult: (taskId, status) => this.#logger.log(`görev ${taskId}: ${status}`),
         onError: (taskId, reason) => this.#logger.warn(`görev ${taskId} işlenemedi: ${String(reason)}`),
@@ -149,7 +149,14 @@ export class TaskPumpService implements OnModuleInit, OnModuleDestroy {
 
   // Brief atama anında MÜHÜRLENİR: prompt sürümü o an sabitlenir, sonradan
   // prompt değişse bile bu görev aynı girdiyle çalışmış sayılır.
-  async #seal(runtime: PumpRuntime, taskId: EntityId): Promise<unknown> {
+  async #seal(runtime: PumpRuntime, projectId: EntityId, taskId: EntityId): Promise<unknown> {
+    // KARARLI cutoff: her turda `now()` kullanmak her denemede YENİ bir brief
+    // mühürlüyordu. İkinci tur, ilk turun attempt'ine bağlı olmayan bir brief
+    // üretiyor ve rapor "task brief uyusmuyor" ile reddediliyordu.
+    const task = await getLatestTask(this.#database.ch, projectId, taskId);
+    if (task === null) throw new Error(`görev bulunamadı: ${taskId}`);
+    const cutoffAt = task.created_at;
+
     const [worker, verifier] = await Promise.all([
       getActivePrompt(this.#database.ch, WORKER_PROMPT),
       getActivePrompt(this.#database.ch, VERIFIER_PROMPT),
@@ -162,7 +169,7 @@ export class TaskPumpService implements OnModuleInit, OnModuleDestroy {
       workerPrompt: { name: worker.prompt_name, version: worker.prompt_version },
       verifierPrompt: { name: verifier.prompt_name, version: verifier.prompt_version },
       allowedTools: ['read_file', 'write_file', 'list_dir', 'git_diff'],
-      cutoffAt: new Date().toISOString(),
+      cutoffAt,
     });
   }
 }

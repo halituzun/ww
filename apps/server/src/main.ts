@@ -110,6 +110,7 @@ async function tryStartOrchestration(): Promise<void> {
           })), store);
         },
         loadRouting: () => loadRoutingIndex(ch),
+        // bindLate'i kaydın parçası yap: composition kurulunca çağrılır.
         register: registerPhase9RuntimeConfig,
       }),
     });

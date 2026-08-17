@@ -18,7 +18,8 @@ export interface ToolCallLike {
 }
 
 export interface ToolExecutorLike {
-  definitions(): readonly ToolDefinitionLike[];
+  /** Bağlam ZORUNLU: izinli araçlar brief ve role göre süzülür. */
+  definitions(context: Record<string, unknown>): readonly ToolDefinitionLike[];
   validate(name: string, args: unknown): unknown;
   execute(context: Record<string, unknown>, call: ToolCallLike): Promise<JsonValue>;
 }
@@ -67,7 +68,7 @@ export function createToolPortFactory(input: ToolFactoryInput) {
     forWorker(scope: ToolScope): ToolPortLike {
       const allowed = allowedByBrief(scope);
       return {
-        definitions: () => input.executor.definitions()
+        definitions: () => input.executor.definitions(contextFor(scope, 'worker'))
           .filter((definition) => allowed.includes(definition.name)),
         validate: (name, args) => input.executor.validate(name, args),
         execute: (call) => input.executor.execute(contextFor(scope, 'worker'), call),
@@ -78,7 +79,7 @@ export function createToolPortFactory(input: ToolFactoryInput) {
       const allowed = allowedByBrief(scope)
         .filter((name) => VERIFIER_READONLY_TOOLS.includes(name));
       return {
-        definitions: () => input.executor.definitions()
+        definitions: () => input.executor.definitions(contextFor(scope, 'verifier'))
           .filter((definition) => allowed.includes(definition.name)),
         validate: (name, args) => input.executor.validate(name, args),
         execute: async (call) => {

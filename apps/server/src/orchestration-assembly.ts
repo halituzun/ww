@@ -4,7 +4,7 @@
 // ayrıştığında ikisi de okunur kalır ve bootstrap testleri kablolamayı
 // mock'lamak zorunda kalmaz.
 import { randomUUID } from 'node:crypto';
-import { CommandRunner, DockerSandboxAdapter, clickHouseExecutorEventStore, dbRedisExecutorAccess } from '@ww/executor';
+import { CommandRunner, DockerSandboxAdapter, WorkspacePaths, clickHouseExecutorEventStore, dbRedisExecutorAccess } from '@ww/executor';
 import { TaskContextSnapshotBuilder } from '@ww/memory';
 import {
   createAwaitUserAnswerOperation,
@@ -24,6 +24,7 @@ import { appendEvent, getActivePrompt } from '@ww/db';
 import type { RuntimeModels } from './runtime-context.js';
 import type { Phase9RuntimeCompositionInput } from './runtime-composition.js';
 import { createLateBoundPort, type LateBoundPort } from './late-binding.js';
+import type { LateBoundServices } from './late-bind-runtime.js';
 
 export interface AssemblyInput {
   ch: ClickHouseClient;
@@ -41,14 +42,7 @@ export interface AssemblyResult {
   /** Gerçek girdi tipi: derleyici composition'ın TAM olduğunu doğrular. */
   composition: Phase9RuntimeCompositionInput;
   /** Composition kurulduktan SONRA çağrılmalı; yoksa portlar açık hata verir. */
-  bindLate(services: Readonly<{
-    taskTransitionService: object;
-    assignmentService: object;
-    toolExecutor: object;
-    gateRunner: object;
-    gitWorkspace: object;
-    workspace: object;
-  }>): void;
+  bindLate(services: LateBoundServices): void;
 }
 
 export async function createOrchestrationComposition(
@@ -135,11 +129,13 @@ export async function createOrchestrationComposition(
       // Context Builder bağlantısı ayrı bir adım; şimdilik boş bağlam.
       loadContextPack: async () => '',
     }),
-    schedulerOperations: {
-      transition: createTransitionOperation({
+    schedulerOperations: (() => {
+      const transition = createTransitionOperation({
         port: transitionPort.proxy as never,
         principalName: 'ww-scheduler',
-      }),
+      });
+      return {
+      transition,
       gate: gateOps.gate,
       commit: gateOps.commit,
       escalate,
@@ -148,10 +144,13 @@ export async function createOrchestrationComposition(
       resumeUserAnswer: createResumeUserAnswerOperation(assignmentPort.proxy as never),
       handleExecutionError: createExecutionErrorRecorder({
         appendEvent: (row) => appendEvent(input.ch, row as never),
+        // Geçiş kilitleri de bırakır; yalnızca durum döndürmek yetmez.
+        transition: (call) => transition(call as never),
         log: (message) => console.warn(`[ww] ${message}`),
         now: () => new Date().toISOString(),
       }),
-    },
+      };
+    })(),
   };
 
   return {
@@ -163,7 +162,8 @@ export async function createOrchestrationComposition(
       gateOps.bind({
         gateRunner: services.gateRunner as never,
         git: services.gitWorkspace as never,
-        workspace: services.workspace as never,
+        // Workspace'i composition kurmaz; proje kökünü bilen taraf burasıdır.
+        workspace: new WorkspacePaths(input.projectRoot) as never,
       });
     },
   };

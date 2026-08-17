@@ -4,6 +4,7 @@
 // TaskTransitionService ise action'a göre farklı şekilde tam bir istek bekler.
 // Bu modül ikisini eşler ve şema ihlallerini SESSİZ geçiş reddine bırakmaz.
 import { randomUUID } from 'node:crypto';
+import { SYSTEM_SENTINEL } from '@ww/shared';
 import type {
   AssignmentAttemptV1,
   AuthenticatedPrincipalV1,
@@ -38,11 +39,15 @@ const COMMIT_HASH = /^[a-f0-9]{7,64}$/;
 export function createTransitionOperation(input: TransitionOperationInput) {
   return async ({ taskId, attempt, action, evidenceRefs, resultSummary }: TransitionCall) => {
     const requestedAt = new Date().toISOString();
+    // Şema 'system' kimliği için principalId = SYSTEM_SENTINEL ve bir
+    // serviceName ister. Servis ADINI principalId'ye yazmak HER geçişi
+    // ZodError ile düşürüyordu; `as never` bunu derleyiciden gizlemişti.
     const principal: AuthenticatedPrincipalV1 = {
       principalType: 'system',
-      principalId: input.principalName,
+      principalId: SYSTEM_SENTINEL,
+      serviceName: input.principalName,
       authenticatedAt: requestedAt,
-    } as never;
+    } as AuthenticatedPrincipalV1;
 
     const identity = {
       protocolVersion: 1 as const,

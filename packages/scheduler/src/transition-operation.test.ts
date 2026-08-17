@@ -1,3 +1,4 @@
+import { SYSTEM_SENTINEL } from '@ww/shared';
 import { describe, expect, it, vi } from 'vitest';
 import { createTransitionOperation, type TransitionApplyPort } from './transition-operation.js';
 
@@ -105,5 +106,36 @@ describe('createTransitionOperation', () => {
     const first = (p.requests[0] as { transitionRequestId: string }).transitionRequestId;
     const second = (p.requests[1] as { transitionRequestId: string }).transitionRequestId;
     expect(first).not.toBe(second);
+  });
+});
+
+// ASIL KUSUR: 'system' kimliği şema gereği principalId = SYSTEM_SENTINEL ve
+// bir serviceName ister. Bu operasyon principalId'ye servis ADINI yazıyor ve
+// serviceName'i hiç vermiyordu; `as never` cast'i hatayı derleyiciden gizledi.
+// Sonuç: HER durum geçişi ZodError ile düşüyordu — hiçbir görev bitemezdi.
+describe('createTransitionOperation kimliği', () => {
+  const attempt = {
+    projectId: '00000000-0000-4000-8000-000000000001',
+    taskBriefId: '00000000-0000-4000-8000-000000000003',
+    assignmentAttemptId: '00000000-0000-4000-8000-000000000004',
+  } as never;
+
+  it('geçerli bir system principal kurar', async () => {
+    const seen: unknown[] = [];
+    const operation = createTransitionOperation({
+      port: { apply: async (principal: unknown) => { seen.push(principal); return {}; } } as never,
+      principalName: 'ww-scheduler',
+    });
+
+    await operation({
+      taskId: '00000000-0000-4000-8000-000000000002' as never,
+      attempt, action: 'fail', resultSummary: 'sebep',
+    });
+
+    expect(seen[0]).toMatchObject({
+      principalType: 'system',
+      principalId: SYSTEM_SENTINEL,
+      serviceName: 'ww-scheduler',
+    });
   });
 });

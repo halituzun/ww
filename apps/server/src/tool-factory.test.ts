@@ -98,3 +98,48 @@ describe('verifier aracı', () => {
     expect(VERIFIER_READONLY_TOOLS).not.toContain('run_command');
   });
 });
+// ASIL KUSUR: definitions() ARGÜMANSIZ çağrılıyordu ama ToolExecutor
+// bağlam ister (brief/agentRole/taskStatus). ToolExecutorLike'ın yanlış
+// imzası uyuşmazlığı derleyiciden gizledi; worker döngüsü ilk adımda
+// "Cannot read properties of undefined (reading 'brief')" ile düştü.
+describe('tool port definitions bağlamı', () => {
+  it('worker için bağlamı executor’a geçirir', () => {
+    const seen: unknown[] = [];
+    const factory = createToolPortFactory({
+      executor: {
+        definitions: (context: unknown) => { seen.push(context); return []; },
+        validate: () => ({}),
+        execute: async () => ({}),
+      },
+    } as never);
+
+    factory.forWorker({
+      brief: { allowedTools: ['read_file'] },
+      attempt: { workerAgentId: 'a', verifierAgentId: 'b' },
+      workspaceRoot: '/w',
+    } as never).definitions();
+
+    expect(seen).toHaveLength(1);
+    expect(seen[0]).toMatchObject({ agentRole: 'worker', taskStatus: 'working' });
+    expect((seen[0] as Record<string, unknown>)['brief']).toBeDefined();
+  });
+
+  it('verifier için de bağlamı geçirir', () => {
+    const seen: unknown[] = [];
+    const factory = createToolPortFactory({
+      executor: {
+        definitions: (context: unknown) => { seen.push(context); return []; },
+        validate: () => ({}),
+        execute: async () => ({}),
+      },
+    } as never);
+
+    factory.forVerifier?.({
+      brief: { allowedTools: ['read_file'] },
+      attempt: { workerAgentId: 'a', verifierAgentId: 'b' },
+      workspaceRoot: '/w',
+    } as never).definitions();
+
+    expect(seen[0]).toMatchObject({ agentRole: 'verifier', taskStatus: 'verifying' });
+  });
+});

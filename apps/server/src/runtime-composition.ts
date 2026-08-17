@@ -1,5 +1,7 @@
 import { CommunicationWakeupPublisher, getFencedLease, taskLockKey } from '@ww/db';
 import type { EntityId } from '@ww/shared';
+import { applyLateBinding, type LateBinder } from './late-bind-runtime.js';
+import { internalServiceTokenMap } from './internal-service-tokens.js';
 import { randomUUID } from 'node:crypto';
 import type { ClickHouseClient, WwRedis } from '@ww/db';
 import type { LlmProvider, ModelRouter, RouterOptions } from '@ww/providers';
@@ -102,6 +104,11 @@ export const PHASE9_RUNTIME_CONFIG = Symbol('PHASE9_RUNTIME_CONFIG');
 
 export interface Phase9RuntimeConfig {
   readonly composition: Phase9RuntimeCompositionInput;
+  /**
+   * Composition kurulduktan SONRA çağrılır. Verilmezse geç bağlanan portlar
+   * bağlanmaz ve her görev ilk geçişte "henüz bağlanmadı" ile düşer.
+   */
+  readonly bindLate?: LateBinder;
 }
 
 let registeredPhase9Config: Phase9RuntimeConfig | undefined;
@@ -125,7 +132,10 @@ export function phase9RuntimeFromConfig(
     if (process.env['WW_PHASE8_RUNTIME_ENABLED'] !== '1') return null;
     throw new Error('WW_PHASE8_RUNTIME_ENABLED=1 ancak Phase9RuntimeConfig kayitli degil');
   }
-  return createPhase9RuntimeComposition(config.composition);
+  const composition = createPhase9RuntimeComposition(config.composition);
+  // Bağlama burada yapılır: servisler ancak composition kurulunca vardır.
+  applyLateBinding(composition as never, config.bindLate);
+  return composition;
 }
 
 /** AppModule exposes this explicit state until concrete provider/scheduler wiring is configured. */
@@ -250,6 +260,8 @@ export function createPhase9RuntimeComposition(
 
   const principalResolver = new PrincipalResolver(input.ch, {
     localSessionToken: input.localSessionToken,
+    // Harita doldurulmazsa runtime'ın HER iç çağrısı reddedilir.
+    internalServiceTokens: internalServiceTokenMap(input.localSessionToken),
     ...(input.agentCapabilities === undefined ? {} : { agentCapabilities: input.agentCapabilities }),
   });
   const wakeups = new CommunicationWakeupPublisher(input.redis, {
