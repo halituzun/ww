@@ -1,8 +1,9 @@
 import { randomUUID } from 'node:crypto';
 import { BadRequestException, Body, Controller, Get, Inject, Injectable, Param, Post, Req } from '@nestjs/common';
 import { createPlan, getLatestProject, listLatestAgents, listLatestPlansByStatus } from '@ww/db';
-import { PlanApprovalError, PlanApprovalService } from '@ww/scheduler';
+import { PlanApprovalError, PlanApprovalService, ReplanningService } from '@ww/scheduler';
 import { parseApprovalInput } from './plan-approval.service.js';
+import { parseReplanInput } from './replan.service.js';
 import type { EntityId } from '@ww/shared';
 import { parseLocalSession, type LocalSessionRequest } from './auth/local-session.js';
 import { SERVER_DATABASE, type ServerDatabase } from './orchestration.module.js';
@@ -53,6 +54,24 @@ export class PlanApplicationService {
     }
   }
 
+  /** Aktif planı revize eder (docs/03 → yeniden planlama turu). */
+  async replan(projectId: string, input: ReturnType<typeof parseReplanInput>) {
+    const service = new ReplanningService(this.database.ch);
+    try {
+      return await service.replan({
+        projectId: projectId as EntityId,
+        reason: input.reason,
+        summary: input.summary,
+        now: new Date().toISOString(),
+      });
+    } catch (reason) {
+      // "aktif plan yok" kullanıcı durumudur; 500 sebebi gizler.
+      const message = reason instanceof Error ? reason.message : String(reason);
+      if (message.includes('aktif plan bulunamadi')) throw new BadRequestException(message);
+      throw reason;
+    }
+  }
+
   async list(projectId: string) {
     const approved = await listLatestPlansByStatus(this.database.ch, projectId as EntityId, 'approved');
     return approved;
@@ -76,6 +95,16 @@ export class PlansController {
   @Get()
   list(@Param('projectId') projectId: string) {
     return this.plans.list(projectId);
+  }
+
+  @Post('replan')
+  replan(
+    @Req() request: LocalSessionRequest,
+    @Param('projectId') projectId: string,
+    @Body() body: unknown,
+  ) {
+    parseLocalSession(request);
+    return this.plans.replan(projectId, parseReplanInput(body));
   }
 
   @Post(':planId/approval')

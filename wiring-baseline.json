@@ -45,9 +45,5 @@
   {
     "symbol": "packages/providers/src/mock.ts:MockProvider",
     "reason": "deterministik testler için; üretimde gerçek sağlayıcı kullanılır"
-  },
-  {
-    "symbol": "packages/scheduler/src/replanning-service.ts:ReplanningService",
-    "reason": "docs/03 yeniden planlama: yazıldı, bağlanmadı — açık iş"
   }
 ]
