@@ -205,6 +205,53 @@ describe('ModelRouter', () => {
     expect(waits).toEqual([]);
   });
 
+
+  // docs/04: "429 (rate limit, 2 DENEMEDEN SONRA)". Geçici bir 429'da hemen
+  // yedeğe geçmek fallback'i boşa harcar ve çoğu zaman aynı kotaya çarpar;
+  // sağlayıcı "yavaşla" diyor, "gitme" demiyor.
+  it('429da ayni saglayiciyi tekrar dener, sonra yedege gecer', async () => {
+    const bad = new MockProvider({ script: [], failFirst: 99, failKind: 'rate_limited' });
+    const good = new MockProvider({ script: [{ content: 'yedek', toolCalls: [] }] });
+    const waits: number[] = [];
+    const usage: { status: string; provider: string }[] = [];
+    const router = new ModelRouter(
+      { get: (id: string) => (id === 'bad' ? renamed(bad, 'bad') : renamed(good, 'good')) } as never,
+      {
+        fallbacks: (ref) => (ref === 'bad:m1' ? ['good:m2'] : []),
+        usageSink: async (row) => { usage.push({ status: row.status, provider: row.provider_id }); },
+        invocationEffect: { run: async ({ execute }) => execute() },
+        sleep: async (ms) => { waits.push(ms); },
+      },
+    );
+
+    const result = await router.complete('bad:m1', { messages: [], meta });
+
+    expect(result.result.content).toBe('yedek');
+    // bad üç kez denendi (ilk + 2 tekrar), sonra good.
+    expect(usage.filter((row) => row.provider === 'bad')).toHaveLength(3);
+    expect(waits.length).toBeGreaterThanOrEqual(2);
+  });
+
+  // Rate limit DIŞINDAKİ hatalarda tekrar denemek zaman kaybıdır: sağlayıcı
+  // zaten "olmaz" demiştir.
+  it('rate limit disindaki hatada ayni saglayiciyi tekrarlamaz', async () => {
+    const bad = new MockProvider({ script: [], failFirst: 99, failKind: 'server' });
+    const good = new MockProvider({ script: [{ content: 'yedek', toolCalls: [] }] });
+    const usage: string[] = [];
+    const router = new ModelRouter(
+      { get: (id: string) => (id === 'bad' ? renamed(bad, 'bad') : renamed(good, 'good')) } as never,
+      {
+        fallbacks: (ref) => (ref === 'bad:m1' ? ['good:m2'] : []),
+        usageSink: async (row) => { usage.push(row.provider_id); },
+        invocationEffect: { run: async ({ execute }) => execute() },
+        sleep: async () => undefined,
+      },
+    );
+
+    await router.complete('bad:m1', { messages: [], meta });
+    expect(usage.filter((id) => id === 'bad')).toHaveLength(1);
+  });
+
   it('bad_request fallback tetiklemez, hata fırlar', async () => {
     const bad = new MockProvider({ script: [], failFirst: 99, failKind: 'bad_request' });
     const good = new MockProvider({ script: [{ content: 'yedek', toolCalls: [] }] });

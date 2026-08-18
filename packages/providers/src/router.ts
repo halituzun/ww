@@ -23,6 +23,12 @@ export interface RouterOptions {
   rateLimiter?: { reserve(providerId: string): number };
   /** Beklemeyi testler kontrol edebilsin diye enjekte edilebilir. */
   sleep?: (ms: number) => Promise<void>;
+  /**
+   * 429'da AYNI sağlayıcıyı kaç kez daha denemeli (docs/04: "429 … 2
+   * denemeden sonra"). Sağlayıcı "yavaşla" diyor, "gitme" demiyor; hemen
+   * yedeğe geçmek fallback'i boşa harcar ve çoğu zaman aynı kotaya çarpar.
+   */
+  rateLimitRetries?: number;
   usageSink: UsageSink;
   timeoutMs?: number;
   invocationEffect?: ProviderInvocationEffect;
@@ -59,6 +65,9 @@ function errStatus(e: unknown): ApiUsageRow['status'] {
 
 const errKind = (e: unknown): string =>
   e instanceof ProviderError ? e.kind : e instanceof Error ? e.name : 'unknown';
+
+/** Her tekrarda katlanan bekleme: beklemeden tekrar aynı 429'a çarpar. */
+const RATE_LIMIT_BACKOFF_MS = 1_000;
 
 const defaultSleep = (ms: number): Promise<void> =>
   new Promise((resolve) => { setTimeout(resolve, ms); });
@@ -114,7 +123,11 @@ export class ModelRouter {
           fallbackAttempt: i,
         });
       }
-      let result: CompletionResult;
+      let result!: CompletionResult;
+      // Aynı sağlayıcı üzerinde kaç kez denendi; YALNIZCA rate limit artırır.
+      let rateLimitAttempt = 0;
+      let advanceChain = false;
+      for (;;) {
       try {
         result = await (this.opts.invocationEffect === undefined
           ? withTimeout(provider.complete(attemptRequest), this.opts.timeoutMs ?? 120_000)
@@ -143,8 +156,20 @@ export class ModelRouter {
         // düşer. Kimlik hatası ise sağlayıcıya özgüdür ve tam da yedeğe
         // geçilmesi gereken durumdur (docs/04).
         if (!e.advancesFallbackChain) throw e;
-        continue;
+
+        // docs/04: 429'da aynı sağlayıcı tekrar denenir. Diğer hatalarda
+        // tekrar zaman kaybıdır — sağlayıcı zaten "olmaz" demiştir.
+        if (e.kind === 'rate_limited' && rateLimitAttempt < (this.opts.rateLimitRetries ?? 2)) {
+          rateLimitAttempt += 1;
+          await (this.opts.sleep ?? defaultSleep)(RATE_LIMIT_BACKOFF_MS * rateLimitAttempt);
+          continue;
+        }
+        advanceChain = true;
+        break;
       }
+      break;
+      }
+      if (advanceChain) continue;
       try {
         await this.record(ref, attemptRequest, result.usage, Date.now() - t0, i > 0 ? 'fallback_used' : 'ok', '');
       } catch (error) {
