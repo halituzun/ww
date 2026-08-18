@@ -28,10 +28,16 @@ export function AgentCanvas({ projectId, onSelectAgent }: {
   const nodes: Node[] = data.nodes.map((node, index) => ({
     id: node.id,
     position: { x: (index % 3) * 260, y: Math.floor(index / 3) * 150 },
-    data: { label: `${node.label}\n${node.role} · ${node.status}\n${node.modelRef}` },
+    // "yanıt vermiyor" METİNLE yazılır: kaydedilmiş durum tek başına yalan
+    // söyleyebilir ve renk tek başına anlam taşımaz.
+    data: {
+      label: `${node.label}\n${node.role} · ${node.status}`
+        + `${node.unresponsive === true ? ' · yanıt vermiyor' : ''}\n${node.modelRef}`,
+    },
     style: {
       background: '#17243a',
-      border: `2px solid ${STATUS_COLOR[node.status] ?? '#6b7280'}`,
+      border: `2px ${node.unresponsive === true ? 'dashed' : 'solid'} `
+        + `${node.unresponsive === true ? '#d95926' : STATUS_COLOR[node.status] ?? '#6b7280'}`,
       borderRadius: 12,
       color: '#fff',
       padding: 12,

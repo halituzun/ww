@@ -53,3 +53,20 @@ describe('AgentCanvas', () => {
     await waitFor(() => expect(screen.getByText(/worker · busy/)).toBeDefined());
   });
 });
+
+describe('AgentCanvas — canlılık', () => {
+  // Kaydedilmiş durum tek başına yalan söyleyebilir: süreç ölünce satır
+  // 'busy' kalır ve tuval çalışmayan bir agent'ı çalışıyor gösterir.
+  it('yanit vermeyen agenti metinle bildirir', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(respond({
+      nodes: [{
+        id: 'a1', label: 'Worker 1', role: 'worker', group: 'coding',
+        modelRef: 'deepseek:deepseek-chat', status: 'busy', unresponsive: true,
+      }],
+      edges: [],
+    }) as never);
+
+    render(<AgentCanvas projectId="p1" />);
+    await waitFor(() => expect(screen.getByText(/yanıt vermiyor/)).toBeDefined());
+  });
+});

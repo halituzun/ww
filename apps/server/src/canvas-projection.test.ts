@@ -89,3 +89,34 @@ describe('buildCanvasProjection', () => {
     expect(canvas.edges).toHaveLength(1);
   });
 });
+
+describe('buildCanvasProjection — canlılık', () => {
+  const NIL2 = '00000000-0000-0000-0000-000000000000';
+  const busy = {
+    agent_id: 'w1', role: 'worker', group: 'coding', name: 'W', model_ref: 'm:1',
+    parent_agent_id: NIL2, clone_of: NIL2, status: 'busy', current_task_id: NIL2,
+  };
+
+  // ASIL KUSUR: süreç ölünce satır 'busy' kalır ve tuval çalışmayan bir
+  // agent'ı çalışıyor gösterir.
+  it('heartbeati olmayan mesgul agenti yanit vermiyor isaretler', () => {
+    const canvas = buildCanvasProjection([busy], [], new Set());
+    expect(canvas.nodes[0]!.unresponsive).toBe(true);
+  });
+
+  it('heartbeati olan mesgul agenti isaretlemez', () => {
+    const canvas = buildCanvasProjection([busy], [], new Set(['w1']));
+    expect(canvas.nodes[0]!.unresponsive).toBe(false);
+  });
+
+  // Boşta agent'ın heartbeat'i zaten beklenmez; onu ölü göstermek yanlış alarm.
+  it('bosta agenti yanit vermiyor saymaz', () => {
+    const canvas = buildCanvasProjection([{ ...busy, status: 'idle' }], [], new Set());
+    expect(canvas.nodes[0]!.unresponsive).toBe(false);
+  });
+
+  // Bilgi yoksa suçlamayız.
+  it('canlilik bilgisi verilmediginde kimseyi isaretlemez', () => {
+    expect(buildCanvasProjection([busy], []).nodes[0]!.unresponsive).toBe(false);
+  });
+});

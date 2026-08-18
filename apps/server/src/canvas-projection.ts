@@ -37,6 +37,12 @@ export interface CanvasNode {
   readonly group: string;
   readonly modelRef: string;
   readonly status: string;
+  /**
+   * Agent MEŞGUL görünüyor ama canlılık işareti yok. Kaydedilmiş durum tek
+   * başına yalan söyleyebilir: süreç ölünce satır 'busy' kalır ve tuval
+   * çalışmayan bir agent'ı çalışıyor gösterir.
+   */
+  readonly unresponsive: boolean;
   readonly cloneOf: string | undefined;
   readonly currentTaskId: string | undefined;
 }
@@ -70,9 +76,18 @@ const ACTIVE_TASK_STATUSES: ReadonlySet<string> = new Set([
   'waiting_user', 'escalated',
 ]);
 
+/** Canlılık işareti olan agent'lar; verilmezse hiçbiri "yanıt vermiyor" sayılmaz. */
+export type LiveAgentIds = ReadonlySet<string>;
+
+/** Canlılık beklenen durumlar: bu durumlarda heartbeat YOKSA agent ölüdür. */
+const LIVE_EXPECTED: ReadonlySet<string> = new Set([
+  'busy', 'waiting_verify', 'waiting_answer',
+]);
+
 export function buildCanvasProjection(
   agents: readonly CanvasAgentLike[],
   tasks: readonly CanvasTaskLike[],
+  liveAgentIds?: LiveAgentIds,
 ): CanvasProjection {
   const known = new Set(agents.map((agent) => agent.agent_id));
   const nodes: CanvasNode[] = agents.map((agent) => ({
@@ -82,6 +97,11 @@ export function buildCanvasProjection(
     group: agent.group,
     modelRef: agent.model_ref,
     status: agent.status,
+    // Bilgi yoksa suçlamayız: heartbeat kümesi verilmediğinde kimse
+    // "yanıt vermiyor" işaretlenmez.
+    unresponsive: liveAgentIds !== undefined
+      && LIVE_EXPECTED.has(agent.status)
+      && !liveAgentIds.has(agent.agent_id),
     cloneOf: concrete(agent.clone_of),
     currentTaskId: concrete(agent.current_task_id),
   }));

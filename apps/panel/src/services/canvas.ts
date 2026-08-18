@@ -8,6 +8,8 @@ export interface CanvasNode {
   group: string;
   modelRef: string;
   status: string;
+  /** Meşgul görünüyor ama canlılık işareti yok. */
+  unresponsive?: boolean;
   cloneOf?: string;
   currentTaskId?: string;
 }

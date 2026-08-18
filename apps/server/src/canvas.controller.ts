@@ -3,7 +3,7 @@
 // Bu uç dokümanda ADIYLA tanımlıydı ama hiç yazılmamıştı; panel tuvali
 // agent'ları değil görevleri çiziyordu.
 import { Controller, Get, Inject, Param, Req } from '@nestjs/common';
-import { listLatestAgents, listLatestTasks } from '@ww/db';
+import { checkHeartbeat, listLatestAgents, listLatestTasks } from '@ww/db';
 import type { EntityId } from '@ww/shared';
 import { parseLocalSession, type LocalSessionRequest } from './auth/local-session.js';
 import { buildCanvasProjection } from './canvas-projection.js';
@@ -20,6 +20,19 @@ export class CanvasController {
       listLatestAgents(this.database.ch, projectId as EntityId),
       listLatestTasks(this.database.ch, projectId),
     ]);
-    return buildCanvasProjection(agents as never, tasks as never);
+
+    // Kaydedilmiş durum tek başına yalan söyleyebilir: süreç ölünce satır
+    // 'busy' kalır. Canlılık işareti Redis'ten okunur; Redis yoksa kimse
+    // "yanıt vermiyor" işaretlenmez (bilgi yoksa suçlamayız).
+    const redis = this.database.redis;
+    let live: Set<string> | undefined;
+    if (redis !== undefined) {
+      live = new Set<string>();
+      for (const agent of agents) {
+        if (await checkHeartbeat(redis, agent.agent_id)) live.add(agent.agent_id);
+      }
+    }
+
+    return buildCanvasProjection(agents as never, tasks as never, live);
   }
 }
