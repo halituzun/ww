@@ -2,6 +2,11 @@
 
 > "Asla unutmama" garantisinin gerçek mimarisi: üç katmanlı hafıza piramidi,
 > özetleyici işleyişi, embedding boru hattı, Context Builder ve "nasıl yaptın?" akışı.
+
+*(2026-08-18: anlatıcı olayları İMLEÇSİZ okuyordu, yani en ESKİ 200 olayı.
+4393 olaylı bir projede sorulan işe değil, projenin en eski geçmişine cevap
+veriyordu. Artık `listRecentEvents` ile en yeni 200 olay kronolojik sırada
+okunur.)*
 > İlgili: [Şema](02-clickhouse-semasi.md) · [Agent Sistemi](03-agent-sistemi.md) ·
 > [İletişim Sözleşmesi](13-agent-iletisim-sozlesmesi.md)
 

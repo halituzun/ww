@@ -5,7 +5,9 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { createCh, type ClickHouseClient } from '../client.js';
 import { runMigrations } from '../migrate.js';
 import { clickhouseUp } from '../testutil.js';
-import { appendEvent, getEvent, listEvents, type EventRow } from './events.js';
+import {
+  appendEvent, getEvent, listEvents, listRecentEvents, type EventRow,
+} from './events.js';
 import { RepositoryConflictError } from './types.js';
 
 const up = await clickhouseUp();
@@ -158,5 +160,30 @@ describe.skipIf(!up)('listEvents imleç desteği', () => {
     const projectId = randomUUID();
     await seed(projectId, 1);
     expect(await listEvents(cursorCh, projectId, { limit: 10 })).toHaveLength(1);
+  });
+
+  // ANLATICI KUSURU: `listEvents` imleçsiz çağrıldığında en ESKİ N olayı
+  // döndürür (deponun kendi uyarısı). Narrator tam da böyle çağırıyordu ve
+  // 4393 olaylı bir projede hep ilk 200 olayı anlatıyordu — yani sorulan işe
+  // değil, projenin en eski geçmişine cevap veriyordu.
+  it('listRecentEvents EN YENI olaylari kronolojik sirada doner', async () => {
+    const projectId = randomUUID();
+    await seed(projectId, 12);
+
+    const recent = await listRecentEvents(cursorCh, projectId, 3);
+    const all = await listEvents(cursorCh, projectId, { limit: 50 });
+
+    expect(recent).toHaveLength(3);
+    // Son üç olay olmalı...
+    expect(recent.map((row) => row.event_id))
+      .toEqual(all.slice(-3).map((row) => row.event_id));
+    // ...ve anlatım için KRONOLOJİK sırada gelmeli (tersten değil).
+    expect(recent[0]!.created_at <= recent[2]!.created_at).toBe(true);
+  });
+
+  it('listRecentEvents olay sayisi limitten azken hepsini doner', async () => {
+    const projectId = randomUUID();
+    await seed(projectId, 2);
+    expect(await listRecentEvents(cursorCh, projectId, 10)).toHaveLength(2);
   });
 });

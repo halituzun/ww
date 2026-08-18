@@ -2,7 +2,7 @@ import { Body, Controller, Inject, Post, Param } from '@nestjs/common';
 import { narrateEvent } from './narrator-evidence.js';
 import { z } from 'zod';
 import { EntityIdSchema, type EntityId } from '@ww/shared';
-import { listEvents } from '@ww/db';
+import { listRecentEvents } from '@ww/db';
 import { NarratorService } from '@ww/memory';
 import { SERVER_DATABASE, type ServerDatabase } from './orchestration.module.js';
 import { focusEvidence } from './narrator-focus.js';
@@ -18,7 +18,10 @@ export class NarratorController {
   async answer(@Param('projectId') projectId: string, @Body() body: unknown) {
     const id = EntityIdSchema.parse(projectId) as EntityId;
     const input = NarratorInput.parse(body);
-    const events = await listEvents(this.database.ch, id, { limit: 200 });
+    // EN YENİ olaylar okunur. `listEvents` imleçsiz çağrıldığında en ESKİ
+    // 200 olayı döndürüyordu: 4393 olaylı bir projede anlatıcı hep projenin
+    // en eski geçmişini anlatıyor, sorulan işe hiç değinmiyordu.
+    const events = await listRecentEvents(this.database.ch, id, 200);
     return this.#narrator.answer({
       projectId: id,
       question: input.question,

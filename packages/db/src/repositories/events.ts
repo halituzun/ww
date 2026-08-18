@@ -171,3 +171,42 @@ export async function appendEvent(ch: ClickHouseClient, input: AppendEventInput)
   );
   return reconcileEvent(event, observed);
 }
+
+/**
+ * EN YENİ `limit` olay, KRONOLOJİK sırada.
+ *
+ * NEDEN VAR: `listEvents` imleçsiz çağrıldığında en ESKİ `limit` olayı
+ * döndürür (yukarıdaki uyarı). Anlatıcı ("bunu nasıl yaptın?") tam da böyle
+ * çağırıyordu: 4393 olaylı bir projede hep ilk 200 olayı okuyor ve sorulan işe
+ * değil, projenin en eski geçmişine cevap veriyordu.
+ *
+ * Sonuç kronolojik sırada döner: anlatım "önce şu oldu, sonra bu" diye
+ * kurulur; ters sırada vermek anlatıyı okunamaz yapar.
+ */
+export async function listRecentEvents(
+  ch: ClickHouseClient,
+  projectId: string,
+  limit = 200,
+): Promise<EventRow[]> {
+  const project = concreteEntityId(projectId, 'projectId');
+  const bounded = storedUnsignedInteger(limit, 'events.limit', 1_000);
+
+  const result = await ch.query({
+    query: `SELECT ${EVENT_COLUMNS} FROM events
+      WHERE project_id = {projectId:UUID}
+        AND event_id IN (
+          SELECT event_id FROM events
+          WHERE project_id = {projectId:UUID}
+          GROUP BY event_id
+          ORDER BY min(created_at) DESC, event_id DESC
+          LIMIT {limit:UInt32}
+        )
+      ORDER BY created_at ASC, event_id ASC`,
+    query_params: { projectId: project, limit: bounded },
+    format: 'JSONEachRow',
+  });
+  const physical = (await result.json<unknown>()).map(parseEvent);
+  const logical = new Map<string, EventRow>();
+  for (const row of physical) logical.set(row.event_id, row);
+  return [...logical.values()];
+}
