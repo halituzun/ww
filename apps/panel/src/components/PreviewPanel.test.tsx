@@ -53,4 +53,32 @@ describe('PreviewPanel', () => {
     render(<PreviewPanel projectId="p1" />);
     await waitFor(() => expect(screen.getByText(/Süreç günlüğü \(1 satır\)/)).toBeDefined());
   });
+
+  // docs/10: "süreç çökerse panelde rozet". Çöküş ile kullanıcının
+  // durdurması ikisi de "kapalı" görünüyordu; kullanıcı işin kendiliğinden
+  // öldüğünü fark edemiyordu.
+  it('cokmus surec icin rozet gosterir', () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(respond({
+      projectId: 'p1', running: false, hasIndexHtml: false,
+      crashed: true, exitCode: 137, logs: [],
+    }) as never);
+
+    render(<PreviewPanel projectId="p1" />);
+    // Rozet role="alert" taşır: ekran okuyucu da duyar (yalnız renk değil).
+    return screen.findByRole('alert').then((node) => {
+      expect(node.textContent).toContain('çöktü');
+      expect(node.textContent).toContain('137');
+    });
+  });
+
+  it('kullanici durdurdugunda cokme rozeti YOK', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(respond({
+      projectId: 'p1', running: false, hasIndexHtml: false,
+      crashed: false, exitCode: null, logs: [],
+    }) as never);
+
+    render(<PreviewPanel projectId="p1" />);
+    await screen.findByText(/kapalı/);
+    expect(screen.queryByRole('alert')).toBeNull();
+  });
 });

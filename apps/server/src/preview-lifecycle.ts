@@ -17,3 +17,16 @@ export function previewMustStop(projectStatus: string): boolean {
   // kapatırdı.
   return STOP_STATUSES.has(projectStatus);
 }
+
+/**
+ * Süreç ÇÖKTÜ mü? (docs/10: "süreç çökerse panelde rozet")
+ *
+ * Ayrım kayıtta: `stop()` çağrıldığında kayıt SİLİNİR. Dolayısıyla kayıt
+ * hâlâ duruyorsa ve süreç ölmüşse, kimse onu durdurmamıştır — kendiliğinden
+ * ölmüştür. Bu ayrım olmadan her durdurma çöküş rozeti gösterirdi.
+ */
+export function previewCrashed(
+  input: Readonly<{ present: boolean; exitCode: number | null }>,
+): boolean {
+  return input.present && input.exitCode !== null;
+}

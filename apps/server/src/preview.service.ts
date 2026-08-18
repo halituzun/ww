@@ -20,7 +20,7 @@ import { readDevPort, withDevPort, withoutDevPort } from './preview-port-store.j
 import { resolveWorkspaceRoot } from './runtime-context.js';
 import { SERVER_DATABASE, type ServerDatabase } from './orchestration.module.js';
 import { processLifecycleEvent } from './process-event.js';
-import { previewMustStop } from './preview-lifecycle.js';
+import { previewCrashed, previewMustStop } from './preview-lifecycle.js';
 
 export class PreviewError extends Error {}
 
@@ -31,6 +31,12 @@ export interface PreviewStatus {
   readonly url: string | undefined;
   /** Statik kök gerçek bir uygulama mı yoksa yalnız dosya listesi mi. */
   readonly hasIndexHtml: boolean;
+  /**
+   * Süreç KENDİLİĞİNDEN öldü (docs/10 → "süreç çökerse panelde rozet").
+   * Kullanıcının durdurmasından ayrıdır: durdurmada kayıt silinir.
+   */
+  readonly crashed: boolean;
+  readonly exitCode: number | null;
   readonly logs: readonly string[];
 }
 
@@ -163,7 +169,9 @@ export class PreviewApplicationService implements OnModuleDestroy {
     }
     return {
       projectId, running: false, port: undefined, url: undefined,
-      hasIndexHtml: false, logs: running?.ring.lines() ?? [],
+      // KULLANICI durdurdu: çöküş değildir.
+      hasIndexHtml: false, crashed: false, exitCode: null,
+      logs: running?.ring.lines() ?? [],
     };
   }
 
@@ -188,10 +196,17 @@ export class PreviewApplicationService implements OnModuleDestroy {
 
   status(projectId: string): PreviewStatus {
     const running = this.#running.get(projectId);
+    const crashed = previewCrashed({
+      present: running !== undefined,
+      exitCode: running?.child.exitCode ?? null,
+    });
     if (running === undefined || running.child.exitCode !== null) {
       return {
         projectId, running: false, port: undefined, url: undefined,
-        hasIndexHtml: false, logs: running?.ring.lines() ?? [],
+        hasIndexHtml: false, crashed,
+        exitCode: running?.child.exitCode ?? null,
+        // Loglar ÇÖKMEDE en değerli veridir; kayıt duruyorsa korunur.
+        logs: running?.ring.lines() ?? [],
       };
     }
     return {
@@ -200,6 +215,8 @@ export class PreviewApplicationService implements OnModuleDestroy {
       port: running.port,
       url: `http://localhost:${running.port}/`,
       hasIndexHtml: running.hasIndexHtml,
+      crashed: false,
+      exitCode: null,
       logs: running.ring.lines(),
     };
   }

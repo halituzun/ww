@@ -7,6 +7,9 @@ export interface PreviewStatus {
   port?: number | undefined;
   url?: string | undefined;
   hasIndexHtml: boolean;
+  /** Süreç KENDİLİĞİNDEN öldü (docs/10 → çöküş rozeti). */
+  crashed?: boolean | undefined;
+  exitCode?: number | null | undefined;
   logs: string[];
 }
 

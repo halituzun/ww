@@ -74,8 +74,10 @@ Emülatör **host'ta** çalışır (Docker'a girmez); gereksinimler ve akış:
   rozet + tek tık yeniden başlatma. *(Olay yazımı 2026-08-18'de eklendi:
   `process_started`/`process_stopped` türleri şemada tanımlıydı ama hiçbir
   üretim kodu yazmıyordu — canlı veritabanında sıfır satır. Önizleme açılıp
-  kapanıyor, zaman çizelgesinde hiç iz kalmıyordu. Emülatör tarafı ve "çöktü"
-  rozeti hâlâ eksik.)*
+  kapanıyor, zaman çizelgesinde hiç iz kalmıyordu. "Çöktü" rozeti de eklendi:
+  `PreviewStatus` çöküşü kullanıcının durdurmasından AYIRIYOR (durdurmada kayıt
+  silinir; kayıt dururken süreç ölmüşse kimse durdurmamıştır). Emülatör tarafı
+  ve tek tık yeniden başlatma hâlâ eksik.)*
 - Aynı anda proje başına en çok 1 önizleme + 1 emülatör süreci (kaynak koruması).
 - Proje duraklatılırsa/arşivlenirse süreçler kapatılır. *(2026-08-18'de
   uygulandı: hiçbir yer proje DURUMUNA bakmıyordu, duraklatılmış projenin dev

@@ -13,6 +13,17 @@ export function PreviewPanel({ projectId }: { readonly projectId: string }) {
           : <button type="button" onClick={() => void start()} disabled={busy}>Başlat</button>}
         {/* Durum METİNLE yazılır; boş bir iframe "çalışıyor" sanılmamalı. */}
         <strong>{status.running ? `çalışıyor · ${status.url}` : 'kapalı'}</strong>
+      {/* docs/10: "süreç çökerse panelde rozet". Çöküş, kullanıcının
+          durdurmasından AYRI gösterilir — ikisi de "kapalı" görünüyordu ve
+          kullanıcı işin kendiliğinden öldüğünü fark edemiyordu. Metin +
+          çıkış kodu birlikte verilir; yalnız renk bilgi taşımaz. */}
+      {status.crashed === true ? (
+        <span className="pill pill--failed" role="alert">
+          çöktü{status.exitCode === null || status.exitCode === undefined
+            ? ''
+            : ` · çıkış ${status.exitCode}`}
+        </span>
+      ) : null}
       </div>
 
       {error !== '' ? <p className="preview__error">{error}</p> : null}
