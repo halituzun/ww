@@ -46,6 +46,35 @@ export function narrateEvent(event: NarratableEvent): string {
       return `hata: ${read(payload, 'reason') ?? 'sebep kaydedilmemiş'}`;
     case 'recovery_completed':
       return 'kurtarma turu tamamlandı';
+
+    // Aşağıdaki türler hiç çevrilmiyordu ve anlatı onlarda ham tür adı
+    // basıyordu. Canlı veride 7 tür / 128 olay böyleydi — üstelik anlatının
+    // EN ÖNEMLİ olayları buradaydı: commit, tırmandırma, devir.
+    case 'commit': {
+      const hash = read(payload, 'commitHash') ?? read(payload, 'commit_hash');
+      // Hash yoksa uydurulmaz; olayın kendisi yine de anlatılır.
+      return hash === undefined
+        ? 'değişiklik commit edildi'
+        : `değişiklik commit edildi: ${hash.slice(0, 7)}`;
+    }
+    case 'escalation':
+      return `tırmandırıldı: ${read(payload, 'reason') ?? 'sebep kaydedilmemiş'}`;
+    case 'task_handoff': {
+      const to = read(payload, 'toAgentId') ?? read(payload, 'to');
+      return `görev devredildi${to === undefined ? '' : `: ${to}`}`;
+    }
+    case 'message_stored':
+      return `mesaj kaydedildi: ${read(payload, 'kind') ?? 'tür bilinmiyor'}`;
+    case 'message_rejected':
+      return `mesaj reddedildi: ${read(payload, 'reason') ?? 'sebep kaydedilmemiş'}`;
+    case 'policy_decision': {
+      const allowed = (payload as { allowed?: unknown } | null)?.allowed;
+      const reason = read(payload, 'reason');
+      const verdict = allowed === false ? 'reddetti' : 'izin verdi';
+      return `politika ${verdict}${reason === undefined ? '' : `: ${reason}`}`;
+    }
+    case 'receipt_changed':
+      return `mesaj makbuzu güncellendi: ${read(payload, 'state') ?? 'durum bilinmiyor'}`;
     default:
       // Bilinmeyen türü JSON'a çevirmek eski okunamaz dökümü geri getirir.
       return event.event_type;

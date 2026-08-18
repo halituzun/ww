@@ -103,7 +103,10 @@ describe.skipIf(probeCh === undefined || probeRedis === undefined)('REST gerçek
       expect(response.body.envelope.messageId).toBe(message.body.messageId);
     });
     await request(app.getHttpServer()).post(`/projects/${projectId}/narrator`).send({ question: 'Ne oldu?' }).expect(201).then((response) => {
-      expect(response.body.answer).toContain('message');
+      // 'message' dizesini aramak, anlatının HAM tür adı ('message_stored')
+      // bastığı döneme aitti — yani testin geçmesi kusurun kanıtıydı. Artık
+      // insan cümlesi bekleniyor (docs/06: "referanslı ANLATI").
+      expect(response.body.answer).toContain('mesaj kaydedildi');
       expect(response.body.evidenceRefs.length).toBeGreaterThan(0);
       expect(response.body.traceHash).toMatch(/^[a-f0-9]{64}$/);
     });
