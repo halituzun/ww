@@ -69,6 +69,7 @@ import {
 import { InboxPollingModule, inboxWorkerDrainPort } from './inbox-poll.module.js';
 import type { DynamicModule } from '@nestjs/common';
 import { createAndEnqueueSubtask } from './delegation.service.js';
+import { MemoryService } from '@ww/memory';
 
 function observeWakeupPublishError(error: Error, wakeup: { readonly recipient: unknown; readonly messageId: string }): void {
   console.warn(JSON.stringify({
@@ -410,6 +411,23 @@ export function createPhase9RuntimeComposition(
     sandboxInputs: input.executor.sandboxInputs,
     sandbox: input.executor.sandbox,
     gitWorkspace,
+    // docs/06 sorgu modu: agent kendi projesinin hafızasına sorabilir.
+    // Araç olmadan geçmiş kararlar görünmüyor, agent aynı işi baştan
+    // tasarlıyor ya da kullanıcıya soruyordu.
+    memory: {
+      query: async ({ projectId, question, limit }) => {
+        const chunks = await new MemoryService(input.ch).query({
+          projectId: projectId as never, query: question, limit,
+        });
+        // Kaynağı da döneriz: kanıtsız bir cevap agent'ın uydurmasına
+        // zemin hazırlar.
+        return chunks.map((chunk) => ({
+          source: `${chunk.sourceTable}:${chunk.sourceId}`,
+          label: chunk.label,
+          text: chunk.text,
+        })) as never;
+      },
+    },
     // docs/03 delegasyon: worker alt görev açabilir. Sınırlar (derinlik,
     // bütçe, döngü) DelegationService'te uygulanır; executor yalnızca iletir.
     delegation: {

@@ -133,6 +133,18 @@ export interface ExecutorDelegationPort {
   }>): Promise<JsonValue>;
 }
 
+/**
+ * Projenin kendi hafızasına soru (docs/05 → `memory_query`; docs/06 → Context
+ * Builder'ın sorgu modu). Bağlı değilse araç AÇIK hata verir.
+ */
+export interface ExecutorMemoryPort {
+  query(input: Readonly<{
+    projectId: string;
+    question: string;
+    limit: number;
+  }>): Promise<JsonValue>;
+}
+
 export interface ExecutorCommunicationPort {
   askQuestion(input: AskQuestionToolInput): Promise<JsonValue>;
   reportResult(input: ReportResultToolInput): Promise<JsonValue>;

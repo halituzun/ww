@@ -46,6 +46,12 @@ export const EXECUTOR_TOOL_CAPABILITIES: Readonly<Record<ToolName, ToolCapabilit
     // gelir ve tekrar güvenli sayılmaz.
     replaySafety: 'non_replay_safe',
   }),
+  memory_query: capability({
+    // GÖRME aracıdır ve YAN ETKİSİ YOKTUR; hedef listesi onu sınırlamaz.
+    toolName: 'memory_query', rule: { ruleId: 'TOOL-002', ruleVersion: 1 },
+    allowedRoles: ['worker', 'verifier'], allowedTaskStatuses: ACTIVE_TOOL_STATUSES,
+    requiresDeclaredTarget: false, requiresFileLock: false, replaySafety: 'replay_safe',
+  }),
   write_file: capability({
     toolName: 'write_file', rule: { ruleId: 'TOOL-003', ruleVersion: 1 },
     allowedRoles: ['worker'], allowedTaskStatuses: ['working'],

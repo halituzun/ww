@@ -11,6 +11,7 @@ export const TOOL_NAMES = [
   'list_dir',
   'search_code',
   'create_subtask',
+  'memory_query',
   'write_file',
   'edit_file',
   'run_command',

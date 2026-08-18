@@ -35,6 +35,7 @@ import type {
   ExecutorSandboxInputPolicyPort,
   ExecutorToolIntent,
   ExecutorDelegationPort,
+  ExecutorMemoryPort,
 } from './ports.js';
 import { WorkspacePaths, normalizeWorkspaceRelativePath } from './workspace-paths.js';
 
@@ -151,6 +152,7 @@ export class ToolExecutor {
   readonly #access: ExecutorAccessPort;
   readonly #communication: ExecutorCommunicationPort;
   readonly #delegation: ExecutorDelegationPort | undefined;
+  readonly #memory: ExecutorMemoryPort | undefined;
   readonly #audit: ExecutorAuditPort;
   readonly #effects: ExecutorEffectPort;
   readonly #intents: ExecutorIntentPort;
@@ -171,12 +173,15 @@ export class ToolExecutor {
     gitWorkspace: Pick<GitWorkspace, 'diff'>;
     /** Bağlı değilse create_subtask AÇIK hata verir; sessizce yok sayılmaz. */
     delegation?: ExecutorDelegationPort;
+    /** Bağlı değilse memory_query AÇIK hata verir. */
+    memory?: ExecutorMemoryPort;
     fenceHeartbeatMs?: number;
   }>) {
     this.#registry = input.registry ?? executorToolRegistry;
     this.#access = input.access;
     this.#communication = input.communication;
     this.#delegation = input.delegation;
+    this.#memory = input.memory;
     this.#audit = input.audit;
     this.#effects = input.effects;
     this.#intents = input.intents;
@@ -351,6 +356,19 @@ export class ToolExecutor {
       case 'git_diff': {
         const result = await this.#git.diff(context.brief.projectId, workspace, context.brief.targetFiles);
         return { diff: result.diff, truncated: result.truncated };
+      }
+      case 'memory_query': {
+        // docs/06: "bunu nasıl yaptın" boru hattının sorgu modu. Araç
+        // olmadan agent geçmiş kararları göremiyor, aynı işi baştan
+        // tasarlıyor ya da kullanıcıya soruyordu.
+        if (this.#memory === undefined) {
+          throw new ExecutorError('INVALID_TOOL', 'memory_query bu koşuda bağlı değil');
+        }
+        return await this.#memory.query({
+          projectId: context.brief.projectId,
+          question: text(args, 'question'),
+          limit: optionalInteger(args, 'limit') ?? 5,
+        });
       }
       case 'create_subtask': {
         // docs/03 delegasyon: "her agent alt görev açabilir". Araç
