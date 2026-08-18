@@ -53,4 +53,26 @@ describe('pickCloneSource', () => {
   it('kaynak secimi kararlidir', () => {
     expect(pickCloneSource([agent('w2'), agent('w1')], need)?.agent_id).toBe('w1');
   });
+
+  // ASİMETRİ: klonlama WORKER için bağlanmıştı, VERIFIER için değil. Oysa
+  // docs/03 kuralı role bakmıyor: "uygun agent meşgulse aynı rol/prompt/
+  // bağlamla klon açılır". Tek verifier'lı bir projede ikinci görev sonsuza
+  // dek "idle verifier bulunamadi" ile erteleniyordu.
+  it('verifier icin de klon kaynagi secer', () => {
+    const verifierNeed = { role: 'verifier', group: 'coding' };
+    const agents = [
+      agent('v1', { role: 'verifier', prompt_name: 'role.verifier' }),
+      agent('v2', { role: 'verifier', prompt_name: 'role.verifier' }),
+    ];
+    expect(pickCloneSource(agents, verifierNeed)?.agent_id).toBe('v1');
+  });
+
+  it('bosta verifier varsa klonlamaz', () => {
+    const verifierNeed = { role: 'verifier', group: 'coding' };
+    const agents = [
+      agent('v1', { role: 'verifier' }),
+      agent('v2', { role: 'verifier', status: 'idle' }),
+    ];
+    expect(pickCloneSource(agents, verifierNeed)).toBeUndefined();
+  });
 });

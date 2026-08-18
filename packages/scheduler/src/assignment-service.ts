@@ -2018,9 +2018,20 @@ export class AssignmentService {
       const rightIndependent = modelProvider(right.model_ref) === workerProvider ? 1 : 0;
       return leftIndependent - rightIndependent || left.agent_id.localeCompare(right.agent_id);
     });
-    const verifier = verifiers[0];
+    let verifier = verifiers[0];
     if (verifier === undefined) {
-      throw new TaskDeferredError('NO_ELIGIBLE_AGENT', `idle verifier bulunamadi: ${task.group}`);
+      // docs/03 klonlama kuralı ROLE BAKMAZ: "uygun agent meşgulse aynı
+      // rol/prompt/bağlamla klon açılır". Klon worker için bağlanmış ama
+      // verifier için unutulmuştu; tek verifier'lı bir projede ikinci görev
+      // sonsuza dek "idle verifier bulunamadi" ile erteleniyordu.
+      const clonedVerifier = await this.#cloneBusyAgent(task, 'verifier', brief);
+      // Klon KAYNAĞIYLA aynı modeli taşır, yani çapraz kontrol bağımsızlığı
+      // zayıflayabilir. docs/03 bunu "mümkünse" diye yazıyor: hiç
+      // doğrulanmayan iş, aynı sağlayıcıyla doğrulanandan kötüdür.
+      if (clonedVerifier === undefined || clonedVerifier.agent_id === worker.agent_id) {
+        throw new TaskDeferredError('NO_ELIGIBLE_AGENT', `idle verifier bulunamadi: ${task.group}`);
+      }
+      verifier = clonedVerifier;
     }
     return Object.freeze([worker, verifier]);
   }
