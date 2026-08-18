@@ -3,6 +3,10 @@ import { NestFactory } from '@nestjs/core';
 import { WsAdapter } from '@nestjs/platform-ws';
 import { createCh, createRedis, runMigrations } from '@ww/db';
 import { RecoveryService } from '@ww/memory';
+import { CommandRunner, resetWorkingTree } from '@ww/executor';
+import { getLatestProject } from '@ww/db';
+import { resolveWorkspaceRoot } from './runtime-context.js';
+import { resetRecoveredWorkspaces } from './workspace-recovery.js';
 import { panelOrigins } from './cors.js';
 import { serverPort } from './port.js';
 
@@ -19,6 +23,23 @@ async function bootstrap(): Promise<void> {
     const recovered = await new RecoveryService(recoveryCh, recoveryRedis).recoverAll();
     const repaired = recovered.reduce((sum, item) => sum + item.requeuedTaskIds.length + item.idledAgentIds.length, 0);
     if (repaired > 0) console.log(`[ww] recovery tamamlandı: ${repaired} kaynak düzeltildi`);
+
+    // docs/01 madde 3: çökmeden kalan yarım dosyalar temizlenir. Yapılmazsa
+    // sonraki deneme KİRLİ ağaçtan başlar; worker yarım dosya okur, kapı
+    // bayat içerikle koşar ve commit önceki denemeden artık taşır.
+    await resetRecoveredWorkspaces({
+      results: recovered as never,
+      loadProject: (projectId) => getLatestProject(recoveryCh, projectId),
+      reset: async (projectKey, slug) => {
+        const root = resolveWorkspaceRoot(
+          process.env['WW_WORKSPACE_ROOT'] ?? `${process.cwd()}/workspace`,
+          slug,
+        );
+        await resetWorkingTree(new CommandRunner(), projectKey, root);
+        console.log(`[ww] çalışma ağacı temizlendi: ${slug}`);
+      },
+      onError: (reason) => console.warn(`[ww] çalışma ağacı temizlenemedi: ${String(reason)}`),
+    });
   } finally {
     await recoveryRedis.quit();
     await recoveryCh.close();

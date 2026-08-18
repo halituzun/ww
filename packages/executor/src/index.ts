@@ -11,3 +11,4 @@ export * from './gate-runner.js';
 export * from './git-workspace.js';
 export * from './tool-executor.js';
 export * from './command-runner.js';
+export * from './workspace-reset.js';
