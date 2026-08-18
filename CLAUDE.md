@@ -84,6 +84,12 @@ when it goes stale, the next session starts from the wrong place.
   A different file failing on each run is the signature of load flake, not of
   your change. Re-run the gate before treating any of them as a real failure —
   and never push on a red gate.
+- `./scripts/gate.sh` also runs **öz-denetim**: ww applies its own docs/09
+  standard to its own panel (`scripts/audit-self.mjs`). Before this, the
+  auditor only ever ran on *generated* projects and on ww's panel when someone
+  remembered to invoke it by hand — so a future session's MVVM violation would
+  have gone unnoticed. If it fails, move the state into a ViewModel; do not
+  narrow the rule.
 - `pnpm wiring:check` guards this repo's most expensive recurring defect:
   code that is written and tested but never called by any production path.
   As of 2026-08-18 it also scans **class methods** — the blind spot that hid

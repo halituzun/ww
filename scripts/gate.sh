@@ -29,4 +29,11 @@ pnpm lint >/dev/null
 echo "[kapı] wiring-check"
 node packages/wiring-check/dist/cli.js >/dev/null
 
+# ww kendi standardını KENDİNE de uygular (docs/09). Denetçi üretilen
+# projeleri denetliyordu ama ww'nin kendi paneline yalnız biri ELLE
+# koşturunca bakılıyordu; yani sonraki oturumun ekleyeceği bir ihlali hiçbir
+# şey yakalamazdı.
+echo "[kapı] öz-denetim (docs/09)"
+node scripts/audit-self.mjs
+
 echo "[kapı] TÜM KAPILAR YEŞİL"
