@@ -118,6 +118,17 @@ export function narrateEvent(event: NarratableEvent): string {
       const verdict = allowed === false ? 'reddetti' : 'izin verdi';
       return `politika ${verdict}${reason === undefined ? '' : `: ${reason}`}`;
     }
+    case 'process_started': {
+      const port = read(payload, 'port') ?? String(asObject(payload)?.['port'] ?? '');
+      return `önizleme süreci başladı${port === '' ? '' : ` (port ${port})`}`;
+    }
+    case 'process_stopped': {
+      const reason = read(payload, 'reason');
+      // "durdu" ile "çöktü" ayrımı sebeple okunur.
+      return reason === undefined
+        ? 'önizleme süreci durduruldu'
+        : `önizleme süreci kapandı: ${reason}`;
+    }
     case 'receipt_changed':
       return `mesaj makbuzu güncellendi: ${read(payload, 'state') ?? 'durum bilinmiyor'}`;
     default:

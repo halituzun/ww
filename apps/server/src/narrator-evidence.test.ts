@@ -167,4 +167,16 @@ describe('narrateEvent', () => {
         .toContain('sebep kaydedilmemiş');
     });
   });
+
+  // docs/10 süreç olayları anlatıya da girmeli; yoksa ham tür adı basılırdı.
+  it('surec baslatmayi portuyla anlatir', () => {
+    expect(narrateEvent(event('process_started', { kind: 'dev', port: 42001 })))
+      .toContain('42001');
+  });
+
+  it('cokmeyi sebebiyle, durdurmayi sebebsiz anlatir', () => {
+    expect(narrateEvent(event('process_stopped', { reason: 'exit:137' })))
+      .toContain('exit:137');
+    expect(narrateEvent(event('process_stopped', {}))).toContain('durduruldu');
+  });
 });

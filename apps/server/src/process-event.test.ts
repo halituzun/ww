@@ -43,4 +43,19 @@ describe('processLifecycleEvent (docs/10 → Ortak Davranışlar)', () => {
     expect(typeof processLifecycleEvent({ ...base, state: 'started' }).payload)
       .toBe('object');
   });
+
+  // ÇÖKME de bir durmadır ve sebebiyle yazılır: "durdu" ile "çöktü" ayrımını
+  // zaman çizelgesinde okuyabilmek için sebep şart.
+  it('cokme sebebini yuke koyar', () => {
+    const row = processLifecycleEvent({
+      ...base, state: 'stopped', port: 42001, reason: 'exit:137',
+    });
+    expect(row.event_type).toBe('process_stopped');
+    expect(row.payload).toMatchObject({ reason: 'exit:137' });
+  });
+
+  it('sebep verilmezse alan HIC olusmaz', () => {
+    const payload = processLifecycleEvent({ ...base, state: 'stopped' }).payload;
+    expect(Object.keys(payload)).not.toContain('reason');
+  });
 });

@@ -69,6 +69,7 @@ export class PreviewApplicationService implements OnModuleDestroy {
     projectId: string,
     state: 'started' | 'stopped',
     port?: number,
+    reason?: string,
   ): Promise<void> {
     try {
       await appendEvent(this.#database.ch, processLifecycleEvent({
@@ -77,6 +78,7 @@ export class PreviewApplicationService implements OnModuleDestroy {
         state,
         occurredAt: new Date().toISOString(),
         ...(port === undefined ? {} : { port }),
+        ...(reason === undefined ? {} : { reason }),
       }) as never);
     } catch (reason) {
       this.#logger.warn(`süreç olayı yazılamadı (${state}): ${String(reason)}`);
@@ -123,6 +125,14 @@ export class PreviewApplicationService implements OnModuleDestroy {
     child.on('exit', (code) => {
       ring.push(`önizleme süreci kapandı (kod ${code ?? 'bilinmiyor'})`);
       this.#logger.log(`önizleme kapandı: ${projectId}`);
+      // docs/10: başlat/durdur olayları yazılır. ÇÖKME de bir durmadır ve
+      // eskiden hiç yazılmıyordu: zaman çizelgesinde "başladı" görünüyor,
+      // "durdu" hiç görünmüyordu — süreç hâlâ ayakta sanılırdı.
+      //
+      // Kayıt SİLİNMİŞSE bunu kullanıcı durdurmuştur ve olay `stop()` içinde
+      // zaten yazıldı; burada ikinci kez yazmak çift kayıt olurdu.
+      if (!this.#running.has(projectId)) return;
+      void this.#recordLifecycle(projectId, 'stopped', port, `exit:${code ?? 'signal'}`);
     });
 
     this.#running.set(projectId, { child, port, ring, hasIndexHtml });
