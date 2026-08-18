@@ -6,6 +6,7 @@
 // proje oluşturulurken hiç yazılmıyordu: iş üretilebiliyor ama HİÇBİR ZAMAN
 // kabul edilemiyordu.
 import type { GateConfigLike } from './project-scaffold-types.js';
+import { GATE_CHECK_FILENAME, GATE_CHECK_SCRIPT } from './gate-check-script.js';
 
 /** Kapı adımları proje türüne göre değişir; tür bilinmiyorsa en dar küme. */
 export function defaultGateConfig(projectType: string): GateConfigLike {
@@ -14,27 +15,20 @@ export function defaultGateConfig(projectType: string): GateConfigLike {
       version: 1,
       // Girdiler DOSYA olmalı: dizin listelemek kapıyı EISDIR ile düşürür.
       // Göreve özgü kaynaklar çalışma anında eklenir (brief.targetFiles).
-      inputs: ['package.json', 'tsconfig.json'],
+      inputs: ['package.json', 'tsconfig.json', GATE_CHECK_FILENAME],
       discardedOutputs: ['node_modules', 'dist'],
       // `npx tsc` sandbox'ta ÇALIŞMAZ: yeni projede node_modules yok ve ağ
       // kapalı; kapı her zaman exit 1 verir ve hiçbir iş kabul edilemez
       // (canlı koşuda `gate_step:typecheck:failed:1` ile doğrulandı).
-      // Varsayılan kapı bu yüzden bağımlılıksız ama GERÇEK bir kontroldür:
-      // beyan edilen kaynak dosyalar var ve boş değil mi. Proje kendi
-      // bağımlılıklarını kurduğunda ww.gate.json zenginleştirilebilir.
+      // Bu yüzden kapı bağımlılıksızdır ama artık gerçekten denetler:
+      // markdown çiti sızması, çakışma artığı, boş dosya, bozuk JSON
+      // (bkz. gate-check-script.ts). Proje kendi bağımlılıklarını kurunca
+      // ww.gate.json zenginleştirilebilir.
       steps: [
         {
-          name: 'sources_present',
+          name: 'gate_check',
           command: 'node',
-          args: [
-            '-e',
-            "const fs=require('fs');const files=fs.readdirSync('src',{recursive:true})"
-            + ".filter((f)=>/[.](ts|tsx|js|jsx)$/.test(String(f)));"
-            + "if(files.length===0){console.error('src altinda kaynak dosya yok');process.exit(1);}"
-            + "for(const f of files){if(fs.statSync('src/'+f).size===0)"
-            + "{console.error('bos dosya: '+f);process.exit(1);}}"
-            + "console.log('kaynak dosyalar mevcut: '+files.length);",
-          ],
+          args: [GATE_CHECK_FILENAME],
           timeoutSec: 60,
         },
       ],
@@ -64,6 +58,9 @@ export function defaultGateConfig(projectType: string): GateConfigLike {
 export function starterFiles(projectType: string, projectName: string): ReadonlyMap<string, string> {
   const files = new Map<string, string>();
   if (projectType === 'web' || projectType === 'api' || projectType === 'fullstack') {
+    // Kapı betiği bir GİRDİDİR: starter üretmezse mühürlü kapı zincirinde
+    // dosya bulunamaz ve kapı hiç çalıştırılamaz.
+    files.set(GATE_CHECK_FILENAME, GATE_CHECK_SCRIPT);
     files.set('package.json', `${JSON.stringify({
       name: projectName,
       private: true,

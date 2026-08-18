@@ -21,8 +21,14 @@ describe('defaultGateConfig', () => {
   // bağımlılıksız ama gerçek bir kontrol olmalı.
   it('web kapısı bağımlılıksız çalışabilen bir adım içerir', () => {
     const steps = defaultGateConfig('web').steps;
-    expect(steps.map((step) => step.name)).toContain('sources_present');
+    expect(steps.map((step) => step.name)).toContain('gate_check');
     expect(steps.every((step) => step.command !== 'npx')).toBe(true);
+  });
+
+  // Kapı betiği bir GİRDİ olmalı: girdilerde yoksa mühürlü kapı zincirinde
+  // dosya bulunamaz ve kapı çalıştırılamaz.
+  it('kapı betiğini girdilere ekler', () => {
+    expect(defaultGateConfig('web').inputs).toContain('ww.gate.check.cjs');
   });
 
   it('fullstack projesi için de geçerlidir', () => {
