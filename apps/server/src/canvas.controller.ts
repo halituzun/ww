@@ -7,6 +7,7 @@ import { checkHeartbeat, listLatestAgents, listLatestTasks } from '@ww/db';
 import type { EntityId } from '@ww/shared';
 import { parseLocalSession, type LocalSessionRequest } from './auth/local-session.js';
 import { buildCanvasProjection } from './canvas-projection.js';
+import { loadRoutingIndex } from './routing.loader.js';
 import { SERVER_DATABASE, type ServerDatabase } from './orchestration.module.js';
 
 @Controller('projects/:projectId/canvas')
@@ -33,6 +34,11 @@ export class CanvasController {
       }
     }
 
-    return buildCanvasProjection(agents as never, tasks as never, live);
+    // Etkin model rol eşlemesinden gelir; agent satırındaki `model_ref`
+    // yalnızca eşleme yokken doğrudur (çağrılar da bu sırayla yönlenir).
+    const routing = await loadRoutingIndex(this.database.ch);
+    return buildCanvasProjection(
+      agents as never, tasks as never, live, (role) => routing.modelForRole(role),
+    );
   }
 }

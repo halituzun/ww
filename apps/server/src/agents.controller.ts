@@ -5,6 +5,7 @@
 // gösterilecek hiçbir veri yoktu.
 import { Controller, Get, Inject, NotFoundException, Param, Req } from '@nestjs/common';
 import { getLatestAgent, readAgentActivity } from '@ww/db';
+import { loadRoutingIndex } from './routing.loader.js';
 import { parseLocalSession, type LocalSessionRequest } from './auth/local-session.js';
 import { SERVER_DATABASE, type ServerDatabase } from './orchestration.module.js';
 
@@ -32,7 +33,10 @@ export class AgentsController {
       name: agent.name,
       role: agent.role,
       group: agent.group,
-      modelRef: agent.model_ref,
+      // Etkin model: rol eşlemesi öncelikli. Agent satırındaki değer,
+      // eşleme varken agent'ın hiç kullanmadığı bir modeli gösterirdi.
+      modelRef: (await loadRoutingIndex(this.database.ch)).modelForRole(agent.role)
+        ?? agent.model_ref,
       status: agent.status,
       tasksDone: agent.tasks_done,
       tasksRejected: agent.tasks_rejected,

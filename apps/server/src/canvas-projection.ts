@@ -84,10 +84,21 @@ const LIVE_EXPECTED: ReadonlySet<string> = new Set([
   'busy', 'waiting_verify', 'waiting_answer',
 ]);
 
+/**
+ * Rol → model eşlemesi. Agent'ın KENDİ `model_ref`'i yalnızca eşleme yoksa
+ * kullanılır — çağrılar da bu sırayla yönlendirilir.
+ *
+ * NEDEN VAR: tuval agent satırındaki modeli yazıyordu. Canlı projede o satır
+ * `mock:worker` diyordu ama 16 gerçek çağrının hepsi `deepseek:deepseek-chat`
+ * ile yapılmıştı: panel, agent'ın HİÇ KULLANMADIĞI bir modeli gösteriyordu.
+ */
+export type RoleModelResolver = (role: string) => string | undefined;
+
 export function buildCanvasProjection(
   agents: readonly CanvasAgentLike[],
   tasks: readonly CanvasTaskLike[],
   liveAgentIds?: LiveAgentIds,
+  modelForRole?: RoleModelResolver,
 ): CanvasProjection {
   const known = new Set(agents.map((agent) => agent.agent_id));
   const nodes: CanvasNode[] = agents.map((agent) => ({
@@ -95,7 +106,7 @@ export function buildCanvasProjection(
     label: agent.name === '' ? agent.role : agent.name,
     role: agent.role,
     group: agent.group,
-    modelRef: agent.model_ref,
+    modelRef: modelForRole?.(agent.role) ?? agent.model_ref,
     status: agent.status,
     // Bilgi yoksa suçlamayız: heartbeat kümesi verilmediğinde kimse
     // "yanıt vermiyor" işaretlenmez.

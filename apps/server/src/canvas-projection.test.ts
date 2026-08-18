@@ -120,3 +120,30 @@ describe('buildCanvasProjection — canlılık', () => {
     expect(buildCanvasProjection([busy], []).nodes[0]!.unresponsive).toBe(false);
   });
 });
+
+describe('buildCanvasProjection — etkin model', () => {
+  const NIL3 = '00000000-0000-0000-0000-000000000000';
+  const worker = {
+    agent_id: 'w1', role: 'worker', group: 'coding', name: 'W',
+    model_ref: 'mock:worker', parent_agent_id: NIL3, clone_of: NIL3,
+    status: 'idle', current_task_id: NIL3,
+  };
+
+  // ASIL KUSUR: canlı projede agent satırı `mock:worker` diyordu ama tüm
+  // gerçek çağrılar `deepseek:deepseek-chat` ile yapılmıştı.
+  it('rol eslemesindeki modeli gosterir', () => {
+    const canvas = buildCanvasProjection([worker], [], undefined,
+      (role) => (role === 'worker' ? 'deepseek:deepseek-chat' : undefined));
+    expect(canvas.nodes[0]!.modelRef).toBe('deepseek:deepseek-chat');
+  });
+
+  // Eşleme yoksa agent'ın kendi modeli DOĞRUDUR: çağrı da onunla yapılır.
+  it('esleme yoksa agentin kendi modeline duser', () => {
+    const canvas = buildCanvasProjection([worker], [], undefined, () => undefined);
+    expect(canvas.nodes[0]!.modelRef).toBe('mock:worker');
+  });
+
+  it('cozucu verilmezse eski davranisi korur', () => {
+    expect(buildCanvasProjection([worker], []).nodes[0]!.modelRef).toBe('mock:worker');
+  });
+});
