@@ -67,7 +67,11 @@ function countOccurrences(text: string, name: string): number {
  *  - Nest CONTROLLER metotlarını framework yönlendirir, ad ile çağırmaz.
  *  - Yaşam döngüsü kancalarını (onModuleInit vb.) framework çağırır.
  */
-const CLASS_BODY = /^export (?:abstract )?class [\s\S]*?^}/gm;
+// TEK SATIRLIK sınıf (`export class X extends Error {}`) ayrı yakalanır.
+// Genel desen `^}` arayınca onu ATLAR ve bir SONRAKİ sınıfın gövdesini ona
+// mal eder; rapor yanlış sınıf adı yazar (canlı örnek:
+// `MobileSessionError.sessionOf` — o metot başka sınıfındı).
+const CLASS_BODY = /^export (?:abstract )?class [^\n]*\{\}$|^export (?:abstract )?class [\s\S]*?^}/gm;
 const CLASS_NAME = /^export (?:abstract )?class ([A-Za-z_][A-Za-z0-9_]*)/;
 const METHOD_PATTERN = /^ {2}(?:public\s+|readonly\s+)?(?:async\s+)?([a-zA-Z_][A-Za-z0-9_]*)\s*\(/gm;
 

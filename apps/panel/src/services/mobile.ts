@@ -28,14 +28,23 @@ export interface MobileFrame {
 export const fetchMobileTargets = (options: RequestOptions = {}): Promise<MobileTargets> =>
   getJson<MobileTargets>('/mobile-preview/avds', options);
 
+/**
+ * `projectId` VERİLİRSE docs/10'un proje başına sınırı uygulanır ve yaşam
+ * döngüsü olayları yazılır; verilmezse oturum projesizdir (meşru: kullanıcı
+ * proje seçmeden de cihaz açabilir).
+ */
 export const openMobileSession = (
   target: string | undefined,
+  projectId?: string,
   options: RequestOptions = {},
 ): Promise<MobileSession> =>
   requestJson<MobileSession>('/mobile-preview/sessions', {
     ...options,
     method: 'POST',
-    body: target === undefined ? {} : { avd: target },
+    body: {
+      ...(target === undefined ? {} : { avd: target }),
+      ...(projectId === undefined || projectId === '' ? {} : { projectId }),
+    },
   });
 
 export const fetchMobileFrame = (

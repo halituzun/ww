@@ -91,6 +91,11 @@ Emülatör **host'ta** çalışır (Docker'a girmez); gereksinimler ve akış:
   (kapalı durumda "Başlat" düğmesi çökmüş süreç için de görünür); önceki not
   yanlıştı. Emülatör tarafı hâlâ bu olayları yazmıyor.)*
 - Aynı anda proje başına en çok 1 önizleme + 1 emülatör süreci (kaynak koruması).
+  *(Emülatör tarafı 2026-08-18'de uygulandı: uçlar projeden BAĞIMSIZDI, bu
+  yüzden ne sınır uygulanabiliyor ne de yaşam döngüsü olayı yazılabiliyordu
+  (`events.project_id` zorunludur). Oturum artık isteğe bağlı `projectId`
+  taşır; PROJESİZ oturum meşrudur ve sınıra takılmaz — kullanıcı proje
+  seçmeden de cihaz açabilir.)*
 - Proje duraklatılırsa/arşivlenirse süreçler kapatılır. *(2026-08-18'de
   uygulandı: hiçbir yer proje DURUMUNA bakmıyordu, duraklatılmış projenin dev
   sunucusu çalışmaya devam edip port tutuyor ve bayat içerik sunuyordu. Kural

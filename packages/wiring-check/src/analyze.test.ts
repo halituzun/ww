@@ -178,6 +178,28 @@ describe('sınıf metotları', () => {
     expect(report.unwired).not.toContain('src/audit.controller.ts:AuditController.report');
   });
 
+
+  // TEK SATIRLIK sınıf, genel desende `^}` bulunmadığı için bir sonraki
+  // sınıfın gövdesini yutuyordu ve metot YANLIŞ SINIFA atfediliyordu.
+  // Canlı örnek: `MobileSessionError.sessionOf` — o metot Registry'nindi.
+  it('tek satirlik sinif sonraki sinifin gövdesini yutmaz', () => {
+    const report = analyzeWiring([
+      {
+        path: 'src/reg.ts',
+        text: [
+          'export class RegError extends Error {}',
+          '',
+          'export class Registry {',
+          '  bind(x: string) { return x; }',
+          '}',
+        ].join('\n'),
+      },
+      { path: 'src/reg.test.ts', text: 'new Registry().bind("a");\n' },
+    ]);
+    expect(report.unwired).toContain('src/reg.ts:Registry.bind');
+    expect(report.unwired).not.toContain('src/reg.ts:RegError.bind');
+  });
+
   it('framework yasam dongusu metotlarini bulgu saymaz', () => {
     const report = analyzeWiring([
       { path: 'src/pump.ts', text: 'export class Pump {\n  onModuleDestroy() { return 1; }\n}\n' },

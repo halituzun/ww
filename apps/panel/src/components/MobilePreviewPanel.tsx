@@ -7,8 +7,13 @@ import {
 } from '../viewmodels/useMobilePreviewViewModel.js';
 import { deviceTapPoint } from '../viewmodels/tap-coordinates.js';
 
-export function MobilePreviewPanel({ ports }: { readonly ports?: MobilePreviewPorts }) {
-  const vm = useMobilePreviewViewModel(ports);
+export function MobilePreviewPanel({ projectId, ports }: {
+  /** Verilirse docs/10'un proje başına sınırı ve yaşam döngüsü olayları
+   * devreye girer. */
+  readonly projectId?: string | undefined;
+  readonly ports?: MobilePreviewPorts;
+}) {
+  const vm = useMobilePreviewViewModel(projectId, ports);
   const choices = [...vm.targets.devices, ...vm.targets.avds];
 
   return (

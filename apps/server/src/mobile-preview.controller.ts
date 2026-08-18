@@ -5,13 +5,17 @@
 import { execFile, spawn } from 'node:child_process';
 import { promisify } from 'node:util';
 import {
-  BadRequestException, Body, Controller, Delete, Get, Injectable, Param, Post, Req,
+  BadRequestException, Body, Controller, Delete, Get, Inject, Injectable, Param, Post, Req,
   ServiceUnavailableException,
 } from '@nestjs/common';
 import { AdbMobilePreviewPort, MobilePreviewError, MobilePreviewService } from '@ww/executor';
+import { appendEvent } from '@ww/db';
 import { parseLocalSession, type LocalSessionRequest } from './auth/local-session.js';
 import { assertMobileArgs, assertMobileCommand } from './mobile-command-allowlist.js';
 import { mobileTargets } from './mobile-targets.js';
+import { MobileSessionRegistry } from './mobile-sessions.js';
+import { processLifecycleEvent } from './process-event.js';
+import { SERVER_DATABASE, type ServerDatabase } from './orchestration.module.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -45,6 +49,29 @@ export class MobilePreviewController {
   readonly #service = new MobilePreviewService(
     new AdbMobilePreviewPort(new MobileCommands()),
   );
+
+  /** docs/10: proje başına en çok 1 emülatör süreci + yaşam döngüsü olayları. */
+  readonly #sessions = new MobileSessionRegistry();
+
+  constructor(@Inject(SERVER_DATABASE) private readonly database: ServerDatabase) {}
+
+  /**
+   * docs/10: "Her ortam başlat/durdur olayları `events`'e yazılır."
+   * PROJESİZ oturumda yazılamaz: `events.project_id` zorunludur ve uydurma
+   * bir kimlik yazmak kaydı bozar.
+   *
+   * Olay yazımı oturumu DÜŞÜRMEZ; sessiz de kalmaz.
+   */
+  async #record(projectId: string | undefined, state: 'started' | 'stopped'): Promise<void> {
+    if (projectId === undefined || projectId === '') return;
+    try {
+      await appendEvent(this.database.ch, processLifecycleEvent({
+        projectId, kind: 'emulator', state, occurredAt: new Date().toISOString(),
+      }) as never);
+    } catch (reason) {
+      console.warn(`[ww] emülatör olayı yazılamadı (${state}): ${String(reason)}`);
+    }
+  }
 
   /** Emülatör kurulu değilse bu AÇIKÇA söylenir; boş liste "her şey yolunda" der. */
   #unavailable(reason: unknown): never {
@@ -101,10 +128,28 @@ export class MobilePreviewController {
   }
 
   @Post('sessions')
-  async open(@Req() request: LocalSessionRequest, @Body() body: { avd?: string }) {
+  async open(
+    @Req() request: LocalSessionRequest,
+    @Body() body: { avd?: string; projectId?: string },
+  ) {
     parseLocalSession(request);
+    const projectId = body?.projectId;
+    if (projectId !== undefined && projectId !== '') {
+      // docs/10 kaynak koruması: sınırsız oturum her tıklamada yeni emülatör
+      // açardı.
+      try {
+        this.#sessions.assertFree(projectId);
+      } catch (reason) {
+        throw new BadRequestException(
+          reason instanceof Error ? reason.message : String(reason),
+        );
+      }
+    }
     try {
-      return await this.#service.open(body?.avd);
+      const session = await this.#service.open(body?.avd);
+      this.#sessions.bind(projectId, session.sessionId);
+      await this.#record(projectId, 'started');
+      return session;
     } catch (reason) { return this.#unavailable(reason); }
   }
 
@@ -146,6 +191,9 @@ export class MobilePreviewController {
     parseLocalSession(request);
     try {
       await new AdbMobilePreviewPort(new MobileCommands()).stop(sessionId);
+      const projectId = this.#sessions.projectOf(sessionId);
+      this.#sessions.release(sessionId);
+      await this.#record(projectId, 'stopped');
       return { stopped: sessionId };
     } catch (reason) { return this.#unavailable(reason); }
   }

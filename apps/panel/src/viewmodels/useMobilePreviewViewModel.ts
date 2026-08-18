@@ -23,7 +23,10 @@ const EMPTY: MobileTargets = { avds: [], devices: [] };
 /** Kare yenileme aralığı; canlı akış değil, düzenli anlık görüntü. */
 export const MOBILE_FRAME_POLL_MS = 2_000;
 
-export function useMobilePreviewViewModel(ports: MobilePreviewPorts = {}) {
+export function useMobilePreviewViewModel(
+  projectId: string | undefined,
+  ports: MobilePreviewPorts = {},
+) {
   const loadTargets = ports.fetchTargets ?? fetchMobileTargets;
   const open_ = ports.openSession ?? openMobileSession;
   const frame_ = ports.fetchFrame ?? fetchMobileFrame;
@@ -68,7 +71,7 @@ export function useMobilePreviewViewModel(ports: MobilePreviewPorts = {}) {
   const open = useCallback(async (target?: string) => {
     setBusy(true);
     try {
-      const session = await open_(target);
+      const session = await open_(target, projectId);
       setSessionId(session.sessionId);
       setError('');
       await refreshFrame(session.sessionId);
@@ -77,7 +80,7 @@ export function useMobilePreviewViewModel(ports: MobilePreviewPorts = {}) {
     } finally {
       setBusy(false);
     }
-  }, [open_, refreshFrame]);
+  }, [open_, refreshFrame, projectId]);
 
   const stop = useCallback(async () => {
     if (sessionId === '') return;

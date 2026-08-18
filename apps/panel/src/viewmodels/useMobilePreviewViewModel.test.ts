@@ -18,7 +18,7 @@ const ports = (over: Record<string, unknown> = {}) => ({
 
 describe('useMobilePreviewViewModel', () => {
   it('hedefleri yukler', async () => {
-    const { result } = renderHook(() => useMobilePreviewViewModel(ports()));
+    const { result } = renderHook(() => useMobilePreviewViewModel('p1', ports()));
     await waitFor(() => expect(result.current.targets.devices).toEqual(['127.0.0.1:26624']));
   });
 
@@ -26,7 +26,7 @@ describe('useMobilePreviewViewModel', () => {
   // mu?"). O sebebi göstermek, kullanıcının neyi kuracağını bilmesini sağlar;
   // boş liste göstermek onu karanlıkta bırakır.
   it('hedef yoksa sunucunun SEBEBINI gosterir', async () => {
-    const { result } = renderHook(() => useMobilePreviewViewModel(ports({
+    const { result } = renderHook(() => useMobilePreviewViewModel('p1', ports({
       fetchTargets: vi.fn(async () => { throw new Error('emülatör araçları bulunamadı'); }),
     })));
     await waitFor(() => expect(result.current.error).toContain('emülatör araçları bulunamadı'));
@@ -34,7 +34,7 @@ describe('useMobilePreviewViewModel', () => {
 
   it('oturum acar ve kareyi ceker', async () => {
     const injected = ports();
-    const { result } = renderHook(() => useMobilePreviewViewModel(injected));
+    const { result } = renderHook(() => useMobilePreviewViewModel('p1', injected));
     await waitFor(() => expect(result.current.targets.devices.length).toBe(1));
 
     await result.current.open('127.0.0.1:26624');
@@ -44,7 +44,7 @@ describe('useMobilePreviewViewModel', () => {
   // Oturum kapatılınca kare TEMİZLENİR: eski kareyi göstermeye devam etmek
   // "hâlâ canlı" yalanını söyler.
   it('durdurunca kareyi temizler', async () => {
-    const { result } = renderHook(() => useMobilePreviewViewModel(ports()));
+    const { result } = renderHook(() => useMobilePreviewViewModel('p1', ports()));
     await waitFor(() => expect(result.current.targets.devices.length).toBe(1));
     await result.current.open('127.0.0.1:26624');
     await waitFor(() => expect(result.current.frameDataUrl).not.toBe(''));

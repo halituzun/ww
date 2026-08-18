@@ -44,8 +44,8 @@
     "reason": "deterministik testler için; üretimde gerçek sağlayıcı kullanılır"
   },
   {
-    "symbol": "apps/server/src/process-pool.ts:PortPoolError.portOf",
-    "reason": "HİÇ BAĞLANMAMIŞ YETENEK: ne üretim çağrısı ne de özel bir ikizi var. Gerçek boşluk; gizlenmiyor, görünür kılınıyor."
+    "symbol": "apps/server/src/process-pool.ts:PortPool.portOf",
+    "reason": "HİÇ BAĞLANMAMIŞ YETENEK: ne üretim çağrısı ne de özel bir ikizi var. Gerçek boşluk; gizlenmiyor, görünür kılınıyor. (Ad 2026-08-18'de düzeltildi: analizör tek satırlık sınıfı atlayıp metodu YANLIŞ sınıfa atfediyordu.)"
   },
   {
     "symbol": "packages/agents/src/communication-service.ts:CommunicationService.pollInbox",
