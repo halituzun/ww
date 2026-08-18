@@ -29,11 +29,33 @@ export interface WorkspaceLike {
   initialize(): Promise<unknown>;
 }
 
+export interface GateStepFailureLike {
+  readonly name: string;
+  readonly exitCode: number | null;
+  readonly output: string;
+}
+
 export interface GateRunnerLike {
   run(projectKey: string, workspace: WorkspaceLike, context: Readonly<{
     operationId: string;
     occurredAt: string;
+    onStepFailure?: ((failure: GateStepFailureLike) => void) | undefined;
   }>): Promise<GateEvidenceLike>;
+}
+
+/**
+ * Kapı hatasının worker'a dönecek metni (docs/05: "Hata → tam çıktı worker'a
+ * döner"). Buraya kadar worker yalnızca "gate_step:tsc:failed:1" görüyordu —
+ * yani göremediği bir hatayı düzeltmesi bekleniyordu.
+ */
+export function gateFailureSummary(failures: readonly GateStepFailureLike[]): string {
+  if (failures.length === 0) return '';
+  return failures
+    .map((failure) => [
+      `Kapı adımı düştü: ${failure.name} (çıkış kodu ${failure.exitCode ?? 'yok'})`,
+      failure.output.trim() === '' ? '(adım çıktı üretmedi)' : failure.output,
+    ].join('\n'))
+    .join('\n\n');
 }
 
 export interface GitWorkspaceLike {
@@ -104,16 +126,26 @@ export function createGateOperations(input: GateOperationsInput) {
     async gate({ taskId, attempt, targetFiles }: Readonly<{ taskId: EntityId; attempt: AssignmentAttemptV1; targetFiles?: readonly string[] }>) {
       const { gateRunner, workspace } = required();
       await workspace.initialize();
+      const failures: GateStepFailureLike[] = [];
       const evidence = await gateRunner.run(attempt.projectId, workspace, {
         operationId: randomUUID(),
         occurredAt: new Date().toISOString(),
+        onStepFailure: (failure) => { failures.push(failure); },
         ...(targetFiles === undefined ? {} : { extraInputs: targetFiles }),
       });
       gatePassed.set(`${taskId}:${attempt.assignmentAttemptId}`, evidence.passed);
       // GateEvidence'da `evidenceRefs` YOKTUR (passed/configPath/steps vardır);
       // onu okumak undefined döndürüp "evidenceRefs is not iterable" ile
       // kapı adımını düşürüyordu. Kanıt adımlardan türetilir.
-      return { passed: evidence.passed, evidenceRefs: gateEvidenceRefs(evidence) };
+      // Kanıt kalıcı kayda gider ve ham çıktı taşımaz; bu özet ayrı yoldan
+      // worker'a döner. GEÇEN kapıda alan hiç konmaz: boş bir "hata özeti"
+      // çağıranın "hata var mı" kontrolünü gereksizce zorlaştırır.
+      const failureSummary = gateFailureSummary(failures);
+      return {
+        passed: evidence.passed,
+        evidenceRefs: gateEvidenceRefs(evidence),
+        ...(failureSummary === '' ? {} : { failureSummary }),
+      };
     },
 
     async commit({ taskId, attempt }: Readonly<{ taskId: EntityId; attempt: AssignmentAttemptV1 }>) {

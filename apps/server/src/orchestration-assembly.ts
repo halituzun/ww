@@ -255,6 +255,16 @@ export async function createOrchestrationComposition(
       // görmedi" diyordu ve replay yanlış noktadan başlardı.
       loadCausalOrdinal: async ({ taskId, assignmentAttemptId }) =>
         (await getTaskCausalCursor(input.ch, taskId, assignmentAttemptId))?.ordinal ?? 0,
+      // docs/05: "Hata → tam çıktı worker'a döner". Kapı ya da doğrulayıcı
+      // reddi `tasks.reject_reason`'a yazılır; buradan okunup prompt'a
+      // konmazsa yeniden denenen worker ilk denemeyle AYNI girdiyi görür ve
+      // aynı hatayı üretir — üç denemenin biri her turda boşa gider.
+      loadPriorFailure: async ({ taskId }) => {
+        const task = await getLatestTask(input.ch, input.projectId, taskId);
+        const reason = task?.reject_reason.trim() ?? '';
+        if (task === null || reason === '') return null;
+        return { attempt: task.attempt, reason };
+      },
       // Context Builder bağlantısı ayrı bir adım; şimdilik boş bağlam.
       // docs/06 Context Builder: geçmiş kararlar, özetler, fihrist ve ilgili
       // yazışmalar modele girer. Boş dize dönmek hafıza katmanını yazıp

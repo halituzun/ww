@@ -144,4 +144,43 @@ describe('assemblePromptMessages', () => {
     });
     expect(messages.map((message) => message.content).join('\n')).toContain('src/colors.ts');
   });
+
+  // docs/05 Çalıştırma/Test Kapısı: "Hata → TAM ÇIKTI worker'a döner
+  // (`testing → working`), attempt++". Dönmüyordu: yeniden denenen worker'ın
+  // prompt'u ilk denemeyle byte byte aynıydı. Yani worker göremediği bir
+  // hatayı düzeltmeye çağrılıyor ve üç denemenin biri her seferinde boşa
+  // gidiyordu.
+  it('onceki denemenin hatasini prompta koyar', () => {
+    const messages = assemblePromptMessages({
+      brief: brief() as never,
+      template,
+      contextPack: '',
+      priorFailure: {
+        attempt: 1,
+        reason: "tsc --noEmit düştü:\nsrc/Board.tsx(4,7): error TS2304: Cannot find name 'Squares'.",
+      },
+    });
+    const text = messages.map((m) => m.content).join('\n');
+    expect(text).toContain('TS2304');
+    expect(text).toContain('src/Board.tsx(4,7)');
+    // Kaçıncı deneme olduğu da söylenir: worker "aynı şeyi tekrar dene"
+    // ile "düzelt" arasındaki farkı ancak böyle bilir.
+    expect(text).toMatch(/1\. deneme/);
+  });
+
+  it('ilk denemede onceki hata bolumu HIC olusmaz', () => {
+    const messages = assemblePromptMessages({ brief: brief() as never, template, contextPack: '' });
+    const text = messages.map((m) => m.content).join('\n');
+    expect(text).not.toContain('Önceki deneme');
+  });
+
+  // Boş/beyaz sebep bölüm başlığı üretmemeli: "Önceki deneme başarısız oldu"
+  // deyip sebebi söylememek, worker'ı yanlış yönlendirir.
+  it('bos sebep icin bolum olusturmaz', () => {
+    const messages = assemblePromptMessages({
+      brief: brief() as never, template, contextPack: '',
+      priorFailure: { attempt: 1, reason: '   ' },
+    });
+    expect(messages.map((m) => m.content).join('\n')).not.toContain('Önceki deneme');
+  });
 });

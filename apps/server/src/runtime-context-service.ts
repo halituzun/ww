@@ -38,6 +38,18 @@ export interface RuntimeContextInput {
     taskId: EntityId;
     assignmentAttemptId: EntityId;
   }>) => Promise<number>;
+  /**
+   * Bu görevin ÖNCEKİ denemesi neden düştü (docs/05: "Hata → tam çıktı
+   * worker'a döner"). Verilmezse prompt eskisi gibi kurulur.
+   *
+   * NEDEN VAR: yeniden denenen worker'ın prompt'u ilk denemeyle byte byte
+   * aynıydı. Worker göremediği bir hatayı düzeltmeye çağrılıyor, aynı çıktıyı
+   * üretiyor ve üç denemenin biri her turda boşa gidiyordu.
+   */
+  loadPriorFailure?: (input: Readonly<{
+    taskId: EntityId;
+    assignmentAttemptId: EntityId;
+  }>) => Promise<{ readonly attempt: number; readonly reason: string } | null>;
 }
 
 export function createRuntimeContextService(input: RuntimeContextInput) {
@@ -65,7 +77,18 @@ export function createRuntimeContextService(input: RuntimeContextInput) {
           taskId,
           assignmentAttemptId: attempt.assignmentAttemptId,
         });
-      const promptMessages = assemblePromptMessages({ brief, template, contextPack });
+      const priorFailure = input.loadPriorFailure === undefined
+        ? null
+        : await input.loadPriorFailure({
+          taskId,
+          assignmentAttemptId: attempt.assignmentAttemptId,
+        });
+      const promptMessages = assemblePromptMessages({
+        brief,
+        template,
+        contextPack,
+        ...(priorFailure === null ? {} : { priorFailure }),
+      });
 
       const snapshot = {
         contractVersion: 1,

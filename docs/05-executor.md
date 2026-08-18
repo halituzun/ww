@@ -97,7 +97,11 @@ Görev `verifying → testing` geçtiğinde proje türüne göre kapı komutlar�
 | Flutter | `flutter pub get` → `dart analyze` → `flutter test` |
 
 - Her adımın çıktısı `events`'e `test_run` olayı olarak yazılır.
-- Hata → tam çıktı worker'a döner (`testing → working`), `attempt++`.
+- Hata → tam çıktı worker'a döner (`testing → working`), `attempt++`. Çıktı
+  KANIT nesnesine konmaz (kanıt kalıcı kayda gider ve ham çıktı taşımaması
+  kasıtlıdır); ayrı bir bellek-içi kanaldan alınır, redakte + sınırlanır
+  (son 4000 karakter) ve `tasks.reject_reason` üzerinden bir sonraki denemenin
+  prompt'una girer.
 - Kapı tanımına adım eklemek/çıkarmak plan kararıdır (konsey/PM belirler,
   `knowledge`'a yazılır).
 - Test *yazmak* da işin parçasıdır: kod görevlerinin kabul kriterlerine

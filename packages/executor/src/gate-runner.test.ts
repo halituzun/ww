@@ -2,7 +2,9 @@ import { mkdtemp, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { GateRunner, parseGateConfig, type GateInputPolicyPort } from './gate-runner.js';
+import {
+  GATE_FAILURE_OUTPUT_LIMIT, GateRunner, parseGateConfig, type GateInputPolicyPort,
+} from './gate-runner.js';
 import type { GateCommitAuditPort, GateAuditInput } from './ports.js';
 import type {
   SandboxCommandResult,
@@ -147,6 +149,65 @@ describe('GateRunner', () => {
     }));
     expect(JSON.stringify(records)).not.toContain(secret);
     expect(JSON.stringify(result)).not.toContain(secret);
+  });
+
+  // docs/05: "Hata → TAM ÇIKTI worker'a döner". Dönmüyordu: kapı yalnızca
+  // hash tutuyor, worker'a giden tek şey "gate_step:tsc:failed:1" oluyordu.
+  // Worker göremediği bir hatayı düzeltmeye çağrılıyordu.
+  //
+  // Çıktı KANIT'a değil, ayrı ve açıkça istenen bir kanala verilir: kanıt
+  // kalıcı kayda gider ve ham çıktı taşımaması KASITLI bir değişmezdir.
+  it('dusen adimin ciktisini ayri kanaldan verir, kanita KOYMAZ', async () => {
+    const { workspace } = await fixture(config([{ name: 'tsc' }]));
+    const sandbox = new FakeSandbox('tsc', "src/Board.tsx(4,7): error TS2304: Cannot find name 'Squares'.");
+    const { audit, policy, records } = ports();
+    const seen: { name: string; output: string }[] = [];
+
+    const result = await new GateRunner(sandbox, audit, policy).run('project', workspace, {
+      operationId, occurredAt,
+      onStepFailure: (failure) => { seen.push({ name: failure.name, output: failure.output }); },
+    });
+
+    expect(result.passed).toBe(false);
+    expect(seen).toHaveLength(1);
+    expect(seen[0]!.name).toBe('tsc');
+    expect(seen[0]!.output).toContain('TS2304');
+    // Kanıt ve kalıcı kayıt eskisi gibi ham çıktıdan arınmış kalır.
+    expect(JSON.stringify(result)).not.toContain('TS2304');
+    expect(JSON.stringify(records)).not.toContain('TS2304');
+  });
+
+  it('gecen adim icin cikti kanali cagrilmaz', async () => {
+    const { workspace } = await fixture(config([{ name: 'tsc' }]));
+    const sandbox = new FakeSandbox(undefined, 'her sey yolunda');
+    const { audit, policy } = ports();
+    const seen: unknown[] = [];
+
+    await new GateRunner(sandbox, audit, policy).run('project', workspace, {
+      operationId, occurredAt, onStepFailure: (failure) => { seen.push(failure); },
+    });
+    expect(seen).toEqual([]);
+  });
+
+  // Kanal worker prompt'una gider: anahtar sızarsa modele ve `tasks`
+  // kaydına sızar. Sınır da şart — 200 bin satırlık test çıktısı prompt'u
+  // boğar ve asıl hatayı görünmez yapar.
+  it('cikti kanalini redakte eder ve sonunu tutarak sinirlar', async () => {
+    const secret = 'sk-live-super-secret-123456789';
+    const noise = 'x'.repeat(10_000);
+    const { workspace } = await fixture(config([{ name: 'test' }]));
+    const sandbox = new FakeSandbox('test', `${secret}\n${noise}\nSON SATIR: assertion failed`);
+    const { audit, policy } = ports();
+    let captured = '';
+
+    await new GateRunner(sandbox, audit, policy).run('project', workspace, {
+      operationId, occurredAt, onStepFailure: (failure) => { captured = failure.output; },
+    });
+
+    expect(captured).not.toContain(secret);
+    expect(captured.length).toBeLessThanOrEqual(GATE_FAILURE_OUTPUT_LIMIT);
+    // Hata genelde SONDA olur; baştan kırpmak tam da aranan satırı atardı.
+    expect(captured).toContain('SON SATIR: assertion failed');
   });
 
   it('audit kabul edip yanıtı kaybederse exact retry audit tarafından reconcile edilir', async () => {

@@ -15,7 +15,7 @@ export interface Phase1SchedulerPort {
   transition(input: Readonly<{ taskId: EntityId; attempt: AssignmentAttemptV1; action: 'start_work' | 'report_result' | 'verifier_approved' | 'verifier_rejected' | 'gate_passed' | 'gate_failed' | 'commit_completed' | 'fail'; evidenceRefs?: readonly string[]; resultSummary?: string }>): Promise<Readonly<{ status: TaskStatus }>>;
   reassign(input: Readonly<{ taskId: EntityId; reason: 'retry_after_rejection' | 'retry_after_gate_failure'; evidenceRefs: readonly string[] }>): Promise<AssignmentAttemptV1>;
   escalate(input: Readonly<{ taskId: EntityId; attempt: AssignmentAttemptV1; reason: string }>): Promise<void>;
-  gate(input: Readonly<{ taskId: EntityId; attempt: AssignmentAttemptV1; targetFiles?: readonly string[] }>): Promise<Readonly<{ passed: boolean; evidenceRefs: readonly string[] }>>;
+  gate(input: Readonly<{ taskId: EntityId; attempt: AssignmentAttemptV1; targetFiles?: readonly string[] }>): Promise<Readonly<{ passed: boolean; evidenceRefs: readonly string[]; failureSummary?: string }>>;
   commit(input: Readonly<{ taskId: EntityId; attempt: AssignmentAttemptV1 }>): Promise<Readonly<{ commitHash: string }>>;
 }
 
@@ -131,8 +131,13 @@ async function runAssignedLifecycle(input: Phase1OrchestratorInput & { brief: Ta
         return { status: 'escalated', attempts };
       }
       // Aynı kural kapı için: 'gate_failed' testing'den working'e döndürür.
+      // Sebep `tasks.reject_reason`'a yazılır ve sonraki denemenin prompt'una
+      // girer; verilmezse sabit "kapı adımı geçilemedi" yazılıyordu ve worker
+      // neyi düzelteceğini asla öğrenemiyordu.
+      const gateReason = gate.failureSummary?.trim() ?? '';
       await input.scheduler.transition({
         taskId: input.taskId, attempt, action: 'gate_failed', evidenceRefs: gate.evidenceRefs,
+        ...(gateReason === '' ? {} : { resultSummary: gateReason }),
       });
       attempt = await input.scheduler.reassign({ taskId: input.taskId, reason: 'retry_after_gate_failure', evidenceRefs: gate.evidenceRefs });
       continue;

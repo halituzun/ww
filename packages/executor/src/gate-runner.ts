@@ -42,6 +42,40 @@ export interface GateStepEvidence {
   readonly durationMs: number;
 }
 
+/**
+ * Düşen adımın çıktısından worker'a gösterilecek en fazla karakter.
+ * Sınırsız çıktı prompt'u boğar ve asıl hatayı görünmez yapar.
+ */
+export const GATE_FAILURE_OUTPUT_LIMIT = 4_000;
+
+/** Kapı çıktısı worker prompt'una ve `tasks.reject_reason`'a gider; sızma
+ * koruması burada başlar (docs/04 → anahtar saklama güvenliği). */
+function redactSecrets(text: string): string {
+  return text
+    .replace(/\b(sk-ant-|sk-|ds-|ghp_|gho_)[A-Za-z0-9_-]{8,}/g, (m) => `${m.slice(0, 3)}…REDACTED`)
+    // ORTAM=deger biçimli sırlar: kapı adımları ortamı yazdırabilir.
+    .replace(/\b([A-Z0-9_]*(?:KEY|TOKEN|SECRET|PASSWORD)[A-Z0-9_]*)\s*=\s*\S+/g, '$1=…REDACTED');
+}
+
+/** Hata genelde SONDA olur (yığın izi, "N tests failed"); baştan kırpmak tam
+ * da aranan satırı atardı. */
+export function boundFailureOutput(text: string, limit = GATE_FAILURE_OUTPUT_LIMIT): string {
+  const redacted = redactSecrets(text).trimEnd();
+  if (redacted.length <= limit) return redacted;
+  // Başlık da sınırın İÇİNDE: yoksa "en fazla N karakter" sözü tutulmaz ve
+  // sınır, prompt bütçesini hesaplayan tarafa yalan söyler.
+  const marker = '…(kırpıldı)\n';
+  return `${marker}${redacted.slice(-(limit - marker.length))}`;
+}
+
+export interface GateStepFailure {
+  readonly name: string;
+  readonly index: number;
+  readonly exitCode: number | null;
+  /** Redakte edilmiş, sınırlanmış stderr+stdout kuyruğu. */
+  readonly output: string;
+}
+
 export interface GateEvidence {
   readonly passed: boolean;
   readonly configPath: 'ww.gate.json';
@@ -49,6 +83,12 @@ export interface GateEvidence {
 }
 
 export interface GateRunContext {
+  /**
+   * Düşen adımın ÇIKTISINI alır (docs/05: "Hata → tam çıktı worker'a döner").
+   * Kanıt nesnesine konmaz: kanıt kalıcı kayda gider ve ham çıktı taşımaması
+   * kasıtlı bir değişmezdir. Çağıran bunu bellekte kullanır.
+   */
+  readonly onStepFailure?: ((failure: GateStepFailure) => void) | undefined;
   /**
    * Göreve özgü ek girdi dosyaları (brief.targetFiles). Statik ww.gate.json
    * gelecekteki dosyaları bilemez; dizin listelemek ise geçersizdir çünkü her
@@ -221,6 +261,16 @@ export class GateRunner {
     for (const [index, step] of steps.entries()) {
       const item = evidence(step, index);
       items.push(item);
+      if (!item.passed && context.onStepFailure !== undefined) {
+        // stderr önce: derleyici/test hatası oraya düşer.
+        const raw = [step.stderr, step.stdout].filter((part) => part.trim() !== '').join('\n');
+        context.onStepFailure({
+          name: item.name,
+          index,
+          exitCode: item.exitCode,
+          output: boundFailureOutput(raw),
+        });
+      }
       await this.audit.appendGate({
         projectKey,
         operationId: context.operationId,

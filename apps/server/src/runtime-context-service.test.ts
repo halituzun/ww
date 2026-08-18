@@ -88,4 +88,25 @@ describe('createRuntimeContextService', () => {
     const text = result.snapshot.promptMessages.map((m) => m.content).join('\n');
     expect(text).toContain('ÖNCEKİ KARAR: react');
   });
+
+  // docs/05: kapı düşünce "tam çıktı worker'a döner". Görev kaydındaki
+  // reject_reason bu yüzden okunmalı; okunmayınca yeniden denenen worker'ın
+  // prompt'u ilk denemeyle AYNI oluyor ve aynı hatayı üretiyordu.
+  it('onceki denemenin reddini prompta tasir', async () => {
+    const result = await service({
+      loadPriorFailure: async () => ({
+        attempt: 1,
+        reason: "tsc --noEmit düştü: src/Board.tsx(4,7): error TS2304: Cannot find name 'Squares'.",
+      }),
+    }).load({ brief, attempt });
+
+    const text = result.snapshot.promptMessages.map((m) => m.content).join('\n');
+    expect(text).toContain('TS2304');
+  });
+
+  it('onceki hata yoksa prompt buyumez', async () => {
+    const withoutPort = await service().load({ brief, attempt });
+    const withEmpty = await service({ loadPriorFailure: async () => null }).load({ brief, attempt });
+    expect(withEmpty.snapshot.promptMessages).toHaveLength(withoutPort.snapshot.promptMessages.length);
+  });
 });

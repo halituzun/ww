@@ -17,6 +17,11 @@ export interface AssembleInput {
   template: string;
   /** docs/06 Context Builder çıktısı; hafızadan derlenen bağlam. */
   contextPack: string;
+  /**
+   * Bu görevin ÖNCEKİ denemesi neden düştü (docs/05: "Hata → tam çıktı
+   * worker'a döner"). Verilmezse bölüm hiç oluşmaz.
+   */
+  priorFailure?: { readonly attempt: number; readonly reason: string } | undefined;
 }
 
 const PLACEHOLDER = /\{\{([a-z_]+)\}\}/g;
@@ -99,9 +104,29 @@ export function assemblePromptMessages(input: AssembleInput): PromptMessage[] {
     `Token bütçesi: ${brief.tokenBudget === 0 ? 'sınırsız' : brief.tokenBudget}`,
   ].join('\n\n');
 
-  return [
+  const messages: PromptMessage[] = [
     { role: 'system', content: system },
     { role: 'user', content: task },
     { role: 'user', content: scope },
   ];
+
+  // ÖNCEKİ DENEMENİN HATASI. Bu bölüm yokken yeniden denenen worker'ın
+  // prompt'u ilk denemeyle aynıydı: göremediği bir hatayı düzeltmesi
+  // bekleniyor, aynı çıktıyı üretiyor ve üç denemenin biri her turda boşa
+  // gidiyordu. Sebep boşsa bölüm HİÇ yazılmaz — "başarısız oldun" deyip
+  // nedenini söylememek worker'ı yanlış yönlendirir.
+  const priorReason = input.priorFailure?.reason.trim() ?? '';
+  if (input.priorFailure !== undefined && priorReason !== '') {
+    messages.push({
+      role: 'user',
+      content: [
+        `Önceki deneme (${input.priorFailure.attempt}. deneme) başarısız oldu.`,
+        'Aynı çözümü tekrar üretme; aşağıdaki hatayı gider:',
+        '',
+        priorReason,
+      ].join('\n'),
+    });
+  }
+
+  return messages;
 }
