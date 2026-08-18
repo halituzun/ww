@@ -27,8 +27,10 @@
     "symbol": "packages/db/src/redis.ts:subscribeEvents",
     "reason": "canlı besleme ClickHouse imleçli yoklamayla akar (events.gateway); pub/sub bilinçli olarak kullanılmıyor"
   },
-  "packages/db/src/redis.ts:transferFileLocks",
-  "packages/db/src/repositories/prompts.ts:getActivePromptAsOf",
+  {
+    "symbol": "packages/db/src/repositories/prompts.ts:getActivePromptAsOf",
+    "reason": "tasarım prompt sürümünü AGENT SATIRINDA sabitler (prompt_name/prompt_version) ve brief mühürlemesi getPromptSourceRefAsOf ile zamana bağlı okur; 'o an aktif olan' sorgusunun üretimde yeri yok. Çağrı yeri uydurmak, denetleyiciyi susturmak için kod yazmak olurdu."
+  },
   {
     "symbol": "packages/db/src/testutil.ts:clickhouseUp",
     "reason": "test altyapısı; üretimden çağrılmaması doğrudur"

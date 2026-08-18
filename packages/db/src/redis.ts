@@ -841,17 +841,6 @@ export async function releaseFileLockUnderTaskLease(
   return decodeRedisBoolean(result, 'Redis task-fenced file lock release');
 }
 
-const TRANSFER_FILE_LOCKS_LUA = `
-for index = 1, #KEYS do
-  if redis.call('get', KEYS[index]) ~= ARGV[1] then
-    return 0
-  end
-end
-for index = 1, #KEYS do
-  redis.call('set', KEYS[index], ARGV[2], 'EX', ARGV[3])
-end
-return 1
-`;
 
 const TRANSFER_OR_ACQUIRE_FILE_LOCKS_LUA = `
 for index = 1, #KEYS do
@@ -876,24 +865,6 @@ function assertCanonicalFileLockSet(keys: readonly FileLockKey[]): void {
 }
 
 /** Atomically moves a complete, canonically sorted file-lock set to a new owner. */
-export async function transferFileLocks(
-  r: WwRedis,
-  keys: readonly FileLockKey[],
-  fromOwner: string,
-  toOwner: string,
-  ttlSec: number,
-): Promise<boolean> {
-  nonEmpty(fromOwner, 'fromOwner');
-  nonEmpty(toOwner, 'toOwner');
-  positiveInteger(ttlSec, 'ttlSec');
-  assertCanonicalFileLockSet(keys);
-  if (keys.length === 0 || fromOwner === toOwner) return true;
-  const result: unknown = await r.eval(TRANSFER_FILE_LOCKS_LUA, {
-    keys: [...keys],
-    arguments: [fromOwner, toOwner, String(ttlSec)],
-  });
-  return decodeRedisBoolean(result, 'Redis file lock transfer');
-}
 
 /**
  * Atomically reconciles a complete lock set after handoff or Redis loss.
