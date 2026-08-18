@@ -9,6 +9,7 @@ export const TOOL_NAMES = [
   // olduğunu göremiyor, canlı koşuda "Workspace'te hangi dosyalar mevcut?"
   // diye sorup duruyordu.
   'list_dir',
+  'search_code',
   'write_file',
   'edit_file',
   'run_command',

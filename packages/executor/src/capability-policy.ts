@@ -28,6 +28,12 @@ export const EXECUTOR_TOOL_CAPABILITIES: Readonly<Record<ToolName, ToolCapabilit
     allowedRoles: ['worker', 'verifier'], allowedTaskStatuses: ACTIVE_TOOL_STATUSES,
     requiresDeclaredTarget: false, requiresFileLock: false, replaySafety: 'replay_safe',
   }),
+  search_code: capability({
+    // `list_dir` gibi GÖRME aracıdır; hedef listesi görmeyi sınırlamaz.
+    toolName: 'search_code', rule: { ruleId: 'TOOL-002', ruleVersion: 1 },
+    allowedRoles: ['worker', 'verifier'], allowedTaskStatuses: ACTIVE_TOOL_STATUSES,
+    requiresDeclaredTarget: false, requiresFileLock: false, replaySafety: 'replay_safe',
+  }),
   write_file: capability({
     toolName: 'write_file', rule: { ruleId: 'TOOL-003', ruleVersion: 1 },
     allowedRoles: ['worker'], allowedTaskStatuses: ['working'],

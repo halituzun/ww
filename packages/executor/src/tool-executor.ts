@@ -296,6 +296,14 @@ export class ToolExecutor {
         const files = await workspace.listFiles(requested);
         return { path: requested === '' ? '.' : requested, files, count: files.length };
       }
+      case 'search_code': {
+        // Worker yalnızca adını bildiği dosyayı okuyabiliyordu; "bu fonksiyon
+        // nerede tanımlı" sorusunun cevabı yoktu ve her arama kullanıcıya
+        // sorulan bir soruya dönüşüyordu.
+        const pattern = text(args, 'pattern');
+        const matches = await workspace.searchText(pattern);
+        return { pattern, matches, count: matches.length };
+      }
       case 'write_file': {
         const relativePath = workspace.assertDeclared(text(args, 'path'), context.brief.targetFiles);
         const content = text(args, 'content');

@@ -187,6 +187,51 @@ export class WorkspacePaths {
     return Object.freeze(out);
   }
 
+  /**
+   * Çalışma alanında metin arar (docs/05 → `search_code`).
+   *
+   * NEDEN VAR: worker yalnızca adını bildiği dosyayı okuyabiliyordu; "bu
+   * fonksiyon nerede tanımlı" sorusunun cevabı yoktu ve her arama bir
+   * kullanıcı sorusuna dönüşüyordu.
+   *
+   * SINIR (dürüstçe): docs/05 ripgrep sarmalayıcısı diyor ama sandbox'ta
+   * bağımlılık kurulamaz; arama bağımlılıksız ve SINIRLIDIR — büyük/ikili
+   * dosyalar atlanır, sonuç sayısı sınırlanır. Sınırsız arama prompt'u boğar.
+   */
+  async searchText(
+    pattern: string,
+    options: Readonly<{ maxResults?: number; maxFileBytes?: number }> = {},
+  ): Promise<readonly { readonly path: string; readonly line: number; readonly text: string }[]> {
+    if (pattern.trim() === '') {
+      throw new ExecutorError('INVALID_ARGUMENTS', 'search_code deseni boş olamaz');
+    }
+    const maxResults = options.maxResults ?? 100;
+    const maxFileBytes = options.maxFileBytes ?? 512_000;
+    const files = await this.listFiles('', 2_000);
+    const needle = pattern.toLowerCase();
+    const out: { path: string; line: number; text: string }[] = [];
+
+    for (const file of files) {
+      if (out.length >= maxResults) break;
+      let content: string;
+      try {
+        content = await this.readText(file, 0, maxFileBytes);
+      } catch {
+        // Okunamayan dosya aramayı DURDURMAZ; sessizce atlanır.
+        continue;
+      }
+      // İkili dosyada eşleşme aramak anlamsız çıktı üretir.
+      if (content.includes('\u0000')) continue;
+      content.split('\n').forEach((line, index) => {
+        if (out.length >= maxResults) return;
+        if (!line.toLowerCase().includes(needle)) return;
+        // Uzun satır prompt'u boğar; kesilir.
+        out.push({ path: file, line: index + 1, text: line.trim().slice(0, 300) });
+      });
+    }
+    return Object.freeze(out);
+  }
+
   async resolveForWrite(relativePath: string): Promise<string> {
     await this.#ensureInitialized();
     const normalized = normalizeWorkspaceRelativePath(relativePath);

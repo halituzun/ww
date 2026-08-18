@@ -67,3 +67,46 @@ describe('WorkspacePaths.listFiles', () => {
     expect((await workspace(files).paths.listFiles('', 5))).toHaveLength(5);
   });
 });
+
+describe('WorkspacePaths.searchText', () => {
+  // ASIL KUSUR: worker yalnızca adını bildiği dosyayı okuyabiliyordu;
+  // "bu fonksiyon nerede tanımlı" sorusunun cevabı yoktu.
+  it('eslesen satiri dosya ve satir numarasiyla bulur', async () => {
+    const { paths } = workspace({ 'src/a.ts': 'const x = 1;\nexport function hedef() {}\n' });
+    const hits = await paths.searchText('hedef');
+    expect(hits).toEqual([{ path: 'src/a.ts', line: 2, text: 'export function hedef() {}' }]);
+  });
+
+  it('buyuk kucuk harf ayirmaz', async () => {
+    const { paths } = workspace({ 'src/a.ts': 'export function Hedef() {}\n' });
+    expect(await paths.searchText('hedef')).toHaveLength(1);
+  });
+
+  it('birden fazla dosyada arar', async () => {
+    const { paths } = workspace({ 'src/a.ts': 'ara', 'src/b.ts': 'ara' });
+    expect((await paths.searchText('ara')).map((h) => h.path)).toEqual(['src/a.ts', 'src/b.ts']);
+  });
+
+  it('eslesme yoksa bos doner', async () => {
+    const { paths } = workspace({ 'src/a.ts': 'x' });
+    expect(await paths.searchText('yok')).toEqual([]);
+  });
+
+  it('bos deseni reddeder', async () => {
+    const { paths } = workspace({ 'src/a.ts': 'x' });
+    await expect(paths.searchText('  ')).rejects.toThrow(/boş olamaz/);
+  });
+
+  // Sınırsız sonuç prompt'u boğar ve token bütçesini yakar.
+  it('sonuc sayisini sinirlar', async () => {
+    const files: Record<string, string> = {};
+    for (let index = 0; index < 20; index += 1) files[`src/f${index}.ts`] = 'ara';
+    expect(await workspace(files).paths.searchText('ara', { maxResults: 5 })).toHaveLength(5);
+  });
+
+  // Uzun satır prompt'u boğar.
+  it('cok uzun satiri keser', async () => {
+    const { paths } = workspace({ 'src/a.ts': `ara${'x'.repeat(500)}` });
+    expect((await paths.searchText('ara'))[0]!.text.length).toBeLessThanOrEqual(300);
+  });
+});
