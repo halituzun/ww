@@ -140,4 +140,37 @@ describe.skipIf(probe === undefined || probeRedis === undefined)('RecoveryServic
     // Sessiz kalmaz: engellenen görev raporlanır.
     expect(result.blockedTaskIds).toEqual([plansizGorev]);
   });
+
+  // CANLI VERİDE BULUNDU: 4 görev `approved` durumunda KİLİTLENMİŞ (commit
+  // yok, attempt 0, 2026-08-17'den beri). Sebep bir çift eksiklik:
+  //   - FSM'de `approved`'ın TEK çıkışı `commit_completed`;
+  //   - kurtarma taraması `['assigned','working','verifying','testing']`e
+  //     bakıyor, `approved` listede YOK.
+  // Süreç kapı geçtikten sonra, commit'ten önce ölürse görev sonsuza dek
+  // orada kalır: kurtarma ona bakmaz, kuyrukta da değildir.
+  it('approvedda kilitlenmis gorevi kurtarir', async () => {
+    const kilitliProje = randomUUID() as EntityId;
+    const kilitliGorev = randomUUID() as EntityId;
+    await ch.insert({
+      table: 'tasks',
+      values: [{
+        task_id: kilitliGorev, project_id: kilitliProje, plan_id: randomUUID(),
+        parent_task_id: NIL_UUID, title: 'kapı geçti, commit yok', description: '',
+        acceptance_criteria: [], status: 'approved', priority: 0,
+        issuer_agent_id: randomUUID(), worker_agent_id: randomUUID(),
+        verifier_agent_id: randomUUID(), group: 'coding', depends_on: [],
+        target_files: ['src/a.ts'], attempt: 0, max_attempts: 3,
+        delegation_depth: 0, token_budget: 0, tokens_spent: '0', commit_hash: '',
+        result_summary: '', reject_reason: '', task_brief_id: NIL_UUID,
+        assignment_attempt_id: NIL_UUID, created_at: now, updated_at: now, version: '1',
+      }],
+      format: 'JSONEachRow',
+    });
+
+    const afterGrace = new Date(Date.parse(now) + 120_000).toISOString();
+    const service = new RecoveryService(ch, redis, { now: () => afterGrace });
+    const result = await service.recoverProject(kilitliProje);
+
+    expect(result.requeuedTaskIds).toContain(kilitliGorev);
+  });
 });

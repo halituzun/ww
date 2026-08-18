@@ -44,7 +44,17 @@ export interface RecoveryResult {
   readonly blockedTaskIds: readonly EntityId[];
 }
 
-const DEFAULT_STATUSES: readonly TaskRow['status'][] = ['assigned', 'working', 'verifying', 'testing'];
+// `approved` DA KURTARILIR. Canlı veride 4 görev orada kilitli bulundu
+// (commit yok, attempt 0). Sebep bir çift eksiklik: FSM'de `approved`'ın tek
+// çıkışı `commit_completed`, ve bu liste `approved`'ı içermiyordu. Süreç kapı
+// geçtikten sonra commit'ten ÖNCE ölürse görev sonsuza dek orada kalıyordu:
+// kurtarma ona bakmaz, kuyrukta da değildir, hiçbir fren de tetiklenmez.
+//
+// docs/07 kurtarma kuralı zaten bunu söylüyor: "yarım kalan görevler queued'a
+// düşürülür (yazılan dosyalar git'te, yarım iş commit'lenmemiştir)".
+const DEFAULT_STATUSES: readonly TaskRow['status'][] = [
+  'assigned', 'working', 'verifying', 'testing', 'approved',
+];
 
 function staleHeartbeat(redis: WwRedis, key: string): Promise<boolean> {
   return redis.pTTL(key).then((ttl: number) => ttl < 0);
