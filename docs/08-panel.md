@@ -20,6 +20,14 @@
 
 ## Genel Yerleşim
 
+*(Karar K6 — panel dili Türkçe. 2026-08-18: görev durumları panelde HAM
+İNGİLİZCE kimlik olarak basılıyordu (`queued`, `waiting_user`); iç
+tanımlayıcının kullanıcı yüzeyine sızması, anlatıcının ham olay adı
+basmasıyla aynı kusurdur. `taskStatusLabel` eklendi ve kapsamı bir TESTLE
+sabitlendi: yeni bir durum eklenip etiketi yazılmazsa test düşer. Bilinmeyen
+durumda ad KORUNUR — anlamadığı bir durumu Türkçeleştirmek kullanıcıya
+olmayan bir anlam verir.)*
+
 React + Vite + zustand + React Flow + Monaco. Sol dikey menü, üstte proje
 seçici + kontör rozeti + bildirim zili.
 

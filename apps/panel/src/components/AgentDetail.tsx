@@ -1,5 +1,6 @@
 // Agent geçmişi yan paneli — SALT GÖRÜNÜM (docs/08 → "düğüme tık → yan
 // panelde agent geçmişi: görevleri, mesajları, harcadığı token").
+import { taskStatusLabel } from '../services/task-status.js';
 import {
   useAgentDetailViewModel, type AgentDetailViewModelPorts,
 } from '../viewmodels/useAgentDetailViewModel.js';
@@ -45,7 +46,7 @@ export function AgentDetail({ projectId, agentId, ports }: {
             <li key={`${task.taskId}:${task.relation}`}>
               <span className="pill">{RELATION_LABEL[task.relation] ?? task.relation}</span>
               <strong>{task.title}</strong>
-              <span className={`pill pill--${task.status}`}>{task.status}</span>
+              <span className={`pill pill--${task.status}`}>{taskStatusLabel(task.status)}</span>
             </li>
           ))}
         </ul>

@@ -3,6 +3,7 @@
 // NEDEN AYRI: App.tsx'in 88. satırı 2251 KARAKTERDİ; tüm sekmelerin gövdesi
 // tek bir ternary zincirinde duruyordu. Satır sayısı düşmüştü ama monolit yok
 // olmamış, sıkışmıştı — okunamaz bir satır, uzun bir dosyadan iyi değildir.
+import { taskStatusLabel } from '../services/task-status.js';
 import type { Task } from '../services/projects.js';
 
 export function TaskListPanel({ tasks, statusCounts }: {
@@ -19,14 +20,14 @@ export function TaskListPanel({ tasks, statusCounts }: {
     <>
       <div className="metrics">
         {Object.entries(statusCounts).map(([key, count]) => (
-          <div key={key}><strong>{count}</strong><span>{key}</span></div>
+          <div key={key}><strong>{count}</strong><span>{taskStatusLabel(key)}</span></div>
         ))}
       </div>
       <ul className="task-list">
         {tasks.map((task) => (
           <li key={task.task_id}>
             <div><strong>{task.title}</strong><small>{task.task_id}</small></div>
-            <span className={`pill pill--${task.status}`}>{task.status}</span>
+            <span className={`pill pill--${task.status}`}>{taskStatusLabel(task.status)}</span>
           </li>
         ))}
       </ul>

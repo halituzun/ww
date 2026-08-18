@@ -16,15 +16,18 @@ describe('TaskListPanel', () => {
       <TaskListPanel tasks={tasks} statusCounts={{ done: 1, queued: 1 }} />,
     );
     // Durum adı hem sayaçta hem rozette geçer; sayaç KUTUSUNA bakılır.
+    // Etiketler TÜRKÇE (karar K6): ham İngilizce kimlik kullanıcıya sızmaz.
     const metrics = container.querySelector('.metrics');
-    expect(metrics?.textContent).toContain('done');
-    expect(metrics?.textContent).toContain('queued');
+    expect(metrics?.textContent).toContain('bitti');
+    expect(metrics?.textContent).toContain('kuyrukta');
   });
 
   it('her gorevi basligi ve durumuyla listeler', () => {
     render(<TaskListPanel tasks={tasks} statusCounts={{}} />);
     expect(screen.getByText('Renk yardımcısı')).toBeTruthy();
     expect(screen.getByText('Tahta bileşeni')).toBeTruthy();
+    // Durum rozetleri de Türkçe.
+    expect(screen.getByText('bitti')).toBeTruthy();
   });
 
   // BOŞ DURUM: docs/09 ui_audit "boş durum tasarlanmış mı" diye soruyor.
