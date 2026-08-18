@@ -109,9 +109,19 @@ async function runAssignedLifecycle(input: Phase1OrchestratorInput & { brief: Ta
       // atlandığı için yeniden deneme "reassignment working task gerektirir"
       // ile düşüyordu — yani verifier reddettiğinde görev ASLA yeniden
       // denenemiyordu.
+      // Gerekçeler `tasks.reject_reason`'a yazılır ve sonraki denemenin
+      // prompt'una girer. Geçilmediğinde geçiş katmanı sabit "verifier işi
+      // reddetti" yazıyordu: reddedilen worker neyi düzelteceğini asla
+      // öğrenemiyor ve aynı işi tekrar üretiyordu. HEPSİ taşınır — yalnız
+      // ilkini almak diğer ihlalleri gizler.
+      const verdictReason = checked.verdict.reasons
+        .map((reason) => reason.message.trim())
+        .filter((message) => message !== '')
+        .join('\n');
       await input.scheduler.transition({
         taskId: input.taskId, attempt, action: 'verifier_rejected',
         evidenceRefs: checked.verdict.evidenceRefs,
+        ...(verdictReason === '' ? {} : { resultSummary: verdictReason }),
       });
       attempt = await input.scheduler.reassign({ taskId: input.taskId, reason: 'retry_after_rejection', evidenceRefs: checked.verdict.evidenceRefs });
       continue;

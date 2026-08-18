@@ -34,6 +34,46 @@ describe('Phase 1 orchestrator', () => {
     expect(s.calls).toEqual(['start_work', 'waiting_user']);
   });
 
+  // Doğrulayıcının GEREKÇESİ worker'a ulaşmalı. Ulaşmıyordu: orkestratör
+  // yalnızca evidenceRefs geçiyor, geçiş katmanı da sebebi bulamayınca sabit
+  // "verifier işi reddetti" yazıyordu. Yani reddedilen worker neyi
+  // düzelteceğini asla öğrenemiyor, aynı işi tekrar üretiyordu.
+  it('doğrulayıcının gerekçesini geçişe tasir', async () => {
+    const seen: (string | undefined)[] = [];
+    const s = scheduler({
+      transition: async ({ action, resultSummary }) => {
+        if (action === 'verifier_rejected') seen.push(resultSummary);
+        return { status: 'working' };
+      },
+    });
+    let run = 0;
+    const runtime: Phase1RuntimePort = {
+      work: async () => ({ kind: 'report', summary: 'ok' }),
+      verify: async () => ({
+        verdict: run++ === 0
+          ? {
+            decision: 'reject' as const,
+            reasons: [
+              { message: 'testler eksik: Board.test.tsx yok', evidenceRefs: ['diff'] },
+              { message: 'MVVM ihlali: mantık View içinde', evidenceRefs: ['diff'] },
+            ],
+            evidenceRefs: ['diff'],
+            ruleRefs: [{ ruleId: 'TASK-001', ruleVersion: 1 }],
+          }
+          : verdict('approve'),
+        diff: 'diff',
+      }),
+    };
+
+    await runPhase1Orchestrator({ taskId: id(2), brief, scheduler: s, runtime });
+
+    expect(seen).toHaveLength(1);
+    // HER gerekçe taşınır: yalnız ilkini almak diğer ihlalleri gizler ve
+    // worker tek tek düzelterek denemelerini tüketir.
+    expect(seen[0]).toContain('Board.test.tsx');
+    expect(seen[0]).toContain('MVVM ihlali');
+  });
+
   it('ret sonrası yeni attempt ile düzeltme yapıp temiz terminale ulaşır', async () => {
     const s = scheduler();
     let run = 0;
