@@ -10,6 +10,7 @@ export const TOOL_NAMES = [
   // diye sorup duruyordu.
   'list_dir',
   'search_code',
+  'create_subtask',
   'write_file',
   'edit_file',
   'run_command',

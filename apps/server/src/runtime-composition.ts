@@ -1,4 +1,6 @@
-import { CommunicationWakeupPublisher, getFencedLease, getTaskBrief, taskLockKey } from '@ww/db';
+import {
+  CommunicationWakeupPublisher, enqueueTask, getFencedLease, getLatestTask, getTaskBrief, taskLockKey,
+} from '@ww/db';
 import type { EntityId } from '@ww/shared';
 import { applyLateBinding, type LateBinder } from './late-bind-runtime.js';
 import { internalServiceTokenMap } from './internal-service-tokens.js';
@@ -25,6 +27,7 @@ import {
   type AgentCapabilityBinding,
 } from '@ww/agents';
 import {
+  DelegationService,
   AssignmentService,
   TaskBriefService,
   TaskCausalLog,
@@ -65,6 +68,7 @@ import {
 } from '@ww/scheduler';
 import { InboxPollingModule, inboxWorkerDrainPort } from './inbox-poll.module.js';
 import type { DynamicModule } from '@nestjs/common';
+import { createAndEnqueueSubtask } from './delegation.service.js';
 
 function observeWakeupPublishError(error: Error, wakeup: { readonly recipient: unknown; readonly messageId: string }): void {
   console.warn(JSON.stringify({
@@ -406,6 +410,34 @@ export function createPhase9RuntimeComposition(
     sandboxInputs: input.executor.sandboxInputs,
     sandbox: input.executor.sandbox,
     gitWorkspace,
+    // docs/03 delegasyon: worker alt görev açabilir. Sınırlar (derinlik,
+    // bütçe, döngü) DelegationService'te uygulanır; executor yalnızca iletir.
+    delegation: {
+      createSubtask: async (subtask) => {
+        const parent = await getLatestTask(input.ch, input.projectId, subtask.parentTaskId);
+        if (parent === null) throw new Error(`parent task bulunamadi: ${subtask.parentTaskId}`);
+        // Alt görevi AÇAN, işi yapan worker'dır; iz "kim iş verdi" sorusunu
+        // cevaplayabilmelidir.
+        const created = await createAndEnqueueSubtask({
+          createSubtask: (value) =>
+            new DelegationService(input.ch).createSubtask(value as never) as never,
+          enqueue: async (taskProjectId, taskId) => {
+            await enqueueTask(input.redis, `ww:queue:${taskProjectId}`, taskId);
+          },
+        }, {
+          parentTaskId: subtask.parentTaskId,
+          issuerAgentId: parent.worker_agent_id,
+          title: subtask.title,
+          description: subtask.description,
+          acceptanceCriteria: [...subtask.criteria],
+          targetFiles: [...subtask.files],
+          group: parent.group,
+          budget: subtask.budget,
+          dependencies: [],
+        });
+        return { taskId: created.task_id, projectId: created.project_id } as never;
+      },
+    },
   });
 
   const inboxWorker = new InboxWorker(

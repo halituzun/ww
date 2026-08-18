@@ -34,6 +34,18 @@ export const EXECUTOR_TOOL_CAPABILITIES: Readonly<Record<ToolName, ToolCapabilit
     allowedRoles: ['worker', 'verifier'], allowedTaskStatuses: ACTIVE_TOOL_STATUSES,
     requiresDeclaredTarget: false, requiresFileLock: false, replaySafety: 'replay_safe',
   }),
+  create_subtask: capability({
+    // Alt görev açmak DURUM DEĞİŞTİRİR ve kaynak harcar; yalnızca çalışan
+    // görevde ve worker rolünde açılabilir. Hedef dosya listesi ARAÇ
+    // ARGÜMANINDADIR, ebeveynin mühürlü listesi değil: alt görev başka
+    // dosyalara bakabilir (sınırları zamanlayıcı uygular).
+    toolName: 'create_subtask', rule: { ruleId: 'TASK-004', ruleVersion: 1 },
+    allowedRoles: ['worker'], allowedTaskStatuses: ['working'],
+    requiresDeclaredTarget: false, requiresFileLock: false,
+    // Aynı çağrı iki kez alt görev AÇMAMALIDIR; idempotency çağrı kimliğinden
+    // gelir ve tekrar güvenli sayılmaz.
+    replaySafety: 'non_replay_safe',
+  }),
   write_file: capability({
     toolName: 'write_file', rule: { ruleId: 'TOOL-003', ruleVersion: 1 },
     allowedRoles: ['worker'], allowedTaskStatuses: ['working'],

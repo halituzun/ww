@@ -118,6 +118,21 @@ export interface SubmitVerdictToolInput {
 }
 
 /** Communication owns envelopes and scheduler transition requests; executor owns neither. */
+/**
+ * Alt görev açma (docs/03 → delegasyon). Sınırlar (derinlik, bütçe, döngü)
+ * zamanlayıcıda uygulanır; executor yalnızca isteği iletir.
+ */
+export interface ExecutorDelegationPort {
+  createSubtask(input: Readonly<{
+    parentTaskId: string;
+    title: string;
+    description: string;
+    files: readonly string[];
+    criteria: readonly string[];
+    budget: number;
+  }>): Promise<JsonValue>;
+}
+
 export interface ExecutorCommunicationPort {
   askQuestion(input: AskQuestionToolInput): Promise<JsonValue>;
   reportResult(input: ReportResultToolInput): Promise<JsonValue>;

@@ -34,6 +34,7 @@ import type {
   ExecutorIntentPort,
   ExecutorSandboxInputPolicyPort,
   ExecutorToolIntent,
+  ExecutorDelegationPort,
 } from './ports.js';
 import { WorkspacePaths, normalizeWorkspaceRelativePath } from './workspace-paths.js';
 
@@ -91,6 +92,16 @@ function optionalInteger(args: Readonly<Record<string, unknown>>, key: string): 
   return Number(value);
 }
 
+/** İsteğe bağlı metin dizisi; yoksa boş dizi (uydurma değil, yokluk). */
+function optionalTextArray(
+  args: Readonly<Record<string, unknown>>,
+  key: string,
+): readonly string[] {
+  const value = args[key];
+  if (!Array.isArray(value)) return [];
+  return Object.freeze(value.filter((item): item is string => typeof item === 'string'));
+}
+
 function textArray(args: Readonly<Record<string, unknown>>, key: string): readonly string[] {
   const value = args[key];
   if (!Array.isArray(value) || !value.every((item) => typeof item === 'string')) {
@@ -139,6 +150,7 @@ export class ToolExecutor {
   readonly #registry: ToolRegistry;
   readonly #access: ExecutorAccessPort;
   readonly #communication: ExecutorCommunicationPort;
+  readonly #delegation: ExecutorDelegationPort | undefined;
   readonly #audit: ExecutorAuditPort;
   readonly #effects: ExecutorEffectPort;
   readonly #intents: ExecutorIntentPort;
@@ -157,11 +169,14 @@ export class ToolExecutor {
     sandboxInputs: ExecutorSandboxInputPolicyPort;
     sandbox: SandboxPort;
     gitWorkspace: Pick<GitWorkspace, 'diff'>;
+    /** Bağlı değilse create_subtask AÇIK hata verir; sessizce yok sayılmaz. */
+    delegation?: ExecutorDelegationPort;
     fenceHeartbeatMs?: number;
   }>) {
     this.#registry = input.registry ?? executorToolRegistry;
     this.#access = input.access;
     this.#communication = input.communication;
+    this.#delegation = input.delegation;
     this.#audit = input.audit;
     this.#effects = input.effects;
     this.#intents = input.intents;
@@ -336,6 +351,21 @@ export class ToolExecutor {
       case 'git_diff': {
         const result = await this.#git.diff(context.brief.projectId, workspace, context.brief.targetFiles);
         return { diff: result.diff, truncated: result.truncated };
+      }
+      case 'create_subtask': {
+        // docs/03 delegasyon: "her agent alt görev açabilir". Araç
+        // tanımlıydı ama hiç yazılmamıştı; worker işi bölemiyordu.
+        if (this.#delegation === undefined) {
+          throw new ExecutorError('INVALID_TOOL', 'create_subtask bu koşuda bağlı değil');
+        }
+        return await this.#delegation.createSubtask({
+          parentTaskId: context.brief.taskId,
+          title: text(args, 'title'),
+          description: text(args, 'description'),
+          files: textArray(args, 'files'),
+          criteria: optionalTextArray(args, 'criteria'),
+          budget: optionalInteger(args, 'budget') ?? 0,
+        });
       }
       case 'ask_question':
         return await this.#communication.askQuestion({
