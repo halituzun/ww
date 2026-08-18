@@ -1,3 +1,4 @@
+import { loadSignal } from './workspace-signals.js';
 import type { PanelTab } from '../services/tabs.js';
 // Çalışma alanı ekranının ViewModel'i (docs/09 MVVM).
 //
@@ -121,10 +122,20 @@ export function useWorkspaceViewModel() {
   useEffect(() => {
     let active = true;
     const load = () => {
-      void fetchProviders().then((next) => { if (active) setProviderList(next); });
+      // Hatalar YAKALANIR: bu uçların bir kısmı artık hatayı yutmuyor
+      // (bilinçli), ama burada yakalanmazsa panelde yakalanmamış promise
+      // reddi oluşur ve bildirim sinyalleri sessizce durur.
+      const warn = (name: string) => (reason: unknown) => {
+        console.warn(`[ww] ${name} sinyali alınamadı: ${String(reason)}`);
+      };
+      void loadSignal(fetchProviders, setProviderList, () => active, warn('sağlayıcı'));
       if (!projectId) return;
-      void fetchBudgetReport(projectId).then((next) => { if (active) setBudgetReport(next); });
-      void fetchAuditReport(projectId).then((next) => { if (active) setAuditReport(next); });
+      void loadSignal(
+        () => fetchBudgetReport(projectId), setBudgetReport, () => active, warn('kontör'),
+      );
+      void loadSignal(
+        () => fetchAuditReport(projectId), setAuditReport, () => active, warn('denetim'),
+      );
     };
     load();
     const timer = window.setInterval(load, SIGNAL_POLL_MS);
