@@ -56,6 +56,11 @@ Emülatör **host'ta** çalışır (Docker'a girmez); gereksinimler ve akış:
   command-line tools, en az bir AVD imajı, `ANDROID_HOME` tanımlı,
   Flutter SDK. Server açılışta `flutter doctor` / `emulator -list-avds`
   ile durumu tespit eder; eksikler Test sayfasında yönergeyle gösterilir.
+  *(2026-08-18: `/mobile-preview/avds` yalnız `emulator -list-avds` çağırıyordu
+  ve o ikili kurulu değilken uç düşüyordu — oysa `adb devices` gerçek bağlı
+  cihazları gösterebiliyor ve önizleme için AVD'ye gerek yok. Uç artık İKİSİNİ
+  de döner; hiçbiri yoksa SEBEBİYLE 503 verir. Panel tarafında emülatör
+  yüzeyi hâlâ YOK.)*
 - **Akış**:
   1. Panel "Emülatörü başlat" → `emulator -avd <ad>` süreci.
   2. `adb wait-for-device` → cihaz hazır.
