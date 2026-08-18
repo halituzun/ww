@@ -20,6 +20,7 @@ import { readDevPort, withDevPort, withoutDevPort } from './preview-port-store.j
 import { resolveWorkspaceRoot } from './runtime-context.js';
 import { SERVER_DATABASE, type ServerDatabase } from './orchestration.module.js';
 import { processLifecycleEvent } from './process-event.js';
+import { previewMustStop } from './preview-lifecycle.js';
 
 export class PreviewError extends Error {}
 
@@ -92,6 +93,11 @@ export class PreviewApplicationService implements OnModuleDestroy {
 
     const project = await getLatestProject(this.#database.ch, projectId);
     if (project === null) throw new PreviewError('proje bulunamadi');
+    // docs/10: duraklatılmış/arşivlenmiş projenin süreçleri kapatılır —
+    // yenisini AÇMAK da aynı kuralın ihlalidir.
+    if (previewMustStop(project.status)) {
+      throw new PreviewError(`proje ${project.status} durumunda: önizleme açılamaz`);
+    }
     const root = await this.#workspaceOf(projectId);
     if (!existsSync(root)) throw new PreviewError(`calisma alani bulunamadi: ${root}`);
     // Önce KAYITLI portu dene: süreç yeniden başlayınca portun değişmesi
@@ -159,6 +165,25 @@ export class PreviewApplicationService implements OnModuleDestroy {
       projectId, running: false, port: undefined, url: undefined,
       hasIndexHtml: false, logs: running?.ring.lines() ?? [],
     };
+  }
+
+
+  /**
+   * docs/10: "Proje duraklatılırsa/arşivlenirse süreçler kapatılır."
+   *
+   * Panel durumu yokladıkça uygulanır; ayrı bir zamanlayıcı kurmak yerine
+   * mevcut yoklamaya bağlamak, kuralı bir bileşenin ömrüne bağlamaz.
+   */
+  async enforceLifecycle(projectId: string): Promise<PreviewStatus> {
+    const running = this.#running.get(projectId);
+    if (running !== undefined) {
+      const project = await getLatestProject(this.#database.ch, projectId);
+      if (project !== null && previewMustStop(project.status)) {
+        this.#logger.log(`proje ${project.status}: önizleme kapatılıyor (${projectId})`);
+        return this.stop(projectId);
+      }
+    }
+    return this.status(projectId);
   }
 
   status(projectId: string): PreviewStatus {

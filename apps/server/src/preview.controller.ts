@@ -13,7 +13,10 @@ export class PreviewController {
   @Get()
   status(@Req() request: LocalSessionRequest, @Param('projectId') projectId: string) {
     parseLocalSession(request);
-    return this.preview.status(projectId);
+    // Durum yoklaması aynı zamanda docs/10 kuralını UYGULAR: duraklatılmış
+    // projenin süreci kapatılır. Ayrı bir zamanlayıcı kurmak yerine mevcut
+    // yoklamaya bağlamak, kuralı bir bileşenin ömrüne bağlamaz.
+    return this.preview.enforceLifecycle(projectId);
   }
 
   @Post('start')

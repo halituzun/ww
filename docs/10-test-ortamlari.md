@@ -77,7 +77,13 @@ Emülatör **host'ta** çalışır (Docker'a girmez); gereksinimler ve akış:
   kapanıyor, zaman çizelgesinde hiç iz kalmıyordu. Emülatör tarafı ve "çöktü"
   rozeti hâlâ eksik.)*
 - Aynı anda proje başına en çok 1 önizleme + 1 emülatör süreci (kaynak koruması).
-- Proje duraklatılırsa/arşivlenirse süreçler kapatılır.
+- Proje duraklatılırsa/arşivlenirse süreçler kapatılır. *(2026-08-18'de
+  uygulandı: hiçbir yer proje DURUMUNA bakmıyordu, duraklatılmış projenin dev
+  sunucusu çalışmaya devam edip port tutuyor ve bayat içerik sunuyordu. Kural
+  durum yoklamasına bağlandı — ayrı zamanlayıcı kurmak, kuralı bir bileşenin
+  ömrüne bağlamak olurdu. `completed` de kapatılır; `draft`/`gathering`/
+  `planning` KAPATILMAZ, çünkü proje henüz başlamamıştır, durdurulmuş
+  değildir.)*
 - Test ortamındayken kullanıcının verdiği emirler normal akışla PM'e gider;
   "gördüğüm şu ekranda X'i değiştir" türü emirler için aktif ekran bağlamı
   (hangi route/ekran açık) emre iliştirilir.
