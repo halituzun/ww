@@ -18,11 +18,10 @@ import {
   listLatestPlansByStatus,
 } from '@ww/db';
 import { NIL_UUID, type EntityId } from '@ww/shared';
-import { auditMvvmView } from './standards-audit.js';
+import { auditStandards } from './standards-audit.js';
 import {
-  correctiveTargetFiles,
-  correctiveTaskDescription,
-  viewModelPathFor,
+  correctiveDescriptionFor,
+  correctiveTargetFilesFor,
 } from './corrective-task.js';
 import { resolveTaskPlanId } from './task-plan-id.js';
 import { SERVER_DATABASE, type ServerDatabase } from './orchestration.module.js';
@@ -75,7 +74,10 @@ export class StandardsAuditApplicationService {
       proposed: await listLatestPlansByStatus(this.#database.ch, project.project_id, 'proposed'),
     });
 
-    const violations = files.flatMap((file) => auditMvvmView(file.filePath, file.content));
+    // Katmanın TAMAMI denetlenir: görünüm, viewmodel ve servis. Eskiden
+    // yalnız görünüme bakılıyordu, yani docs/09'un kuralları yazılıydı ama
+    // bir kısmı hiç uygulanmıyordu.
+    const violations = files.flatMap((file) => auditStandards(file.filePath, file.content));
     const now = new Date().toISOString();
     const findings: {
       findingId: EntityId; ruleId: string; filePath: string; correctiveTaskId: EntityId;
@@ -89,13 +91,13 @@ export class StandardsAuditApplicationService {
         plan_id: planId,
         parent_task_id: sourceTaskId ?? NIL_UUID,
         title: `Standart düzeltmesi: ${violation.filePath}`,
-        description: correctiveTaskDescription({
+        description: correctiveDescriptionFor({
+          ruleId: violation.ruleId,
           summary: violation.summary,
-          viewPath: violation.filePath,
-          viewModelPath: viewModelPathFor(violation.filePath),
+          filePath: violation.filePath,
           evidenceRefs: violation.evidenceRefs,
         }),
-        acceptance_criteria: [`${violation.filePath} docs/09 MVVM standardına uyar`],
+        acceptance_criteria: [`${violation.filePath} docs/09 ${violation.ruleId} kuralına uyar`],
         status: 'queued',
         // Düzeltme görevi standart ihlalidir: normal öncelikte kuyruğa girer.
         priority: 0,
@@ -107,7 +109,7 @@ export class StandardsAuditApplicationService {
         // View'ın YANINDA ViewModel dosyası da hedeftir: mantığı taşımak
         // ikinci dosyayı yazmayı gerektirir ve executor mühürlü hedef dışına
         // yazdırmaz — tek hedefle düzeltme fiilen imkânsızdı.
-        target_files: [...correctiveTargetFiles(violation.filePath)],
+        target_files: [...correctiveTargetFilesFor(violation.ruleId, violation.filePath)],
         attempt: 0,
         max_attempts: 3,
         // Düzeltme görevi kaynak görevin ALTINDA açılır; derinlik sınırı

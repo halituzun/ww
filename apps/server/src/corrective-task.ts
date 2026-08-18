@@ -51,3 +51,61 @@ export function correctiveTaskDescription(input: Readonly<{
 export function correctiveTargetFiles(viewPath: string): readonly string[] {
   return Object.freeze([viewPath, viewModelPathFor(viewPath)]);
 }
+
+/**
+ * Düzeltme görevinin hedef dosyaları, KURALA göre.
+ *
+ * NEDEN VAR: metin ve hedefler tamamen STD-001'e (View → ViewModel) göre
+ * yazılmıştı. Katman kurallarını (STD-002/003) körlemesine aynı yoldan
+ * geçirmek "src/viewmodels/useUseThing.ts oluştur" gibi SAÇMA bir görev
+ * üretirdi; worker onu ya yapamaz ya da yanlış dosya yaratır.
+ */
+export function correctiveTargetFilesFor(
+  ruleId: 'STD-001' | 'STD-002' | 'STD-003',
+  filePath: string,
+): readonly string[] {
+  // Katman ihlallerinde düzeltilecek dosya ihlalin KENDİSİDİR; ikinci bir
+  // dosya yaratmak gerekmez.
+  if (ruleId !== 'STD-001') return Object.freeze([filePath]);
+  return correctiveTargetFiles(filePath);
+}
+
+const LAYER_RULE: Record<'STD-002' | 'STD-003', readonly string[]> = {
+  'STD-002': [
+    'Kural: ViewModel katmanı DOM’a dokunmaz.',
+    '- document/querySelector/getElementById/innerHTML kullanımı View’a aittir.',
+    '- ViewModel yalnızca durumu ve yan etkileri tutar, değer döner.',
+  ],
+  'STD-003': [
+    'Kural: Servis katmanı UI framework’ünden bağımsızdır.',
+    '- Servis dosyası React (veya react-dom) import ETMEZ.',
+    '- React’a ihtiyaç duyan mantık ViewModel katmanına aittir.',
+  ],
+};
+
+/** Kurala uygun, KENDİ KENDİNE YETERLİ düzeltme görevi tanımı. */
+export function correctiveDescriptionFor(input: Readonly<{
+  ruleId: 'STD-001' | 'STD-002' | 'STD-003';
+  summary: string;
+  filePath: string;
+  evidenceRefs: readonly string[];
+}>): string {
+  if (input.ruleId === 'STD-001') {
+    return correctiveTaskDescription({
+      summary: input.summary,
+      viewPath: input.filePath,
+      viewModelPath: viewModelPathFor(input.filePath),
+      evidenceRefs: input.evidenceRefs,
+    });
+  }
+  return [
+    input.summary,
+    '',
+    `Kanıt: ${input.evidenceRefs.join(', ')}`,
+    '',
+    ...LAYER_RULE[input.ruleId],
+    '',
+    `Yapılacak: ${input.filePath} dosyasını bu kurala uydur. Davranışı değiştirme.`,
+    'Başka dosya okuma; ihtiyacın olan her şey bu tanımda yazılı.',
+  ].join('\n');
+}

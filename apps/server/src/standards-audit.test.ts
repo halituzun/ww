@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { auditMvvmView, isViewFile } from './standards-audit.js';
+import { auditStandards, auditMvvmView, isViewFile } from './standards-audit.js';
 
 const view = 'src/components/TodoList.tsx';
 
@@ -61,5 +61,65 @@ describe('auditMvvmView', () => {
   it('hem fetch hem durum varsa ikisini de bildirir', () => {
     const findings = auditMvvmView(view, 'const [a] = useState(0);\nfetch("/api");\n');
     expect(findings).toHaveLength(2);
+  });
+
+  // docs/09 satır 47-48 altı kontrol tanımlıyor; denetçi yalnız GÖRÜNÜM
+  // katmanına bakıyordu. `services/` ve `viewmodels/` hiç denetlenmiyordu:
+  // yani standardın üçte ikisi yazılı ama uygulanmıyordu.
+  describe('servis katmanı (docs/09: "Service React import etmez")', () => {
+    it('servis React import ederse bulgu acar', () => {
+      const found = auditStandards(
+        'apps/panel/src/services/projects.ts',
+        "import { useState } from 'react';\nexport const a = 1;\n",
+      );
+      expect(found).toHaveLength(1);
+      expect(found[0]!.ruleId).toBe('STD-003');
+      expect(found[0]!.summary).toContain('React');
+    });
+
+    it('React importu olmayan servis temizdir', () => {
+      expect(auditStandards(
+        'apps/panel/src/services/projects.ts',
+        "export async function load(): Promise<number> { return 1; }\n",
+      )).toEqual([]);
+    });
+
+    // Yorumdaki "react" kelimesi ihlal DEĞİLDİR.
+    it('yorumdaki react kelimesini ihlal saymaz', () => {
+      expect(auditStandards(
+        'apps/panel/src/services/projects.ts',
+        "// bu dosya react import etmez\nexport const a = 1;\n",
+      )).toEqual([]);
+    });
+  });
+
+  describe('viewmodel katmanı (docs/09: "ViewModel DOMa dokunmaz")', () => {
+    it('viewmodel DOMa dokunursa bulgu acar', () => {
+      const found = auditStandards(
+        'apps/panel/src/viewmodels/useThing.ts',
+        "export function useThing() { document.querySelector('#x'); }\n",
+      );
+      expect(found).toHaveLength(1);
+      expect(found[0]!.ruleId).toBe('STD-002');
+    });
+
+    // ASIL RİSK — YANLIŞ POZİTİF: `window.setInterval` bir ZAMANLAYICIDIR,
+    // DOM erişimi değil. Mevcut viewmodel'lerin çoğu onu kullanıyor; bunu
+    // ihlal saymak denetçiyi gürültüye boğar ve gürültü kapıyı aşındırır.
+    it('window.setInterval kullanimini ihlal SAYMAZ', () => {
+      expect(auditStandards(
+        'apps/panel/src/viewmodels/useThing.ts',
+        'export function useThing() { const t = window.setInterval(() => undefined, 5); return t; }\n',
+      )).toEqual([]);
+    });
+  });
+
+  it('gorunum kurallari eskisi gibi calisir', () => {
+    const found = auditStandards(
+      'apps/panel/src/components/Thing.tsx',
+      'export function Thing() { const [a] = useState(1); return a; }\n',
+    );
+    expect(found).toHaveLength(1);
+    expect(found[0]!.ruleId).toBe('STD-001');
   });
 });
