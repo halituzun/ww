@@ -55,6 +55,57 @@ function countOccurrences(text: string, name: string): number {
   return matches === null ? 0 : matches.length;
 }
 
+
+/**
+ * Sınıf METOTLARI da bu kapının konusudur. `MemoryService.appendSummary` tam
+ * bu kör noktadan saklandı: hiçbir çağıranı yoktu, kapı onu göremedi ve
+ * görülmediği için gerçek tabloya hiç yazılmadığı (kolonları yanlış eşlediği)
+ * da fark edilmedi.
+ *
+ * Üç yanlış-pozitif kaynağı bilinçli olarak elenir; gürültü kapıyı aşındırır:
+ *  - ARAYÜZ üyeleri metot değildir (yalnız `export class` gövdesi taranır).
+ *  - Nest CONTROLLER metotlarını framework yönlendirir, ad ile çağırmaz.
+ *  - Yaşam döngüsü kancalarını (onModuleInit vb.) framework çağırır.
+ */
+const CLASS_BODY = /^export (?:abstract )?class [\s\S]*?^}/gm;
+const CLASS_NAME = /^export (?:abstract )?class ([A-Za-z_][A-Za-z0-9_]*)/;
+const METHOD_PATTERN = /^ {2}(?:public\s+|readonly\s+)?(?:async\s+)?([a-zA-Z_][A-Za-z0-9_]*)\s*\(/gm;
+
+const FRAMEWORK_METHODS = new Set([
+  'onModuleInit', 'onModuleDestroy', 'onApplicationBootstrap',
+  'beforeApplicationShutdown', 'onApplicationShutdown', 'constructor',
+]);
+
+const CONTROL_KEYWORDS = new Set(['if', 'for', 'while', 'switch', 'catch', 'return', 'function']);
+
+const isController = (file: SourceFile): boolean =>
+  /\.controller\.tsx?$/.test(file.path) || /@Controller\(/.test(file.text);
+
+interface ClassMethod { readonly key: string; readonly name: string; readonly owner: SourceFile; }
+
+function classMethods(files: readonly SourceFile[]): ClassMethod[] {
+  const found: ClassMethod[] = [];
+  for (const file of files) {
+    if (isTest(file.path) || isBarrel(file.path) || isController(file)) continue;
+    for (const body of file.text.match(CLASS_BODY) ?? []) {
+      const className = CLASS_NAME.exec(body)?.[1];
+      if (className === undefined) continue;
+      for (const match of body.matchAll(METHOD_PATTERN)) {
+        const name = match[1]!;
+        if (FRAMEWORK_METHODS.has(name) || CONTROL_KEYWORDS.has(name)) continue;
+        found.push({ key: `${file.path}:${className}.${name}`, name, owner: file });
+      }
+    }
+  }
+  return found;
+}
+
+/** `.metot(` çağrısı — polimorfik çağrılar da aynı adı kullanır. */
+function countCalls(text: string, name: string): number {
+  const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return (text.match(new RegExp(`\\.${escaped}\\s*\\(`, 'g')) ?? []).length;
+}
+
 export function analyzeWiring(files: readonly SourceFile[]): WiringReport {
   const exports = new Map<string, SourceFile>();
   for (const file of files) {
@@ -88,6 +139,22 @@ export function analyzeWiring(files: readonly SourceFile[]): WiringReport {
     if (own > 1) continue;
     if (testing > 0) unwired.push(key);           // aranan desen
     else if (own > 0) untested.push(key);         // ölü kod
+  }
+
+  for (const method of classMethods(files)) {
+    let production = 0;
+    let testing = 0;
+    for (const file of files) {
+      // AYNI DOSYA da sayılır: aynı dosyadaki başka bir sınıfın çağırması
+      // gerçek bir bağlantıdır. Tanım satırı zaten `.ad(` desenine uymaz
+      // (nokta yoktur), o yüzden ayrıca elemek gerekmez.
+      const hits = countCalls(file.text, method.name);
+      if (hits === 0) continue;
+      if (isTest(file.path)) testing += hits;
+      else production += hits;
+    }
+    if (production > 0) continue;
+    if (testing > 0) unwired.push(method.key);
   }
 
   return { unwired: unwired.sort(), untested: untested.sort() };

@@ -137,3 +137,63 @@ describe('gerekçeli istisna', () => {
     expect(diff.added).toEqual(['a.ts:x']);
   });
 });
+
+// `appendSummary` tam bu kör noktadan saklandı: sınıf METODUYDU, hiçbir
+// çağıranı yoktu ve kapı onu göremedi. Görülmediği için de gerçek tabloya hiç
+// yazılmadığı (kolonları yanlış eşlediği) fark edilmemişti.
+describe('sınıf metotları', () => {
+  it('testte kullanilan ama uretimde cagrilmayan metodu bulur', () => {
+    const report = analyzeWiring([
+      { path: 'src/memory.ts', text: 'export class Memory {\n  async appendSummary(x: number) { return x; }\n}\n' },
+      { path: 'src/memory.test.ts', text: 'new Memory().appendSummary(1);\n' },
+    ]);
+    expect(report.unwired).toContain('src/memory.ts:Memory.appendSummary');
+  });
+
+  it('uretimde cagrilan metodu bulgu saymaz', () => {
+    const report = analyzeWiring([
+      { path: 'src/memory.ts', text: 'export class Memory {\n  async appendSummary(x: number) { return x; }\n}\n' },
+      { path: 'src/use.ts', text: 'declare const m: Memory; m.appendSummary(1);\n' },
+      { path: 'src/memory.test.ts', text: 'new Memory().appendSummary(1);\n' },
+    ]);
+    expect(report.unwired).not.toContain('src/memory.ts:Memory.appendSummary');
+  });
+
+  // AYNI DOSYADAKİ başka bir sınıfın çağırması gerçek bir bağlantıdır.
+  it('ayni dosyadaki cagriyi baglanti sayar', () => {
+    const report = analyzeWiring([
+      { path: 'src/preview.ts', text: 'export class Port {\n  screenshot() { return 1; }\n}\nexport class Service {\n  run(p: Port) { return p.screenshot(); }\n}\n' },
+      { path: 'src/preview.test.ts', text: 'new Port().screenshot();\n' },
+    ]);
+    expect(report.unwired).not.toContain('src/preview.ts:Port.screenshot');
+  });
+
+  // Nest controller metotlarını FRAMEWORK çağırır, ad ile değil. Onları ihlal
+  // saymak kapıyı gürültüye boğar ve gürültü kapıyı aşındırır.
+  it('controller metotlarini bulgu saymaz', () => {
+    const report = analyzeWiring([
+      { path: 'src/audit.controller.ts', text: '@Controller()\nexport class AuditController {\n  report() { return 1; }\n}\n' },
+      { path: 'src/audit.controller.test.ts', text: 'new AuditController().report();\n' },
+    ]);
+    expect(report.unwired).not.toContain('src/audit.controller.ts:AuditController.report');
+  });
+
+  it('framework yasam dongusu metotlarini bulgu saymaz', () => {
+    const report = analyzeWiring([
+      { path: 'src/pump.ts', text: 'export class Pump {\n  onModuleDestroy() { return 1; }\n}\n' },
+      { path: 'src/pump.test.ts', text: 'new Pump().onModuleDestroy();\n' },
+    ]);
+    // Sınıfın kendisi ayrı bir bulgu olabilir; burada METODUN bulgu
+    // sayılmadığını sabitliyoruz.
+    expect(report.unwired).not.toContain('src/pump.ts:Pump.onModuleDestroy');
+  });
+
+  // ARAYÜZ üyesi metot değildir; onu sınıf gövdesi sanmak sahte bulgu üretir.
+  it('interface uyelerini metot saymaz', () => {
+    const report = analyzeWiring([
+      { path: 'src/types.ts', text: 'export interface Provider {\n  embed(text: string): Promise<number[]>;\n}\n' },
+      { path: 'src/types.test.ts', text: 'declare const p: Provider; p.embed("x");\n' },
+    ]);
+    expect(report.unwired).not.toContain('src/types.ts:Provider.embed');
+  });
+});

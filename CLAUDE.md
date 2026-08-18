@@ -58,8 +58,13 @@ when it goes stale, the next session starts from the wrong place.
   and never push on a red gate.
 - `pnpm wiring:check` guards this repo's most expensive recurring defect:
   code that is written and tested but never called by any production path.
-  `wiring-baseline.json` is down to **11 entries and every one now carries a
-  reason** — if you add an entry without a reason, you are hiding a defect.
+  As of 2026-08-18 it also scans **class methods** — the blind spot that hid
+  `MemoryService.appendSummary` (no caller, and therefore never noticed that it
+  mapped its columns wrong). That expansion surfaced **17 genuine gaps** at
+  once, including the embedding provider docs/04 defines but nothing ever
+  builds. `wiring-baseline.json` is now **28 entries and every one carries a
+  reason**; the 17 new ones say plainly that they are real gaps awaiting
+  individual turns — the baseline makes them visible, it does not excuse them — if you add an entry without a reason, you are hiding a defect.
 - "Faz" and "Phase" are different scales: the roadmap has **Faz 0-6** (product
   milestones), while `docs/superpowers/plans/2026-08-14-faz-1-*` has its own
   internal **Phase 0-9** (implementation steps). Code names like
