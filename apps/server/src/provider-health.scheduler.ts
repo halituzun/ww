@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { Inject, Injectable, Logger, type OnModuleDestroy, type OnModuleInit } from '@nestjs/common';
 import { NIL_UUID } from '@ww/shared';
-import { getLatestApiProvider, listLatestApiProviders, upsertApiProvider } from '@ww/db';
+import { getLatestApiProvider, listLatestApiProviders, recordApiProviderHealth } from '@ww/db';
 import { Keystore, buildProviderRegistry } from '@ww/providers';
 import { SERVER_DATABASE, type ServerDatabase } from './orchestration.module.js';
 import {
@@ -54,7 +54,12 @@ export class ProviderHealthScheduler implements OnModuleInit, OnModuleDestroy {
       listProviders: () => listLatestApiProviders(ch),
       ping: (providerId) => this.#pingProvider(providerId),
       errorRate: (providerId) => this.#recentErrorRate(providerId),
-      persist: (row) => upsertApiProvider(ch, row),
+      // Sağlık taraması SADECE sağlık alanlarını yazar ve yazmadan hemen
+      // önce satırı tazeden okur; aksi halde ping süresince panelden yapılan
+      // bir değişikliği (yeni anahtar, pasifleştirme) sessizce geri alır.
+      persist: ({ providerId, healthStatus, checkedAt }) => recordApiProviderHealth(ch, {
+        provider_id: providerId, health_status: healthStatus, last_health_check: checkedAt,
+      }),
       recordUsage: (record) => this.#recordUsage(record),
       publish: (event) => this.#publish(event),
       onError: (providerId, reason) =>

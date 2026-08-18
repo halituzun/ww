@@ -2,7 +2,7 @@
 // Adaptörlerde healthCheck() vardı ama onu çağıran hiçbir şey yoktu; bu yüzden tüm
 // sağlayıcılar 'unknown' kalıyor ve fallback zincirinin sağlık sinyali ölüydü.
 import { evaluateHealth, type HealthStatus } from '@ww/providers';
-import type { ApiProviderRow, UpsertApiProviderInput } from '@ww/db';
+import type { ApiProviderRow } from '@ww/db';
 
 export interface PingResult {
   ok: boolean;
@@ -39,7 +39,15 @@ export interface HealthSweepPorts {
   ping: (providerId: string) => Promise<PingResult>;
   /** Son 5 dk hata oranı (0..1) — mv_provider_errors. Bilinmiyorsa undefined. */
   errorRate: (providerId: string) => Promise<number | undefined>;
-  persist: (row: UpsertApiProviderInput) => Promise<unknown>;
+  /**
+   * SADECE sağlık alanları. Tarama, kullanıcıya ait alanları (enabled,
+   * key_ref, models…) taşımaz: eskiden satırın tamamını taramanın başındaki
+   * anlık görüntüden yazıyordu ve o aralıkta panelden yapılan değişikliği
+   * sessizce geri alabiliyordu.
+   */
+  persist: (input: Readonly<{
+    providerId: string; healthStatus: string; checkedAt: string;
+  }>) => Promise<unknown>;
   /**
    * Ping'i api_usage'a yazar. Kayıt yoksa iki sinyal birden kaybolur:
    * kontör panosunda ping maliyeti ve mv_provider_errors'tan beslenen
@@ -92,17 +100,9 @@ export async function runHealthSweep(
         const checkedAt = ports.now();
         try {
           await ports.persist({
-            provider_id: provider.provider_id,
-            display_name: provider.display_name,
-            base_url: provider.base_url,
-            enabled: provider.enabled,
-            is_default: provider.is_default,
-            fallback_order: provider.fallback_order,
-            models: provider.models,
-            key_ref: provider.key_ref,
-            health_status: 'unknown',
-            last_health_check: checkedAt,
-            updated_at: checkedAt,
+            providerId: provider.provider_id,
+            healthStatus: 'unknown',
+            checkedAt,
           });
         } catch (reason) {
           ports.onError?.(provider.provider_id, reason);
@@ -145,17 +145,9 @@ export async function runHealthSweep(
       const changed = evaluation.status !== provider.health_status;
       const checkedAt = ports.now();
       await ports.persist({
-        provider_id: provider.provider_id,
-        display_name: provider.display_name,
-        base_url: provider.base_url,
-        enabled: provider.enabled,
-        is_default: provider.is_default,
-        fallback_order: provider.fallback_order,
-        models: provider.models,
-        key_ref: provider.key_ref,
-        health_status: evaluation.status,
-        last_health_check: checkedAt,
-        updated_at: checkedAt,
+        providerId: provider.provider_id,
+        healthStatus: evaluation.status,
+        checkedAt,
       });
       // Yayın SADECE değişimde: her dakika "hâlâ ok" bildirmek paneli boğar.
       // Ama damga her taramada tazelenir (yukarıda), yoksa ölmüş bir tarayıcı

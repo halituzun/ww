@@ -104,6 +104,12 @@ Normalizasyon kuralları:
   isteği başarıyla karşılamıştır. İkisi de 2026-08-18'de düzeltildi),
   art arda 3 ping hatası → `down`; ilk başarılı ping → `ok`.
 - Durum `api_providers.health_status`'a yazılır + pub/sub ile panele düşer
+  (yazma yolu `recordApiProviderHealth`: satırı YAZMADAN HEMEN ÖNCE tazeden
+  okur ve yalnızca sağlık alanlarını değiştirir. Tarama önceden satırın
+  tamamını, taramanın BAŞINDA okunmuş anlık görüntüden yazıyordu; ping
+  saniyeler sürdüğü için o aralıkta panelden girilen yeni anahtar ya da
+  yapılan pasifleştirme sessizce geri alınabiliyordu — "girdiğim anahtar
+  çalışmıyor" gibi görünen, aslında kaybolmuş bir yazma.)
   (API yönetim ekranında yeşil/sarı/kırmızı).
 
 ## Rol→Model Eşleme

@@ -65,3 +65,46 @@ export async function upsertApiProvider(ch: ClickHouseClient, input: UpsertApiPr
   if (observed.length === 0) throw new RepositoryConflictError(`provider yazimi okunamadi: ${id}`);
   return observed[0]!;
 }
+
+export interface RecordApiProviderHealthInput {
+  readonly provider_id: string;
+  readonly health_status: string;
+  readonly last_health_check: string;
+}
+
+/**
+ * Periyodik sağlık taramasının TEK yazma yolu (docs/04).
+ *
+ * NEDEN DAR: tarama eskiden satırın tamamını yazıyordu ve yazdığı alanlar
+ * taramanın BAŞINDA okunmuş anlık görüntüden geliyordu. Ping saniyeler
+ * sürdüğü için o aralıkta kullanıcının panelden yaptığı değişiklik
+ * (pasifleştirme, YENİ ANAHTAR) sessizce geri alınabiliyordu — "girdiğim
+ * anahtar çalışmıyor" gibi görünen, aslında kaybolmuş bir yazma.
+ *
+ * Burada kayıt YAZMADAN HEMEN ÖNCE tazeden okunur ve yalnızca sağlık alanları
+ * değişir. Pencere saniyelerden milisaniyelere iner ve tarama, kullanıcıya
+ * ait hiçbir alanı taşımaz.
+ *
+ * Sağlayıcı yoksa `null` döner: tarama sırasında silinmiş olabilir, bu bir
+ * hata değildir.
+ */
+export async function recordApiProviderHealth(
+  ch: ClickHouseClient,
+  input: RecordApiProviderHealthInput,
+): Promise<ApiProviderRow | null> {
+  const current = await getLatestApiProvider(ch, input.provider_id);
+  if (current === null) return null;
+  return await upsertApiProvider(ch, {
+    provider_id: current.provider_id,
+    display_name: current.display_name,
+    base_url: current.base_url,
+    enabled: current.enabled,
+    is_default: current.is_default,
+    fallback_order: current.fallback_order,
+    models: current.models,
+    key_ref: current.key_ref,
+    health_status: input.health_status,
+    last_health_check: input.last_health_check,
+    updated_at: input.last_health_check,
+  });
+}

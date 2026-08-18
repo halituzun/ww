@@ -28,7 +28,7 @@ describe('runHealthSweep', () => {
     const result = await runHealthSweep(ports({ persist }), new Map());
 
     expect(persist).toHaveBeenCalledTimes(1);
-    expect(persist.mock.calls[0]![0]).toMatchObject({ provider_id: 'deepseek', health_status: 'ok' });
+    expect(persist.mock.calls[0]![0]).toMatchObject({ providerId: 'deepseek', healthStatus: 'ok' });
     expect(result.get('deepseek')).toBe(0);
   });
 
@@ -40,7 +40,7 @@ describe('runHealthSweep', () => {
     for (let i = 0; i < 3; i += 1) state = await runHealthSweep(failing, state);
 
     expect(state.get('deepseek')).toBe(3);
-    expect(persist.mock.calls.at(-1)![0]).toMatchObject({ health_status: 'down' });
+    expect(persist.mock.calls.at(-1)![0]).toMatchObject({ healthStatus: 'down' });
   });
 
   it('pasif sağlayıcıyı hiç pinglemez', async () => {
@@ -61,7 +61,7 @@ describe('runHealthSweep', () => {
       ping: async () => ({ ok: false, latencyMs: 1, error: 'anahtar yok', fatal: true }),
     }), new Map());
 
-    expect(persist.mock.calls[0]![0]).toMatchObject({ health_status: 'down' });
+    expect(persist.mock.calls[0]![0]).toMatchObject({ healthStatus: 'down' });
     // Kalıcı hata art arda sayacını şişirmez; anahtar girilince tek pingle toparlar.
     expect(state.get('deepseek')).toBe(0);
   });
@@ -83,9 +83,9 @@ describe('runHealthSweep', () => {
     await runHealthSweep(stable, new Map());
     expect(persist).toHaveBeenCalledTimes(1);
     expect(persist.mock.calls[0]![0]).toMatchObject({
-      provider_id: 'deepseek',
-      health_status: 'ok',
-      last_health_check: '2026-08-17T00:00:00.000Z',
+      providerId: 'deepseek',
+      healthStatus: 'ok',
+      checkedAt: '2026-08-17T00:00:00.000Z',
     });
   });
 
@@ -99,7 +99,7 @@ describe('runHealthSweep', () => {
     });
 
     await runHealthSweep(degraded, new Map());
-    expect(persist.mock.calls[0]![0]).toMatchObject({ health_status: 'degraded' });
+    expect(persist.mock.calls[0]![0]).toMatchObject({ healthStatus: 'degraded' });
   });
 
   it('pasif sağlayıcı için damga tazelemez', async () => {
@@ -121,7 +121,7 @@ describe('runHealthSweep', () => {
   it('hata oranı eşiği aşarsa ping geçse bile degraded yazar', async () => {
     const persist = vi.fn(async () => undefined);
     await runHealthSweep(ports({ persist, errorRate: async () => 0.9 }), new Map());
-    expect(persist.mock.calls[0]![0]).toMatchObject({ health_status: 'degraded' });
+    expect(persist.mock.calls[0]![0]).toMatchObject({ healthStatus: 'degraded' });
   });
 
   // Bir sağlayıcının hatası taramanın kalanını düşürmemeli.
@@ -136,7 +136,7 @@ describe('runHealthSweep', () => {
       },
     }), new Map());
 
-    const written = persist.mock.calls.map((call) => (call[0] as { provider_id: string }).provider_id);
+    const written = persist.mock.calls.map((call) => (call[0] as { providerId: string }).providerId);
     expect(written).toContain('saglam');
   });
 
@@ -256,7 +256,7 @@ describe('runHealthSweep', () => {
     }), new Map());
 
     expect(persist).toHaveBeenCalledTimes(1);
-    expect(persist.mock.calls[0]![0]).toMatchObject({ provider_id: 'mock', health_status: 'unknown' });
+    expect(persist.mock.calls[0]![0]).toMatchObject({ providerId: 'mock', healthStatus: 'unknown' });
   });
 
   it('zaten unknown olan taklit saglayiciyi bosuna yazmaz', async () => {
