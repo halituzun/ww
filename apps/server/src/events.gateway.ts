@@ -4,9 +4,12 @@ import {
   EMPTY_EVENT_CURSOR, EntityIdSchema, decodeEventCursor, encodeEventCursor, type WsEnvelope,
 } from '@ww/shared';
 
+/** Bir turda gönderilen azami olay; panel de bu ölçekte bir pencere tutar. */
+const WINDOW = 200;
+
 /** Görevle ilgisi olmayan olaylar NIL taşır; panele boş dize gider. */
 const NIL_TASK = '00000000-0000-0000-0000-000000000000';
-import { listEvents, type ClickHouseClient } from '@ww/db';
+import { listEvents, listRecentEvents, type ClickHouseClient } from '@ww/db';
 import type { Server, WebSocket } from 'ws';
 import { SERVER_DATABASE, type ServerDatabase } from './orchestration.module.js';
 
@@ -94,9 +97,19 @@ export class EventsGateway implements OnModuleDestroy {
     // İmleç sorguya verilir. Aksi halde en ESKİ 200 olay gelir ve proje 200
     // olayı geçtiğinde akış kalıcı olarak susardı (panel bağlı görünüp donardı).
     const after = subscription.afterCursor;
-    const events = await listEvents(this.#ch, subscription.projectId, {
-      limit: 200, afterCursor: after,
-    });
+    // İMLEÇSİZ ABONELİK EN YENİDEN BAŞLAR. `listEvents` en ESKİ 200 olayı
+    // döndürüyordu ve panel her açılışta sıfır imleçle bağlanıyor: 4511
+    // olaylı bir projede canlı veriye ulaşmak saniyede 200 olayla ~23 saniye
+    // sürüyor, kullanıcı o süre boyunca ESKİ olayların akışını izliyordu.
+    // docs/08 istemcinin "snapshot high-water"dan başlamasını söyler.
+    //
+    // İmleç VARSA kaldığı yerden devam edilir: yeniden bağlanan panel
+    // kaçırdıklarını almalı, en yeniye atlamamalıdır.
+    const events = after === EMPTY_EVENT_CURSOR
+      ? await listRecentEvents(this.#ch, subscription.projectId, WINDOW)
+      : await listEvents(this.#ch, subscription.projectId, {
+          limit: WINDOW, afterCursor: after,
+        });
     for (const event of events) {
       const cursor = encodeEventCursor(event.created_at, event.event_id);
       if (cursor <= after) continue;

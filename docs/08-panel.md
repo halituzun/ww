@@ -192,6 +192,13 @@ type WsEventName =
   | 'notification';       // genel bildirimler
 ```
 
+- İmleçsiz abonelik EN YENİ pencereden başlar (snapshot high-water).
+  *(2026-08-18: `listEvents` en ESKİ 200 olayı döndürüyordu ve panel her
+  açılışta sıfır imleçle bağlanıyor. 4511 olaylı bir projede canlı veriye
+  ulaşmak saniyede 200 olayla ~23 saniye sürüyordu; kullanıcı o süre boyunca
+  yıllanmış olayların akışını "canlı" sanarak izliyordu. İmleç VERİLDİYSE
+  kaldığı yerden devam edilir — yeniden bağlanan panel kaçırdıklarını almalı,
+  en yeniye atlamamalıdır.)*
 - Abonelik REDDİ istemciye bildirilir: geçersiz proje kimliği ya da bozuk
   imleçte sunucu `subscribe.rejected` zarfı gönderir ve yoklamayı başlatmaz.
   *(2026-08-18: doğrulama istisnası sessizce yutuluyordu — soket açık kalıyor,
