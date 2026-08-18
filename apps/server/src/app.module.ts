@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { AgentsController } from './agents.controller.js';
 import { CanvasController } from './canvas.controller.js';
 import { ArtifactsController } from './artifacts.controller.js';
 import { PreviewController } from './preview.controller.js';
@@ -62,6 +63,7 @@ import {
     KnowledgeController,
     MobilePreviewController,
     DelegationController,
+    AgentsController,
     CanvasController,
     ArtifactsController,
     PreviewController,

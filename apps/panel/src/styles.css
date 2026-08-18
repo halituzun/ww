@@ -341,3 +341,8 @@ dd {
 .device-bar { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
 
 .canvas__error { color: var(--danger, #d95926); }
+
+/* Agent geçmişi yan paneli (docs/08). */
+.agent-detail { margin-top: 12px; padding: 12px; border: 1px solid var(--line, #2a2f3a); border-radius: 8px; }
+.agent-detail__tasks { list-style: none; padding: 0; display: grid; gap: 8px; }
+.agent-detail__tasks li { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }

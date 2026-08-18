@@ -32,3 +32,35 @@ export const fetchCanvas = (
   options: RequestOptions = {},
 ): Promise<CanvasData> =>
   getJson<CanvasData>(`/projects/${projectId}/canvas`, options, 'Tuval verisi alınamadı');
+
+export interface AgentTaskSummary {
+  taskId: string;
+  title: string;
+  status: string;
+  relation: 'issuer' | 'worker' | 'verifier';
+}
+
+export interface AgentDetail {
+  agentId: string;
+  name: string;
+  role: string;
+  group: string;
+  modelRef: string;
+  status: string;
+  tasksDone: number;
+  tasksRejected: number;
+  tasks: AgentTaskSummary[];
+  messageCount: number;
+  promptTokens: number;
+  completionTokens: number;
+  costUsd: number;
+  calls: number;
+}
+
+export const fetchAgentDetail = (
+  projectId: string,
+  agentId: string,
+  options: RequestOptions = {},
+): Promise<AgentDetail> =>
+  getJson<AgentDetail>(`/projects/${projectId}/agents/${agentId}`, options,
+    'Agent geçmişi alınamadı');

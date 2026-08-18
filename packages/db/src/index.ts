@@ -20,6 +20,7 @@ export * from './repositories/messages.js';
 export * from './repositories/receipts.js';
 export * from './repositories/receipt-quarantine.js';
 export * from './repositories/effects.js';
+export * from './repositories/agent-activity.js';
 export * from './repositories/tasks.js';
 export * from './repositories/briefs.js';
 export * from './repositories/causal-entries.js';

@@ -15,7 +15,11 @@ const EDGE_COLOR: Record<string, string> = {
   hierarchy: '#6b7280', assignment: '#6ce9c5', verification: '#f0b429', clone: '#9b8afb',
 };
 
-export function AgentCanvas({ projectId }: { readonly projectId: string }) {
+export function AgentCanvas({ projectId, onSelectAgent }: {
+  readonly projectId: string;
+  /** docs/08: düğüme tık → agent geçmişi. */
+  readonly onSelectAgent?: ((agentId: string) => void) | undefined;
+}) {
   const { data, error } = useCanvasViewModel(projectId);
 
   if (error !== '') return <p className="canvas__error">{error}</p>;
@@ -50,7 +54,12 @@ export function AgentCanvas({ projectId }: { readonly projectId: string }) {
 
   return (
     <div className="flow-canvas">
-      <ReactFlow nodes={nodes} edges={edges} fitView>
+      <ReactFlow
+        nodes={nodes}
+        edges={edges}
+        fitView
+        onNodeClick={(_event, node) => onSelectAgent?.(node.id)}
+      >
         <Background color="#24344d" />
         <Controls />
         <MiniMap />

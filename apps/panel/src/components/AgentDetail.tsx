@@ -1,0 +1,68 @@
+// Agent geçmişi yan paneli — SALT GÖRÜNÜM (docs/08 → "düğüme tık → yan
+// panelde agent geçmişi: görevleri, mesajları, harcadığı token").
+import { useEffect, useState } from 'react';
+import { fetchAgentDetail, type AgentDetail as Detail } from '../services/canvas.js';
+
+const RELATION_LABEL: Record<string, string> = {
+  issuer: 'iş verdi', worker: 'yaptı', verifier: 'denetledi',
+};
+
+export function AgentDetail({ projectId, agentId }: {
+  readonly projectId: string;
+  readonly agentId: string | undefined;
+}) {
+  const [detail, setDetail] = useState<Detail | undefined>();
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    if (agentId === undefined || projectId === '') { setDetail(undefined); return; }
+    let active = true;
+    setError('');
+    void fetchAgentDetail(projectId, agentId)
+      .then((next) => { if (active) setDetail(next); })
+      .catch((reason: unknown) => {
+        // Hata yutulursa boş panel "bu agent hiçbir şey yapmadı" yalanını söyler.
+        if (!active) return;
+        setDetail(undefined);
+        setError(reason instanceof Error ? reason.message : 'Agent geçmişi alınamadı');
+      });
+    return () => { active = false; };
+  }, [projectId, agentId]);
+
+  if (agentId === undefined) {
+    return <p className="hint">Geçmişi görmek için tuvalden bir agent seçin.</p>;
+  }
+  if (error !== '') return <p className="canvas__error">{error}</p>;
+  if (detail === undefined) return <p className="hint">Yükleniyor…</p>;
+
+  return (
+    <section className="agent-detail" aria-label="Agent geçmişi">
+      <div className="section-heading">
+        <h4>{detail.name}</h4>
+        <small>{detail.role} · {detail.status} · {detail.modelRef}</small>
+      </div>
+
+      <dl className="fihrist__meta">
+        <dt>Görev</dt><dd>{detail.tasks.length}</dd>
+        <dt>Mesaj</dt><dd>{detail.messageCount}</dd>
+        <dt>Çağrı</dt><dd>{detail.calls}</dd>
+        <dt>Token</dt><dd>{detail.promptTokens + detail.completionTokens}</dd>
+        <dt>Maliyet</dt><dd>${detail.costUsd.toFixed(4)}</dd>
+      </dl>
+
+      {detail.tasks.length === 0 ? (
+        <p className="hint">Bu agent henüz hiçbir göreve bağlanmadı.</p>
+      ) : (
+        <ul className="agent-detail__tasks">
+          {detail.tasks.map((task) => (
+            <li key={`${task.taskId}:${task.relation}`}>
+              <span className="pill">{RELATION_LABEL[task.relation] ?? task.relation}</span>
+              <strong>{task.title}</strong>
+              <span className={`pill pill--${task.status}`}>{task.status}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
+  );
+}

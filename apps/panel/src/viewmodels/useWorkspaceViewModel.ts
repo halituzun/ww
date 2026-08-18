@@ -64,6 +64,8 @@ export function useWorkspaceViewModel() {
   // docs/11 Faz 5: geçmişe kaydırıcı. Sonsuz (Infinity) "canlı" demektir;
   // yeni olay geldikçe kullanıcı geçmişten canlıya sürüklenmez.
   const [timelineCursor, setTimelineCursor] = useState(Number.POSITIVE_INFINITY);
+  // docs/08: tuvalde seçilen agent'ın geçmişi yan panelde açılır.
+  const [selectedAgent, setSelectedAgent] = useState<string | undefined>();
   const [tab, setTab] = useState<'tasks' | 'timeline' | 'canvas' | 'files' | 'api' | 'preview'>('tasks');
 
   useEffect(() => {
@@ -184,6 +186,7 @@ export function useWorkspaceViewModel() {
     selectedFile, setSelectedFile,
     events, connection, statusCounts,
     timelineCursor, setTimelineCursor,
+    selectedAgent, setSelectedAgent,
     replay: replayAt(events, timelineCursor),
     message, setMessage, messageStatus,
     narratorQuestion, setNarratorQuestion, narratorResult,
