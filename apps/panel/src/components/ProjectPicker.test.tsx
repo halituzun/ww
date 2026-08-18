@@ -58,4 +58,12 @@ describe('ProjectPicker', () => {
     render(<ProjectPicker {...base} projects={[]} />);
     expect(screen.getByText(/henüz proje yok/i)).toBeTruthy();
   });
+
+  // "Proje yok" ile "liste alınamadı" AYNI ŞEY DEĞİLDİR: ikisini karıştırmak
+  // kullanıcıya projelerini kaybettiğini düşündürür ve kopyasını açtırabilir.
+  it('liste alinamadiginda bos durum yerine hatayi gosterir', () => {
+    render(<ProjectPicker {...base} projects={[]} loadError="Proje listesi alınamadı" />);
+    expect(screen.getByText('Proje listesi alınamadı')).toBeTruthy();
+    expect(screen.queryByText(/henüz proje yok/i)).toBeNull();
+  });
 });

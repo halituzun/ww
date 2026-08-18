@@ -93,8 +93,14 @@ const scope = (projectId: string, path = ''): string =>
 /* --------------------------------- okuma --------------------------------- */
 // Okuma uçları panelin akışını kesmemeli: hata durumunda boş sonuç dönerler.
 
+/**
+ * HATAYI YUTMAZ. Boş dizi döndürmek ProjectPicker'a "Henüz proje yok —
+ * yukarıdan ilkini oluşturun" dedirtiyordu: kullanıcı var olan projelerini
+ * kaybettiğini sanıp kopyasını açabilirdi. "Proje yok" ile "liste alınamadı"
+ * aynı şey değildir (bkz. fetchAuditReport, fetchBudgetReport).
+ */
 export const fetchProjects = (options: RequestOptions = {}): Promise<Project[]> =>
-  getJsonOr<Project[]>('/projects', [], options);
+  getJson<Project[]>('/projects', options);
 
 export const fetchProject = (projectId: string, options: RequestOptions = {}): Promise<Project | null> =>
   getJsonOr<Project | null>(scope(projectId), null, options);

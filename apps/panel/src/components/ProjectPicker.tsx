@@ -12,7 +12,7 @@ export interface ProjectDraft {
 }
 
 export function ProjectPicker({
-  projects, draft, onDraft, onCreate, statusMessage, onSelect,
+  projects, draft, onDraft, onCreate, statusMessage, onSelect, loadError,
 }: {
   readonly projects: readonly Project[];
   readonly draft: ProjectDraft;
@@ -20,6 +20,9 @@ export function ProjectPicker({
   readonly onDraft: (patch: Partial<ProjectDraft>) => void;
   readonly onCreate: () => void;
   readonly statusMessage: string;
+  /** Liste ALINAMADI. Boş listeden ayrı tutulur: ikisini karıştırmak
+   * kullanıcıya projelerini kaybettiğini düşündürür. */
+  readonly loadError?: string | undefined;
   readonly onSelect: (projectId: string) => void;
 }) {
   return (
@@ -57,7 +60,9 @@ export function ProjectPicker({
 
       {/* Boş durum AÇIKÇA söylenir (docs/09 ui_audit): boş liste kullanıcıya
           "yükleniyor mu, yok mu?" sorusunu bırakır. */}
-      {projects.length === 0 ? (
+      {loadError !== undefined && loadError !== '' ? (
+        <p className="audit-error" role="alert">{loadError}</p>
+      ) : projects.length === 0 ? (
         <p className="hint">Henüz proje yok — yukarıdan ilkini oluşturun.</p>
       ) : (
         <ul className="task-list">

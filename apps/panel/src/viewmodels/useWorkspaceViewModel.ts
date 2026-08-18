@@ -69,10 +69,20 @@ export function useWorkspaceViewModel() {
   // docs/08: tuvalde seçilen agent'ın geçmişi yan panelde açılır.
   const [selectedAgent, setSelectedAgent] = useState<string | undefined>();
   const [tab, setTab] = useState<PanelTab>('tasks');
+  // "Proje yok" ile "liste alınamadı" ayrı tutulur: ikisini karıştırmak
+  // kullanıcıya projelerini kaybettiğini düşündürür.
+  const [projectsError, setProjectsError] = useState('');
 
   useEffect(() => {
     if (projectId) return;
-    void fetchProjects().then(setProjects);
+    // Hata YAKALANIR: bu uç artık hatayı yutmuyor. Yakalamazsak yakalanmamış
+    // promise reddi oluşur (geçen turda tam bunu yaşadım).
+    void loadSignal(
+      fetchProjects, setProjects, () => true,
+      (reason) => setProjectsError(
+        reason instanceof Error ? reason.message : 'Proje listesi alınamadı',
+      ),
+    );
   }, [projectId]);
 
   useEffect(() => {
@@ -192,7 +202,7 @@ export function useWorkspaceViewModel() {
     page, setPage,
     projectId, setProjectId,
     budgetReport, auditReport, providerList,
-    tasks, projects, projectDraft, setProjectDraft,
+    tasks, projects, projectsError, projectDraft, setProjectDraft,
     projectStatusMessage, projectStatus,
     usage, files, providerHealth, apiArtifacts,
     selectedFile, setSelectedFile,

@@ -26,7 +26,7 @@ export default function App() {
     page, setPage,
     projectId, setProjectId,
     budgetReport, auditReport, providerList,
-    tasks, projects, projectDraft, setProjectDraft,
+    tasks, projects, projectsError, projectDraft, setProjectDraft,
     projectStatusMessage, projectStatus,
     usage, files, providerHealth, apiArtifacts,
     timelineCursor, setTimelineCursor, replay,
@@ -86,7 +86,7 @@ export default function App() {
         <p className="hint">API sağlayıcıları ve anahtarlar <button type="button" className="linklike" onClick={() => setPage('providers')}>API'ler sayfasında</button> yönetilir.</p>
         <TabBar tab={tab} onTab={setTab} counts={{ tasks: tasks.length, events: events.length }} />
         {tab === 'tasks' ? <TaskListPanel tasks={tasks} statusCounts={statusCounts} /> : tab === 'timeline' ? <TimelinePanel events={events} cursor={timelineCursor} onCursor={setTimelineCursor} visible={replay.visible} at={replay.at} /> : tab === 'canvas' ? <CanvasPanel projectId={projectId} events={events} cursor={timelineCursor} onCursor={setTimelineCursor} at={replay.at} tasks={tasks} statusByTask={timelineCursor >= events.length ? undefined : replay.statusByTask} selectedAgent={selectedAgent} onSelectAgent={setSelectedAgent} /> : tab === 'files' ? <FileBrowserPanel projectId={projectId} files={files} selectedFile={selectedFile} onSelectFile={setSelectedFile} narratorQuestion={narratorQuestion} onNarratorQuestion={setNarratorQuestion} onAskNarrator={() => void askNarrator()} narratorResult={narratorResult ?? undefined} /> : tab === 'api' ? <ApiConsole projectId={projectId} artifacts={apiArtifacts} /> : <PreviewPanel projectId={projectId} />}
-      </section> : <ProjectPicker projects={projects} draft={projectDraft} onDraft={(patch) => setProjectDraft((current) => ({ ...current, ...patch }))} onCreate={() => void createProject()} statusMessage={projectStatusMessage} onSelect={setProjectId} />}
+      </section> : <ProjectPicker projects={projects} draft={projectDraft} onDraft={(patch) => setProjectDraft((current) => ({ ...current, ...patch }))} onCreate={() => void createProject()} statusMessage={projectStatusMessage} onSelect={setProjectId} loadError={projectsError} />}
     </main>
   );
 }

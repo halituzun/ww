@@ -28,6 +28,18 @@ describe('okuma uçları', () => {
     expect(urlOf(mock)).toBe(`${DEFAULT_API_BASE}/projects`);
   });
 
+
+  // "Proje yok" ile "liste alınamadı" AYNI ŞEY DEĞİLDİR. `getJsonOr` boş dizi
+  // döndürdüğünde ProjectPicker "Henüz proje yok — yukarıdan ilkini
+  // oluşturun" diyordu; kullanıcı var olan projelerini kaybettiğini sanabilir
+  // ve kopyasını açabilir. Bu, panelin "yüzey yalan söylüyor" sınıfının son
+  // örneğiydi (denetim ve kontör panolarında aynısı düzeltildi).
+  it('proje listesi alinamazsa hatayi YUTMAZ', async () => {
+    const mock = vi.fn(async () => new Response('bozuk', { status: 500 }));
+    await expect(fetchProjects({ fetchImpl: mock as unknown as typeof fetch }))
+      .rejects.toBeTruthy();
+  });
+
   it.each([
     ['tasks', fetchTasks, '/projects/p1/tasks'],
     ['usage', fetchUsage, '/projects/p1/usage'],
