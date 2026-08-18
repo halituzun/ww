@@ -49,9 +49,15 @@ Görev kuyruktan çekildiğinde:
 | Global paralel agent | 8 | `settings.max_parallel_agents` (global ayar) |
 | Proje başına paralel agent | 5 | proje `settings` |
 | Agent başına klon | 5 | `settings.max_clones_per_agent` |
-| Sağlayıcı başına istek/dk | sağlayıcıya göre (`api_providers.settings`) | provider router token-bucket |
+| Sağlayıcı başına istek/dk | `WW_PROVIDER_RPM` (0 = sınırsız, varsayılan) | provider router token-bucket |
 | Proje başına eşzamanlı komut | 4 | executor |
 | Delegasyon derinliği | 3 | `settings.max_delegation_depth` |
+
+> **Sapma (2026-08-18):** Bu satır önce sınırın `api_providers.settings`'ten
+> okunacağını söylüyordu, ama öyle bir kolon ne docs/02 şemasında ne kodda var.
+> Sınır şimdilik süreç genelinde `WW_PROVIDER_RPM` ile ayarlanır. Sağlayıcı
+> başına ayrı sınır gerekirse şemaya kolon eklenmeli — o zamana kadar burada
+> olmayan bir alanı tarif etmek okuyanı yanıltır.
 
 Rate limit aşımında router bekletir (kuyruklu token-bucket); 429 dönerse
 üstel geri çekilme + 2 denemeden sonra fallback ([04](04-model-katmani.md#fallback)).

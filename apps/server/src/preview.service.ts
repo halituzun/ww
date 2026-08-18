@@ -14,8 +14,9 @@ import { spawn, type ChildProcess } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { Inject, Injectable, Logger, OnModuleDestroy } from '@nestjs/common';
-import { getLatestProject } from '@ww/db';
-import { OutputRing, PortPool } from './process-pool.js';
+import { appendProjectVersion, getLatestProject } from '@ww/db';
+import { OutputRing, PORT_POOL_END, PORT_POOL_START, PortPool } from './process-pool.js';
+import { readDevPort, withDevPort, withoutDevPort } from './preview-port-store.js';
 import { resolveWorkspaceRoot } from './runtime-context.js';
 import { SERVER_DATABASE, type ServerDatabase } from './orchestration.module.js';
 
@@ -63,9 +64,14 @@ export class PreviewApplicationService implements OnModuleDestroy {
     // Zaten çalışan süreci yeniden başlatmak portu ve logları koparırdı.
     if (existing !== undefined && existing.child.exitCode === null) return this.status(projectId);
 
+    const project = await getLatestProject(this.#database.ch, projectId);
+    if (project === null) throw new PreviewError('proje bulunamadi');
     const root = await this.#workspaceOf(projectId);
     if (!existsSync(root)) throw new PreviewError(`calisma alani bulunamadi: ${root}`);
-    const port = this.#pool.assign(projectId);
+    // Önce KAYITLI portu dene: süreç yeniden başlayınca portun değişmesi
+    // paneldeki iframe'i sessizce kırar (docs/05 portu projeye yazmayı
+    // bu yüzden şart koşuyor).
+    const port = this.#pool.assign(projectId, readDevPort(project.settings, PORT_POOL_START, PORT_POOL_END));
     const ring = new OutputRing();
     const hasIndexHtml = existsSync(join(root, 'index.html'));
 
@@ -82,16 +88,44 @@ export class PreviewApplicationService implements OnModuleDestroy {
     });
 
     this.#running.set(projectId, { child, port, ring, hasIndexHtml });
+    // Port PROJEYE yazılır: bellek süreç ömründen uzun yaşamaz.
+    await appendProjectVersion(this.#database.ch, {
+      expectedVersion: project.version,
+      next: {
+        ...project,
+        settings: withDevPort(project.settings, port) as never,
+        updated_at: new Date().toISOString(),
+      },
+    });
     this.#logger.log(`önizleme açıldı: ${projectId} → http://localhost:${port}`);
     return this.status(projectId);
   }
 
-  stop(projectId: string): PreviewStatus {
+  async stop(projectId: string): Promise<PreviewStatus> {
     const running = this.#running.get(projectId);
     if (running !== undefined) {
       running.child.kill('SIGTERM');
       this.#running.delete(projectId);
       this.#pool.release(projectId);
+      // Kayıt "çalışıyor" yalanını söylememeli: durdurulan önizlemenin portu
+      // projeden silinir.
+      try {
+        const project = await getLatestProject(this.#database.ch, projectId);
+        if (project !== null) {
+          await appendProjectVersion(this.#database.ch, {
+            expectedVersion: project.version,
+            next: {
+              ...project,
+              settings: withoutDevPort(project.settings) as never,
+              updated_at: new Date().toISOString(),
+            },
+          });
+        }
+      } catch (reason) {
+        // Süreç ZATEN durduruldu; kayıt temizliği düşse bile onu geri
+        // döndürmeyiz, yalnızca bildiririz.
+        this.#logger.warn(`önizleme portu kaydı silinemedi: ${String(reason)}`);
+      }
     }
     return {
       projectId, running: false, port: undefined, url: undefined,
@@ -119,7 +153,7 @@ export class PreviewApplicationService implements OnModuleDestroy {
 
   /** Sunucu kapanırken süreçler bırakılmaz: yetim süreç portu tutar. */
   onModuleDestroy(): void {
-    for (const [projectId] of this.#running) this.stop(projectId);
+    for (const [projectId] of this.#running) void this.stop(projectId);
   }
 }
 

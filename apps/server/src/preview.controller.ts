@@ -29,8 +29,8 @@ export class PreviewController {
   }
 
   @Post('stop')
-  stop(@Req() request: LocalSessionRequest, @Param('projectId') projectId: string) {
+  async stop(@Req() request: LocalSessionRequest, @Param('projectId') projectId: string) {
     parseLocalSession(request);
-    return this.preview.stop(projectId);
+    return await this.preview.stop(projectId);
   }
 }

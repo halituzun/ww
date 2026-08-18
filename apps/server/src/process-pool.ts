@@ -18,10 +18,21 @@ export const PORT_POOL_END = 42_999;
 export class PortPool {
   readonly #assigned = new Map<string, number>();
 
-  assign(key: string): number {
+  /**
+   * `preferred`: daha önce KAYITLI olan port. Süreç yeniden başlayınca aynı
+   * projeye aynı portu vermek için; başkası tutuyorsa yok sayılır.
+   */
+  assign(key: string, preferred?: number): number {
     const existing = this.#assigned.get(key);
     if (existing !== undefined) return existing;
     const used = new Set(this.#assigned.values());
+    if (
+      preferred !== undefined && !used.has(preferred)
+      && preferred >= PORT_POOL_START && preferred <= PORT_POOL_END
+    ) {
+      this.#assigned.set(key, preferred);
+      return preferred;
+    }
     for (let port = PORT_POOL_START; port <= PORT_POOL_END; port += 1) {
       if (used.has(port)) continue;
       this.#assigned.set(key, port);

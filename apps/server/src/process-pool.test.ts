@@ -78,3 +78,23 @@ describe('OutputRing', () => {
     expect(() => (ring.lines() as string[]).push('b')).toThrow();
   });
 });
+
+describe('PortPool — kayıtlı port tercihi', () => {
+  // Süreç yeniden başlayınca portun değişmesi paneldeki iframe'i sessizce
+  // kırar; docs/05 portu projeye yazmayı bu yüzden şart koşuyor.
+  it('kayitli portu yeniden kullanir', () => {
+    expect(new PortPool().assign('p1', 42_042)).toBe(42_042);
+  });
+
+  // Başkası tutuyorsa kayıtlı portu vermek iki sunucuyu aynı porta koyardı.
+  it('baskasi tutuyorsa kayitli portu vermez', () => {
+    const pool = new PortPool();
+    pool.assign('p1', 42_042);
+    expect(pool.assign('p2', 42_042)).not.toBe(42_042);
+  });
+
+  // Havuz dışındaki port başka bir servisin portunu çalmak olurdu.
+  it('havuz disindaki tercihi yok sayar', () => {
+    expect(new PortPool().assign('p1', 80)).toBe(PORT_POOL_START);
+  });
+});
