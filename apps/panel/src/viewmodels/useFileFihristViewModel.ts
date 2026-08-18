@@ -8,11 +8,20 @@
 // Narrator sorusu dosyaya göre ÜRETİLİR; kullanıcı soruyu kendisi yazmak
 // zorunda kalmaz ve "bu dosya nasıl yapıldı" sorusu tek tıkla cevaplanır.
 import { useState } from 'react';
-import { askNarrator, type FileIndex } from '../services/projects.js';
+import {
+  askNarrator,
+  fetchArtifact,
+  type ArtifactDetail,
+  type FileIndex,
+} from '../services/projects.js';
 
 export interface FileFihristViewModel {
   readonly file: FileIndex | undefined;
   readonly relatedTaskIds: readonly string[];
+  readonly relatedArtifactIds: readonly string[];
+  /** Açılan çıktı kaydı; tıklanmadan yüklenmez. */
+  readonly artifact: ArtifactDetail | undefined;
+  openArtifact(artifactId: string): Promise<void>;
   readonly narrative: string;
   readonly error: string;
   readonly loading: boolean;
@@ -26,6 +35,7 @@ export function narratorQuestionForFile(filePath: string): string {
 
 export interface FileFihristPorts {
   ask?: typeof askNarrator;
+  loadArtifact?: typeof fetchArtifact;
 }
 
 export function useFileFihristViewModel(
@@ -34,6 +44,8 @@ export function useFileFihristViewModel(
   ports: FileFihristPorts = {},
 ): FileFihristViewModel {
   const ask = ports.ask ?? askNarrator;
+  const loadArtifact = ports.loadArtifact ?? fetchArtifact;
+  const [artifact, setArtifact] = useState<ArtifactDetail | undefined>();
   const [narrative, setNarrative] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -56,9 +68,24 @@ export function useFileFihristViewModel(
     }
   };
 
+  const openArtifact = async (artifactId: string): Promise<void> => {
+    if (projectId === '') return;
+    setError('');
+    try {
+      setArtifact(await loadArtifact(projectId, artifactId));
+    } catch (reason) {
+      // Hata yutulursa kullanıcı boş panele bakıp kaydın olmadığını sanır.
+      setArtifact(undefined);
+      setError(reason instanceof Error ? reason.message : 'Çıktı kaydı alınamadı');
+    }
+  };
+
   return {
     file,
     relatedTaskIds: file?.related_task_ids ?? [],
+    relatedArtifactIds: file?.related_artifact_ids ?? [],
+    artifact,
+    openArtifact,
     narrative,
     error,
     loading,

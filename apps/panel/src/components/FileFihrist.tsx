@@ -10,8 +10,10 @@ export function FileFihrist({ projectId, file, onSelectTask }: {
   readonly file: FileIndex | undefined;
   readonly onSelectTask?: ((taskId: string) => void) | undefined;
 }) {
-  const { relatedTaskIds, narrative, error, loading, explain } =
-    useFileFihristViewModel(projectId, file);
+  const {
+    relatedTaskIds, relatedArtifactIds, artifact, openArtifact,
+    narrative, error, loading, explain,
+  } = useFileFihristViewModel(projectId, file);
 
   if (file === undefined) {
     return <p className="hint">Fihristi görmek için bir dosya seçin.</p>;
@@ -44,6 +46,33 @@ export function FileFihrist({ projectId, file, onSelectTask }: {
             </li>
           ))}
         </ul>
+      )}
+
+      <h5>Bu dosyadan üretilen çıktılar</h5>
+      {relatedArtifactIds.length === 0 ? (
+        <p className="hint">Bu dosyaya bağlı çıktı kaydı yok.</p>
+      ) : (
+        <ul className="fihrist__tasks">
+          {relatedArtifactIds.map((artifactId) => (
+            <li key={artifactId}>
+              <button
+                type="button"
+                className="linklike"
+                onClick={() => void openArtifact(artifactId)}
+              >
+                <code>{artifactId.slice(0, 8)}</code>
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+      {artifact === undefined ? null : (
+        <dl className="fihrist__meta">
+          <dt>Çıktı</dt><dd>{artifact.name} · {artifact.type}</dd>
+          <dt>Özet</dt><dd>{artifact.summary === '' ? '—' : artifact.summary}</dd>
+          <dt>Commit</dt>
+          <dd>{artifact.commitHash === '' ? '—' : <code>{artifact.commitHash.slice(0, 8)}</code>}</dd>
+        </dl>
       )}
 
       <button type="button" onClick={() => void explain()} disabled={loading}>

@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { ArtifactsController } from './artifacts.controller.js';
 import { PreviewController } from './preview.controller.js';
 import { PreviewApplicationService } from './preview.service.js';
 import { InterviewController } from './interview.controller.js';
@@ -60,6 +61,7 @@ import {
     KnowledgeController,
     MobilePreviewController,
     DelegationController,
+    ArtifactsController,
     PreviewController,
     InterviewController,
     CouncilController,

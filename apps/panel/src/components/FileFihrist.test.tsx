@@ -65,3 +65,46 @@ describe('FileFihrist', () => {
     await waitFor(() => expect(screen.getByText(/8248aa61 görevinde yazıldı/)).toBeDefined());
   });
 });
+
+describe('FileFihrist — çıktı bağları', () => {
+  const withArtifacts: FileIndex = { ...file, related_artifact_ids: ['abbf4878-9f0c-4475-96cb-f2d2d142e56c'] };
+
+  // docs/08: fihrist "ilişkili işler/kararlar" gösterir. Bağlar veride vardı
+  // ama panelde tıklanamayan hiçbir şey yoktu.
+  it('cikti kayitlarini tiklanabilir listeler', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+      ok: true, status: 200,
+      headers: new Headers({ 'content-type': 'application/json' }),
+      text: async () => JSON.stringify({
+        artifactId: 'abbf4878-9f0c-4475-96cb-f2d2d142e56c', taskId: 't1', type: 'model',
+        name: 'useTodos.ts', path: 'src/viewmodels/useTodos.ts', summary: 'worker raporu',
+        commitHash: '0363932612', createdAt: '2026-08-18T00:00:00.000Z',
+      }),
+    } as never);
+
+    render(<FileFihrist projectId="p1" file={withArtifacts} />);
+    fireEvent.click(screen.getByText('abbf4878'));
+
+    await waitFor(() => expect(screen.getByText(/useTodos\.ts · model/)).toBeDefined());
+    expect(screen.getByText('03639326')).toBeDefined();
+  });
+
+  it('cikti bagi yoksa bunu acikca soyler', () => {
+    render(<FileFihrist projectId="p1" file={file} />);
+    expect(screen.getByText(/bağlı çıktı kaydı yok/i)).toBeDefined();
+  });
+
+  // Hata yutulursa kullanıcı boş panele bakıp kaydın olmadığını sanır.
+  it('cikti kaydi alinamazsa hatayi gosterir', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+      ok: false, status: 404,
+      headers: new Headers({ 'content-type': 'application/json' }),
+      text: async () => JSON.stringify({ message: 'artifact bulunamadi' }),
+    } as never);
+
+    render(<FileFihrist projectId="p1" file={withArtifacts} />);
+    fireEvent.click(screen.getByText('abbf4878'));
+
+    await waitFor(() => expect(screen.getByText(/artifact bulunamadi|Çıktı kaydı alınamadı/)).toBeDefined());
+  });
+});

@@ -34,10 +34,31 @@ export interface FileIndex {
   layer: string;
   exports: string[];
   related_task_ids: string[];
+  /** Bu dosyayı üreten çıktı kayıtları (docs/08 fihrist). */
+  related_artifact_ids?: string[];
   last_commit_hash: string;
   change_count: number;
   updated_at: string;
 }
+
+export interface ArtifactDetail {
+  artifactId: string;
+  taskId: string;
+  type: string;
+  name: string;
+  path: string;
+  summary: string;
+  commitHash: string;
+  createdAt: string;
+}
+
+export const fetchArtifact = (
+  projectId: string,
+  artifactId: string,
+  options: RequestOptions = {},
+): Promise<ArtifactDetail> =>
+  getJson<ArtifactDetail>(scope(projectId, `/artifacts/${artifactId}`), options,
+    'Çıktı kaydı alınamadı');
 
 export interface ProviderHealth {
   provider_id: string;
