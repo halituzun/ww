@@ -134,6 +134,12 @@ Amaç: planın tek modelin önyargısıyla değil, çok modelin çatışmasıyla
 
 ## Delegasyon
 
+Alt görev, parent görevin `plan_id`'sini DEVRALIR. (2026-08-18'e kadar sabit
+NIL yazılıyordu: plansız görev atamada reddedildiği için `create_subtask` ile
+açılan her alt görev doğuştan koşamaz durumdaydı — hem de sessizce, `queued`
+görünerek. Parent'ın planı yoksa alt görev açılmaz; açık hata, hiç çalışmayan
+görevden iyidir.)
+
 - Her agent `create_subtask` aracıyla alt görev açabilir (yalnız PM değil) —
   `tasks.issuer_agent_id` açanı, `parent_task_id` zinciri hiyerarşiyi tutar.
 - Alt görev de **otomatik worker+verifier çifti** alır; çift kuralı istisnasızdır.

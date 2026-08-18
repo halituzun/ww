@@ -33,7 +33,7 @@ export class DelegationService {
     // The project is read from the parent task; this keeps delegation scoped
     // even when the caller only has a parent task id.
     const parentRows = await this.#ch.query({
-      query: `SELECT task_id, project_id, parent_task_id, delegation_depth, token_budget, tokens_spent, issuer_agent_id
+      query: `SELECT task_id, project_id, plan_id, parent_task_id, delegation_depth, token_budget, tokens_spent, issuer_agent_id
         FROM tasks WHERE task_id = {taskId:UUID} ORDER BY version DESC LIMIT 1`,
       query_params: { taskId: input.parentTaskId },
       format: 'JSONEachRow',
@@ -68,11 +68,26 @@ export class DelegationService {
       if (String(dependencyRows[0]!['project_id']) !== projectId) throw new DelegationError('dependency farkli projeye ait');
       if (ancestors.has(dependency)) throw new DelegationError('delegation dependency cycle');
     }
+    // ALT GÖREV PARENT'IN PLANINI DEVRALIR. Eskiden `plan_id: NIL_UUID` SABİT
+    // yazılıydı: plansız görev atamada reddedilir, yani docs/03'ün çekirdek
+    // yeteneği olan `create_subtask` ile açılan HER alt görev doğuştan
+    // koşamaz durumdaydı — hem de sessizce, `queued` görünerek.
+    //
+    // Kontrol bütçe/soy ağacı kontrollerinden SONRA yapılır: onlar daha
+    // özgül hatalardır ve önce raporlanmaları çağırana daha çok şey anlatır.
+    const planId = String(raw['plan_id'] ?? NIL_UUID);
+    if (planId === '' || planId === NIL_UUID) {
+      // Sessizce açmak, koşamayacak bir görev yaratmaktır.
+      throw new DelegationError(
+        `parent task plan kimligi tasimiyor, alt gorev acilamaz: ${input.parentTaskId}`,
+      );
+    }
+
     const now = new Date().toISOString();
     return createTask(this.#ch, {
       task_id: randomUUID() as EntityId,
       project_id: projectId,
-      plan_id: NIL_UUID,
+      plan_id: planId as EntityId,
       parent_task_id: input.parentTaskId,
       title: input.title,
       description: input.description ?? '',

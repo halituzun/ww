@@ -20,4 +20,51 @@ describe('DelegationService bütçe ve soy ağacı sınırları', () => {
     const service = new DelegationService(fakeDb([{ task_id: parentId, project_id: projectId, parent_task_id: NIL_UUID, delegation_depth: 0, token_budget: 10, tokens_spent: '0', issuer_agent_id: issuerId }]));
     await expect(service.createSubtask({ parentTaskId: parentId as never, issuerAgentId: issuerId as never, title: 'cycle', acceptanceCriteria: [], targetFiles: [], group: 'coding', budget: 1, dependencies: [parentId as never] })).rejects.toThrow(/cycle/);
   });
+
+  // KAYNAK KUSUR (canlı veride bulundu): `plan_id: NIL_UUID` SABİT yazılıydı.
+  // Plansız görev atamada reddedilir ("task plan kimligi tasimiyor"), yani
+  // docs/03'ün çekirdek yeteneği olan `create_subtask` ile açılan HER alt
+  // görev doğuştan koşamaz durumdaydı. Üstelik sessizce: görev `queued`
+  // görünüyor, kuyruğa giriyor, her turda reddediliyordu.
+  it('alt gorev parentin plan kimligini DEVRALIR', async () => {
+    const planId = '44444444-4444-4444-8444-444444444444';
+    const inserted: Record<string, unknown>[] = [];
+    // İLK sorgu parent'ı döndürür; sonrakiler boş. Aksi halde createTask'ın
+    // `getLatestTask` okuması da parent satırını görüp "task zaten var" der
+    // ve ekleme hiç yapılmaz.
+    let calls = 0;
+    const db = {
+      query: async () => ({ json: async () => (calls++ === 0 ? [{
+        task_id: parentId, project_id: projectId, plan_id: planId,
+        parent_task_id: NIL_UUID, delegation_depth: 0, token_budget: 10,
+        tokens_spent: '0', issuer_agent_id: issuerId,
+      }] : []) }),
+      insert: async (payload: { values: Record<string, unknown>[] }) => {
+        inserted.push(...payload.values);
+      },
+    } as never;
+
+    await new DelegationService(db).createSubtask({
+      parentTaskId: parentId as never, issuerAgentId: issuerId as never,
+      title: 'alt görev', acceptanceCriteria: [], targetFiles: [],
+      group: 'coding', budget: 1,
+    }).catch(() => undefined);
+
+    expect(inserted[0]?.['plan_id']).toBe(planId);
+  });
+
+  // Parent'ın planı yoksa alt görevi SESSİZCE açmak, koşamayacak bir görev
+  // yaratmaktır. Açık hata, hiç çalışmayan görevden iyidir.
+  it('parentin plani yoksa acik hata verir', async () => {
+    const service = new DelegationService(fakeDb([{
+      task_id: parentId, project_id: projectId, plan_id: NIL_UUID,
+      parent_task_id: NIL_UUID, delegation_depth: 0, token_budget: 10,
+      tokens_spent: '0', issuer_agent_id: issuerId,
+    }]));
+    await expect(service.createSubtask({
+      parentTaskId: parentId as never, issuerAgentId: issuerId as never,
+      title: 'plansız', acceptanceCriteria: [], targetFiles: [],
+      group: 'coding', budget: 1,
+    })).rejects.toThrow(/plan/);
+  });
 });
