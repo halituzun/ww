@@ -1,5 +1,5 @@
 // Rol -> model eşlemesi IO katmanı (docs/04 → Rol→Model Eşleme, docs/08 → API Yönetimi).
-import { getJsonOr, requestJson, type RequestOptions } from './http.js';
+import { getJson, requestJson, type RequestOptions } from './http.js';
 
 export interface RoleModel {
   role: string;
@@ -23,7 +23,11 @@ function assertModelRef(value: string): string {
 }
 
 export const fetchRoleModels = (options: RequestOptions = {}): Promise<RoleModel[]> =>
-  getJsonOr<RoleModel[]>('/role-models', [], options);
+  // HATAYI YUTMAZ: boş dizi TABLOYU BOŞ gösterir ve bu "hiç rol eşlemesi
+  // yok" gibi okunur. Kullanıcı var olan eşlemeleri yeniden kurmaya
+  // yönelir; docs/04 varsayılana düşmenin parayla sonuçlandığını söylüyor
+  // ("kullanıcının seçmediği modelle para harcamak").
+  getJson<RoleModel[]>('/role-models', options);
 
 export async function saveRoleModel(
   role: string,

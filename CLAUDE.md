@@ -24,9 +24,11 @@ when it goes stale, the next session starts from the wrong place.
   panels showed a calm default when their fetch had failed: the audit screen
   said "0 findings", the kontör panel said "$0 spent", the project list said
   "no projects yet". All three came from `getJsonOr` swallowing errors. Those
-  five now propagate (audit, budget, projects, tasks, files); **`/usage`,
-  `/provider-health`, `/artifacts` and `/role-models` still use `getJsonOr`**,
-  so when you touch a surface, ask what it shows when the fetch fails.
+  six now propagate (audit, budget, projects, tasks, files, role-models);
+  **`/usage`, `/provider-health` and `/artifacts` still use `getJsonOr`** —
+  those three are omissions (a badge or list simply disappears) rather than
+  false claims, which is why they were left. When you touch a surface, ask
+  what it shows when the fetch fails, and whether that is a lie or a gap.
 - **Tests encode current behaviour, not correct behaviour.** Six times this
   session a green test was hiding a defect: a fake DB returning the same row
   for every query, an adb fake treating a process id as a device serial, a gate

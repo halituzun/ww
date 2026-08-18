@@ -23,10 +23,8 @@ describe('fetchRoleModels', () => {
     expect(urlOf(mock)).toBe(`${DEFAULT_API_BASE}/role-models`);
   });
 
-  it('okuma hatasında boş liste döner, paneli düşürmez', async () => {
-    const fetchImpl = vi.fn(async () => jsonResponse({}, { status: 500 })) as unknown as typeof fetch;
-    await expect(fetchRoleModels({ fetchImpl })).resolves.toEqual([]);
-  });
+  // DEĞİŞTİ: artık hatayı yutmuyor. Ayrıntılı gerekçe ve testler
+  // `role-models.error.test.ts` içinde.
 });
 
 describe('saveRoleModel', () => {

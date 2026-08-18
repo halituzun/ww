@@ -23,6 +23,12 @@ export function RoleModelTable({ providers }: { providers: readonly Provider[] }
         <p key={warning} className="role-warning" role="note">⚠ {warning}</p>
       ))}
       {vm.loading ? <p className="hint">Yükleniyor…</p> : null}
+      {/* Boş tablo "hiç rol eşlemesi yok" gibi okunur; yükleme hatası
+          AÇIKÇA söylenir ki kullanıcı var olan eşlemelerini yeniden
+          kurmaya kalkmasın. */}
+      {vm.loadError === '' ? null : (
+        <p className="audit-error" role="alert">{vm.loadError}</p>
+      )}
 
       <datalist id="model-suggestions">
         {suggestions.map((ref) => <option key={ref} value={ref} />)}

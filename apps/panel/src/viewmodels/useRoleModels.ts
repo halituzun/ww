@@ -9,7 +9,10 @@ export interface RoleModelDraft {
 export interface RoleModelsViewModel {
   rows: RoleModel[];
   loading: boolean;
+  /** Kullanıcı eyleminin sonucu (kaydetme). */
   status: string;
+  /** Liste ALINAMADI; boş listeden ayrı tutulur. */
+  loadError: string;
   drafts: Record<string, RoleModelDraft>;
   setDraft: (role: string, draft: RoleModelDraft) => void;
   submit: (role: string) => Promise<void>;
@@ -27,10 +30,21 @@ export function useRoleModels(): RoleModelsViewModel {
   const [loading, setLoading] = useState(true);
   const [status, setStatus] = useState('');
   const [drafts, setDrafts] = useState<Record<string, RoleModelDraft>>({});
+  // Yükleme hatası, kullanıcı eyleminden doğan `status`tan AYRIDIR.
+  const [loadError, setLoadError] = useState('');
 
   const reload = useCallback(async () => {
     setLoading(true);
-    const next = await fetchRoleModels();
+    let next: RoleModel[];
+    try {
+      next = await fetchRoleModels();
+    } catch (reason) {
+      // Boş tablo "eşleme yok" gibi okunur; yükleme hatası AÇIKÇA söylenir.
+      setLoadError(reason instanceof Error ? reason.message : 'Rol eşlemeleri alınamadı');
+      setLoading(false);
+      return;
+    }
+    setLoadError('');
     setRows(next);
     // Taslaklar kayıtlı değerle başlar; kullanıcı üzerine yazana dek eşit kalır.
     setDrafts(Object.fromEntries(next.map((row) => [
@@ -60,5 +74,5 @@ export function useRoleModels(): RoleModelsViewModel {
     }
   }, [drafts]);
 
-  return { rows, loading, status, drafts, setDraft, submit, reload };
+  return { rows, loading, status, loadError, drafts, setDraft, submit, reload };
 }
