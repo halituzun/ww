@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { analyzeWiring, diffAgainstBaseline, type SourceFile } from './analyze.js';
+import { analyzeWiring, unbaselinedDeadCode, diffAgainstBaseline, type SourceFile } from './analyze.js';
 
 const file = (path: string, text: string): SourceFile => ({ path, text });
 
@@ -238,5 +238,49 @@ describe('sınıf metotları', () => {
       { path: 'src/types.test.ts', text: 'declare const p: Provider; p.embed("x");\n' },
     ]);
     expect(report.unwired).not.toContain('src/types.ts:Provider.embed');
+  });
+});
+
+// Ölü kod listesinin de GEREKÇE yeri olmalı: aksi halde bilinen ve bilinçli
+// olanlar her koşuda tekrar basılır, her oturum onları yeniden araştırır ve
+// liste gürültüye dönüşür. Gürültülü liste okunmaz.
+describe('bağlandı sinyali', () => {
+  // YANLIŞ "ÇÖZÜLDÜ" SİNYALİ: ölü kod kaydı `unwired` listesinde olmadığı
+  // için "bağlandı" görünüyordu. Bağlanmamıştı; yalnızca başka listedeydi.
+  // Yanlış bir çözüldü raporu, kaydı silmeye davet eder ve boşluk gizlenir.
+  it('olu kod kaydini BAGLANDI saymaz', () => {
+    const diff = diffAgainstBaseline(
+      [],
+      [{ symbol: 'src/a.ts:A.b', reason: 'bilinçli' }],
+      ['src/a.ts:A.b'],
+    );
+    expect(diff.resolved).toEqual([]);
+  });
+
+  it('gercekten bagli olani BAGLANDI sayar', () => {
+    const diff = diffAgainstBaseline([], [{ symbol: 'src/a.ts:A.b', reason: 'x' }], []);
+    expect(diff.resolved).toEqual(['src/a.ts:A.b']);
+  });
+});
+
+describe('ölü kod temel listesi', () => {
+  it('gerekceli girisi listeden duser', () => {
+    const report = { unwired: [], untested: ['src/a.ts:A.b'] };
+    expect(unbaselinedDeadCode(report, [
+      { symbol: 'src/a.ts:A.b', reason: 'paralel genel yüzey; üretim özel yolu kullanıyor' },
+    ])).toEqual([]);
+  });
+
+  it('gerekcesiz girisi DUSURMEZ', () => {
+    const report = { unwired: [], untested: ['src/a.ts:A.b'] };
+    expect(unbaselinedDeadCode(report, [{ symbol: 'src/a.ts:A.b', reason: '  ' }]))
+      .toEqual(['src/a.ts:A.b']);
+  });
+
+  it('listede olmayani gosterir', () => {
+    const report = { unwired: [], untested: ['src/a.ts:A.b', 'src/c.ts:C.d'] };
+    expect(unbaselinedDeadCode(report, [
+      { symbol: 'src/a.ts:A.b', reason: 'bilinçli' },
+    ])).toEqual(['src/c.ts:C.d']);
   });
 });

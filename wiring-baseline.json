@@ -110,5 +110,13 @@
   {
     "symbol": "packages/scheduler/src/task-transition-service.ts:TaskTransitionService.applyWithLease",
     "reason": "PARALEL GENEL YÜZEY: üretim yolu bu sınıfın ÖZEL metodunu kullanıyor (ör. drainOnce → #processItem); bu genel metot yalnız testlerin çağırdığı ikinci bir kapı. Riski şudur: test bu yüzeyden geçer ama üretimin koştuğu yol denenmemiş kalır. Kaldırmak/birleştirmek ayrı bir tur."
+  },
+  {
+    "symbol": "packages/scheduler/src/task-transition-service.ts:TaskTransitionService.activateAttemptWithLease",
+    "reason": "PARALEL GENEL YÜZEY: üretim yolu bu sınıfın ÖZEL metodunu kullanıyor (#activateAttemptWithLease → #activateAttemptWithGuard); bu genel metot hiçbir yerden çağrılmıyor. Eksik özellik DEĞİL, fazladan kapı."
+  },
+  {
+    "symbol": "packages/memory/src/memory-service.ts:MemoryService.appendEmbedding",
+    "reason": "docs/04 embedding sağlayıcısını tanımlıyor ama HİÇBİR üretim yolu embedding üretmiyor — docs/06'nın semantik geri getirme katmanı fiilen yok. Gerçek boşluk, görünür kılındı."
   }
 ]

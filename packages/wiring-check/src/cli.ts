@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { readFile, readdir } from 'node:fs/promises';
 import { join, relative } from 'node:path';
-import { analyzeWiring, diffAgainstBaseline, type BaselineEntry, type SourceFile } from './analyze.js';
+import { analyzeWiring, diffAgainstBaseline, unbaselinedDeadCode, type BaselineEntry, type SourceFile } from './analyze.js';
 
 const ROOT = process.cwd();
 const SCAN_DIRS = ['packages', 'apps'];
@@ -28,19 +28,23 @@ const report = analyzeWiring(files);
 let baseline: BaselineEntry[] = [];
 try { baseline = JSON.parse(await readFile(BASELINE, 'utf8')) as BaselineEntry[]; } catch { /* ilk koşu */ }
 
-const diff = diffAgainstBaseline(report.unwired, baseline);
+const diff = diffAgainstBaseline(report.unwired, baseline, report.untested);
 
 console.log(`taranan dosya: ${files.length}`);
 console.log(`bağlantısız (testte var, üretimde yok): ${report.unwired.length}`);
-console.log(`hiç kullanılmayan: ${report.untested.length}`);
+console.log(`hiç kullanılmayan: ${report.untested.length} (gerekçesiz: ${unbaselinedDeadCode(report, baseline).length})`);
 
 // ADLARI YAZ. Eskiden yalnız SAYI yazılıyordu: ölü kod sayılıyor ama kimse
 // üzerine gidemiyordu. `AgentCloneService` bu yüzden proje boyunca
 // bağlanmadan kaldı — docs/03'ün klonlama mekanizması yazılmıştı ama hiç
 // çağrılmıyordu ve hiçbir çıktı bunu söylemiyordu.
-if (report.untested.length > 0) {
+// Temel listede GEREKÇESİYLE yer alanlar basılmaz: bilinen ve bilinçli
+// girişleri her koşuda tekrarlamak listeyi gürültüye çevirir ve her oturum
+// aynı sembolleri yeniden araştırır.
+const deadCode = unbaselinedDeadCode(report, baseline);
+if (deadCode.length > 0) {
   console.log('\n· hiç kullanılmayan (ne üretimde ne testte):');
-  for (const entry of report.untested) console.log(`    ${entry}`);
+  for (const entry of deadCode) console.log(`    ${entry}`);
   console.log('  Bunlar ya bağlanmalı ya silinmelidir; sayı tek başına eyleme dönüşmez.');
 }
 

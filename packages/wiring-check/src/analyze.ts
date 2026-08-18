@@ -179,12 +179,39 @@ export function analyzeWiring(files: readonly SourceFile[]): WiringReport {
 export function diffAgainstBaseline(
   current: readonly string[],
   baseline: readonly BaselineEntry[],
+  /**
+   * Hâlâ ÖLÜ olan semboller. Bunlar `current` (bağlantısız) listesinde
+   * olmadıkları için "bağlandı" görünüyorlardı — oysa bağlanmamışlardı,
+   * yalnızca başka listedeydiler. Yanlış bir "çözüldü" raporu, kaydı silmeye
+   * davet eder ve boşluk gizlenir.
+   */
+  stillDead: readonly string[] = [],
 ): BaselineDiff {
   const symbols = baselineSymbols(baseline);
   const known = new Set(symbols);
   const now = new Set(current);
+  const dead = new Set(stillDead);
   return {
     added: current.filter((entry) => !known.has(entry)).sort(),
-    resolved: symbols.filter((entry) => !now.has(entry)).sort(),
+    resolved: symbols.filter((entry) => !now.has(entry) && !dead.has(entry)).sort(),
   };
+}
+
+/**
+ * Temel listede GEREKÇESİYLE yer almayan ölü kod.
+ *
+ * NEDEN VAR: ölü kod listesi her koşuda basılıyordu ve bilinen/bilinçli
+ * girişler orada kalıyordu. Sonuç: her oturum aynı iki metodu yeniden
+ * araştırıyor ve liste gürültüye dönüşüyor. Gürültülü liste okunmaz, okunmayan
+ * liste de kapı değildir.
+ *
+ * Gerekçesiz giriş DÜŞMEZ — istisna bilinçli olmalıdır (bağlantısız listesiyle
+ * aynı kural).
+ */
+export function unbaselinedDeadCode(
+  report: Pick<WiringReport, 'untested'>,
+  baseline: readonly BaselineEntry[],
+): string[] {
+  const known = new Set(baselineSymbols(baseline));
+  return report.untested.filter((symbol) => !known.has(symbol));
 }
