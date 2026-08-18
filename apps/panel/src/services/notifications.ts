@@ -4,10 +4,10 @@
 // ve belgelenen kaynak listesine uymuyordu. Bildirimler artık docs/08'deki
 // kaynaklardan türetilir ve kimlikleri KARARLIDIR — aksi halde "görüldü"
 // işareti her yenilemede sıfırlanırdı.
-import { brakeLabel } from './audit.js';
+import { brakeLabel, recordRuleLabel } from './audit.js';
 import type { BudgetState } from './budget.js';
 
-export type NotificationKind = 'budget' | 'provider' | 'question' | 'escalation';
+export type NotificationKind = 'budget' | 'provider' | 'question' | 'escalation' | 'record';
 export type NotificationTone = 'critical' | 'warning' | 'info';
 
 export interface PanelNotification {
@@ -24,6 +24,14 @@ export interface NotificationSignals {
   providers?: readonly { provider_id: string; health_status?: string | undefined; enabled: boolean }[] | undefined;
   tasks?: readonly { task_id: string; title: string; status: string }[] | undefined;
   escalations?: readonly { eventId: string; taskId: string; reason: string; brakeKind: string }[] | undefined;
+  /**
+   * docs/09 `db_write_audit` bulguları. Denetim ekranında görünüyorlardı ama
+   * ZİL ÇALMIYORDU: kalıcı olarak ölü bir görev (REC-004), kullanıcı denetim
+   * ekranını açmayı akıl etmedikçe fark edilmiyordu.
+   */
+  recordFindings?: readonly {
+    ruleId: string; taskId: string; summary: string; severity: string;
+  }[] | undefined;
 }
 
 const TONE_ORDER: Record<NotificationTone, number> = { critical: 0, warning: 1, info: 2 };
@@ -69,6 +77,20 @@ export function deriveNotifications(signals: NotificationSignals): PanelNotifica
       id: `question:${task.task_id}`, kind: 'question', tone: 'warning',
       title: 'Cevabın bekleniyor',
       detail: task.title,
+    });
+  }
+
+  for (const finding of signals.recordFindings ?? []) {
+    out.push({
+      // Aynı görev + kural için TEK kimlik: bulgular her taramada yeniden
+      // üretilir ve kimlik değişse zil sürekli çalardı.
+      id: `record:${finding.ruleId}:${finding.taskId}`,
+      kind: 'record',
+      tone: finding.severity === 'high' || finding.severity === 'critical'
+        ? 'critical'
+        : 'warning',
+      title: recordRuleLabel(finding.ruleId),
+      detail: finding.summary,
     });
   }
 

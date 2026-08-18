@@ -113,4 +113,43 @@ describe('unseenCount', () => {
   it('artık var olmayan görüldü kaydı sayımı bozmaz', () => {
     expect(unseenCount(list, new Set(['eski-kayit']))).toBe(2);
   });
+
+  // docs/08 bildirim merkezi. REC-004 (plansız görev) denetim ekranında
+  // görünüyordu ama ZİL ÇALMIYORDU. Kalıcı olarak ölü bir görev tam da
+  // bildirim gerektiren şeydir: kullanıcı denetim ekranını açmayı akıl
+  // etmedikçe iş ilerlememesini fark edemezdi.
+  describe('kayıt bulguları', () => {
+    const finding = (over: Record<string, unknown> = {}) => ({
+      ruleId: 'REC-004', taskId: 't1',
+      summary: '"Renk yardımcısı" görevi plansız kuyrukta: atanamaz ve hiç çalışmaz.',
+      severity: 'high', ...over,
+    });
+
+    it('yuksek onemli bulguyu kritik bildirim yapar', () => {
+      const out = deriveNotifications({ recordFindings: [finding()] as never });
+      expect(out).toHaveLength(1);
+      expect(out[0]).toMatchObject({ tone: 'critical', kind: 'record' });
+      expect(out[0]!.detail).toContain('Renk yardımcısı');
+    });
+
+    it('orta onemli bulguyu uyari yapar', () => {
+      const out = deriveNotifications({
+        recordFindings: [finding({ ruleId: 'REC-002', severity: 'medium' })] as never,
+      });
+      expect(out[0]).toMatchObject({ tone: 'warning' });
+    });
+
+    // Aynı görev + kural için TEK bildirim: her taramada yeniden üretilen
+    // bulgular zili boğardı.
+    it('ayni bulgu icin tek kimlik uretir', () => {
+      const out = deriveNotifications({
+        recordFindings: [finding(), finding()] as never,
+      });
+      expect(new Set(out.map((n) => n.id)).size).toBe(1);
+    });
+
+    it('bulgu yoksa bildirim uretmez', () => {
+      expect(deriveNotifications({ recordFindings: [] })).toEqual([]);
+    });
+  });
 });
