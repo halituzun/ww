@@ -1,3 +1,4 @@
+import { auditProfileLabel } from '../services/labels.js';
 import { brakeLabel, recordRuleLabel, severityTone } from '../services/audit.js';
 import {
   useAuditViewModel, type AuditViewModelPorts,
@@ -80,7 +81,7 @@ export function AuditPanel({ projectId, ports }: {
             {report.findings.map((finding) => (
               <li key={finding.findingId} className={`audit-finding audit-finding--${severityTone(finding.severity)}`}>
                 <div className="audit-finding__head">
-                  <span className="pill">{finding.profile}</span>
+                  <span className="pill">{auditProfileLabel(finding.profile)}</span>
                   <strong>{finding.summary}</strong>
                 </div>
                 <div className="audit-finding__meta">

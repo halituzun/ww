@@ -56,3 +56,25 @@ export const projectStatusLabel = (value: string): string => lookup(PROJECT, val
 export const agentStatusLabel = (value: string): string => lookup(AGENT_STATUS, value);
 export const agentRoleLabel = (value: string): string => lookup(AGENT_ROLE, value);
 export const healthStatusLabel = (value: string): string => lookup(HEALTH, value);
+
+const AUDIT_PROFILE: Readonly<Record<string, string>> = Object.freeze({
+  verifier: 'doğrulayıcı',
+  communication_audit: 'iletişim denetimi',
+});
+
+export const auditProfileLabel = (value: string): string => lookup(AUDIT_PROFILE, value);
+
+const MESSAGE_KIND: Readonly<Record<string, string>> = Object.freeze({
+  question: 'soru',
+  answer: 'cevap',
+  order: 'emir',
+  proposal: 'öneri',
+  objection: 'itiraz',
+  synthesis: 'sentez',
+  report: 'rapor',
+  escalation: 'tırmandırma',
+  user_command: 'kullanıcı emri',
+  verdict: 'karar',
+});
+
+export const messageKindLabel = (value: string): string => lookup(MESSAGE_KIND, value);

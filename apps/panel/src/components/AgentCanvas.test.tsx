@@ -50,7 +50,8 @@ describe('AgentCanvas', () => {
     }) as never);
 
     render(<AgentCanvas projectId="p1" />);
-    await waitFor(() => expect(screen.getByText(/worker · busy/)).toBeDefined());
+    // Etiketler TÜRKÇE (karar K6): tuval kullanıcıya iç kimlik göstermez.
+    await waitFor(() => expect(screen.getByText(/yapan · meşgul/)).toBeDefined());
   });
 });
 

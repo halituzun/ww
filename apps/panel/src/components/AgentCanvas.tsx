@@ -2,6 +2,7 @@
 //
 // Düğümler agent'lardır; oklar gerçek ilişkilerden gelir. Durum YALNIZ renkle
 // değil metinle de yazılır: renk tek başına anlam taşımaz.
+import { agentRoleLabel, agentStatusLabel } from '../services/labels.js';
 import { Background, Controls, MiniMap, ReactFlow, type Edge, type Node } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import { useCanvasViewModel } from '../viewmodels/useCanvasViewModel.js';
@@ -31,7 +32,7 @@ export function AgentCanvas({ projectId, onSelectAgent }: {
     // "yanıt vermiyor" METİNLE yazılır: kaydedilmiş durum tek başına yalan
     // söyleyebilir ve renk tek başına anlam taşımaz.
     data: {
-      label: `${node.label}\n${node.role} · ${node.status}`
+      label: `${node.label}\n${agentRoleLabel(node.role)} · ${agentStatusLabel(node.status)}`
         + `${node.unresponsive === true ? ' · yanıt vermiyor' : ''}\n${node.modelRef}`,
     },
     style: {

@@ -1,5 +1,6 @@
 // Bekleyen agent soruları — SALT GÖRÜNÜM (docs/08 → "bekleyen kullanıcı-onayı
 // soruları kutusu"; kullanıcı PM'i beklemeden soruyu görüp cevaplayabilir).
+import { messageKindLabel } from '../services/labels.js';
 import { usePendingQuestionsViewModel } from '../viewmodels/usePendingQuestionsViewModel.js';
 
 export function PendingQuestions({ projectId }: { readonly projectId: string }) {
@@ -22,7 +23,7 @@ export function PendingQuestions({ projectId }: { readonly projectId: string }) 
           {questions.map((question) => (
             <li key={question.messageId}>
               <div className="questions__head">
-                <span className="pill">{question.kind}</span>
+                <span className="pill">{messageKindLabel(question.kind)}</span>
                 {question.taskId === undefined
                   ? null
                   : <code>{question.taskId.slice(0, 8)}</code>}

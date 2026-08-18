@@ -1,7 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { AGENT_ROLES, AGENT_STATUSES, HEALTH_STATUSES, PROJECT_STATUSES } from '@ww/shared';
 import {
-  agentRoleLabel, agentStatusLabel, healthStatusLabel, projectStatusLabel,
+  AGENT_ROLES, AGENT_STATUSES, AUDIT_FINDING_PROFILES, HEALTH_STATUSES, MESSAGE_KINDS,
+  PROJECT_STATUSES,
+} from '@ww/shared';
+import {
+  agentRoleLabel, agentStatusLabel, auditProfileLabel, healthStatusLabel, messageKindLabel,
+  projectStatusLabel,
 } from './labels.js';
 
 // Karar K6: panel dili Türkçe. Ham iç kimliğin kullanıcı yüzeyine sızması,
@@ -16,6 +20,8 @@ describe('etiket kapsamı', () => {
     ['agent durumu', AGENT_STATUSES, agentStatusLabel],
     ['agent rolü', AGENT_ROLES, agentRoleLabel],
     ['sağlık durumu', HEALTH_STATUSES, healthStatusLabel],
+    ['denetim profili', AUDIT_FINDING_PROFILES, auditProfileLabel],
+    ['mesaj türü', MESSAGE_KINDS, messageKindLabel],
   ])('%s: her deger icin etiket var', (_name, values, label) => {
     expect((values as readonly string[]).filter((value) => label(value) === value)).toEqual([]);
   });
