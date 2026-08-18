@@ -29,6 +29,8 @@ import type { RuntimeModels } from './runtime-context.js';
 import type { Phase9RuntimeCompositionInput } from './runtime-composition.js';
 import { createLateBoundPort, type LateBoundPort } from './late-binding.js';
 import { ProviderHealthCache } from './provider-health-cache.js';
+import { StandardsAuditApplicationService } from './standards-audit.service.js';
+import { shouldRunStandardsAudit } from './audit-trigger.js';
 import type { LateBoundServices } from './late-bind-runtime.js';
 import { providerRequestsPerMinute } from './provider-rate.js';
 
@@ -88,7 +90,33 @@ export async function createOrchestrationComposition(
 
   // Kapı/commit geç bağlanır: gateRunner ve gitWorkspace composition'ın
   // İÇİNDE kurulur, dolayısıyla girdi hazırlanırken henüz yoktur.
+  // docs/09: denetçiler "her N görev tamamlanışında (varsayılan 5)" koşar.
+  // Bu tetik hiç yoktu; `auditFiles`'ı çağıran tek yer HTTP denetleyicisiydi,
+  // yani denetim ancak biri ELLE tetiklerse koşuyordu.
+  const standardsAudit = new StandardsAuditApplicationService({
+    ch: input.ch, redis: input.redis,
+  } as never);
+
   const gateOps = createGateOperations({
+    onCommitted: async ({ projectId, taskId, targetFiles, readFile }) => {
+      const done = await countDoneTasks(input.ch, projectId);
+      if (!shouldRunStandardsAudit(done)) return;
+
+      // Yalnız commit'lenen dosyalar denetlenir: tüm depoyu taramak her
+      // beşinci görevde pahalı ve gürültülü olurdu.
+      const files: { filePath: string; content: string }[] = [];
+      for (const filePath of targetFiles) {
+        // Okunamayan dosya denetimi DÜŞÜRMEZ (silinmiş olabilir).
+        const content = await readFile(filePath).catch(() => '');
+        if (content !== '') files.push({ filePath, content });
+      }
+      if (files.length === 0) return;
+
+      const outcome = await standardsAudit.auditFiles(projectId, files, taskId);
+      if (outcome.findings.length > 0) {
+        console.warn(`[ww] standart denetimi ${outcome.findings.length} bulgu açtı (görev ${taskId})`);
+      }
+    },
     // Üretilen çıktı ve fihrist commit ile birlikte yazılır: aksi halde
     // "agent ne üretti" ve "bu dosyayı kim, neden değiştirdi" sorularının
     // cevabı hiçbir yerde durmaz (docs/02 artifacts, docs/08 fihrist).
@@ -330,4 +358,16 @@ export async function createOrchestrationComposition(
       });
     },
   };
+}
+
+/** Projede tamamlanmış görev sayısı — denetçi tetiğinin sayacı (docs/09). */
+async function countDoneTasks(ch: ClickHouseClient, projectId: string): Promise<number> {
+  const rows = await ch.query({
+    query: `SELECT count() AS n FROM (
+        SELECT task_id, argMax(status, version) AS status FROM tasks
+        WHERE project_id = {projectId:UUID} GROUP BY task_id
+      ) WHERE status = 'done'`,
+    query_params: { projectId }, format: 'JSONEachRow',
+  }).then((r) => r.json<{ n: string }>());
+  return Number(rows[0]?.n ?? 0);
 }

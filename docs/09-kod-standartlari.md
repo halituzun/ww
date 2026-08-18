@@ -105,7 +105,11 @@ DTO'lar `class-validator` ile doğrulanır.
 ## Denetçi Kontrol Listeleri
 
 Denetçiler (`standards_auditor`) şu tetiklerle çalışır: her N görev tamamlanışında
-(varsayılan 5), her faz bitiminde, PM/kullanıcı istediğinde. Bulgular denetim
+(varsayılan 5), her faz bitiminde, PM/kullanıcı istediğinde. *(2026-08-18'e kadar
+yalnız SONUNCUSU vardı: `auditFiles`'ı çağıran tek yer HTTP denetleyicisiydi,
+yani denetim ancak elle tetiklenirse koşuyordu. Commit sonrası tetik eklendi ve
+yalnız commit'lenen dosyaları denetler; tüm depoyu taramak her beşinci görevde
+pahalı ve gürültülü olurdu. Faz bitişi tetiği hâlâ yok.)* Bulgular denetim
 ekranına düşer, her bulgu düzeltme görevine bağlanır ([08 — Denetim](08-panel.md#denetim-ekranı)).
 
 ### `mvvm_audit` — katman denetçisi

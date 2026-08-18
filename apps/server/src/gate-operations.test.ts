@@ -124,4 +124,39 @@ describe('createGateOperations', () => {
     expect(result).toEqual({ commitHash: 'abc1234def', artifactIds: ['art-1'] });
     expect(seen[0]).toMatchObject({ commitHash: 'abc1234def' });
   });
+
+  // docs/09: denetçiler "her N görev tamamlanışında" koşar. Bu kanca o tetiği
+  // taşır; olmadığında denetim ancak biri ELLE tetiklerse koşuyordu.
+  it('commit sonrasi denetim kancasini cagirir', async () => {
+    const seen: { taskId: string; files: readonly string[] }[] = [];
+    const { gateRunner, git } = fakes();
+    const ops = createGateOperations({
+      workspaceRoot: '/w',
+      taskDetails: details,
+      onCommitted: async ({ taskId: committed, targetFiles }) => {
+        seen.push({ taskId: committed, files: targetFiles });
+      },
+    });
+    ops.bind({ gateRunner, git, workspace: { initialize: async () => undefined } as never });
+
+    await ops.commit({ taskId: id(2), attempt });
+
+    expect(seen).toHaveLength(1);
+    expect(seen[0]!.files).toEqual(['src/Board.tsx']);
+  });
+
+  // Commit ZATEN tarihe yazıldı. Denetim koşamadı diye commit'i düşürmek,
+  // çözdüğünden fazlasını bozar.
+  it('kanca patlasa da commit basarili doner', async () => {
+    const { gateRunner, git } = fakes();
+    const ops = createGateOperations({
+      workspaceRoot: '/w',
+      taskDetails: details,
+      onCommitted: async () => { throw new Error('denetim patladı'); },
+    });
+    ops.bind({ gateRunner, git, workspace: { initialize: async () => undefined } as never });
+
+    await expect(ops.commit({ taskId: id(2), attempt }))
+      .resolves.toMatchObject({ commitHash: 'abc1234def' });
+  });
 });

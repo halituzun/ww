@@ -27,6 +27,8 @@ export interface GateEvidenceLike {
 
 export interface WorkspaceLike {
   initialize(): Promise<unknown>;
+  /** Denetim commit'lenen dosyanın İÇERİĞİNİ görmeli. */
+  readText?(relativePath: string, offset: number, limit: number): Promise<string>;
 }
 
 export interface GateStepFailureLike {
@@ -73,8 +75,20 @@ export interface TaskCommitDetails {
   verifierName: string;
 }
 
+export interface CommittedTaskNotice {
+  readonly projectId: EntityId;
+  readonly taskId: EntityId;
+  readonly targetFiles: readonly string[];
+  readonly readFile: (relativePath: string) => Promise<string>;
+}
+
 export interface GateOperationsInput {
   workspaceRoot: string;
+  /**
+   * Commit tarihe yazıldıktan SONRA çalışır (docs/09 denetçi tetiği).
+   * Hatası commit'i düşürmez.
+   */
+  onCommitted?: (notice: CommittedTaskNotice) => Promise<unknown>;
   taskDetails: (taskId: EntityId) => Promise<TaskCommitDetails>;
   /**
    * Commit sonrası üretilen çıktıları ve dosya fihristini kaydeder.
@@ -198,6 +212,27 @@ export function createGateOperations(input: GateOperationsInput) {
         summary: details.summary,
         targetFiles: details.targetFiles,
       }) ?? [];
+
+      // docs/09: denetçiler "her N görev tamamlanışında" koşar. Bu kanca o
+      // tetiği taşır.
+      //
+      // HATASI COMMIT'İ DÜŞÜRMEZ: commit zaten tarihe yazıldı; denetim
+      // koşamadı diye onu geri almak, çözdüğünden fazlasını bozar. Sessiz de
+      // kalmaz.
+      if (input.onCommitted !== undefined) {
+        try {
+          await input.onCommitted({
+            projectId: attempt.projectId,
+            taskId,
+            targetFiles: details.targetFiles,
+            readFile: async (relativePath) => (workspace.readText === undefined
+              ? ''
+              : workspace.readText(relativePath, 0, 262_144)),
+          });
+        } catch (reason) {
+          console.warn(`[ww] commit sonrası denetim tetiklenemedi: ${String(reason)}`);
+        }
+      }
 
       return { commitHash: result.commitHash, artifactIds };
     },
