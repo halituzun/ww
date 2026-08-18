@@ -1,5 +1,12 @@
 # 09 — Kod Standartları
 
+*(2026-08-18: ww'nin kendi paneli de bu standarda tabidir ve `scripts/audit-self.mjs`
+her kapıda onu denetler. Denetçi satır UZUNLUĞUNU görmez: App.tsx bir ara
+"kısa dosya, okunamaz satır" hâline gelmişti — en uzun satırı 1083 karakterlik
+iç içe beş ternary'di. TopBar, WorkspaceTabs, UsageMetrics/ProviderHealthBadges
+ve ProjectControls bileşenlerine ayrıldıktan sonra en uzun satır 281'e indi ve
+her parçanın testi oldu.)*
+
 *(2026-08-18: bu standartlar CANLI VERİDE hiçbir projeye yazılmamıştı —
 `knowledge` tablosunda kind='standard' olan sıfır satır, 78 projeye rağmen.
 docs/06 Context Builder'ın sabit çekirdeği standartları oradan aldığı için

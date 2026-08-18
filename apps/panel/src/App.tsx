@@ -4,23 +4,18 @@
 // `useWorkspaceViewModel` içindedir; burada iş mantığı bulunmaz.
 import { useHealth } from './viewmodels/useHealth.js';
 import { useScreenContextViewModel } from './viewmodels/useScreenContextViewModel.js';
-import { healthStatusLabel } from './services/labels.js';
 import { TabBar } from './components/TabBar.js';
-import { MobilePreviewPanel } from './components/MobilePreviewPanel.js';
+import { TopBar } from './components/TopBar.js';
+import { ProjectControls } from './components/ProjectControls.js';
+import { ProviderHealthBadges, UsageMetrics } from './components/UsageMetrics.js';
+import { WorkspaceTabs } from './components/WorkspaceTabs.js';
 import { ProjectPicker } from './components/ProjectPicker.js';
-import { TaskListPanel } from './components/TaskListPanel.js';
-import { TimelinePanel } from './components/TimelinePanel.js';
-import { CanvasPanel } from './components/CanvasPanel.js';
-import { FileBrowserPanel } from './components/FileBrowserPanel.js';
-import { PreviewPanel } from './components/PreviewPanel.js';
-import { ApiConsole } from './components/ApiConsole.js';
 import { ProvidersPage } from './components/ProvidersPage.js';
 import { BudgetPanel } from './components/BudgetPanel.js';
 import { PendingQuestions } from './components/PendingQuestions.js';
 import { RequirementWizard } from './components/RequirementWizard.js';
 import { AuditPanel } from './components/AuditPanel.js';
 import { NotificationBell } from './components/NotificationBell.js';
-import { connectionLabel } from './viewmodels/live-connection.js';
 import { useWorkspaceViewModel } from './viewmodels/useWorkspaceViewModel.js';
 
 export default function App() {
@@ -48,7 +43,7 @@ export default function App() {
   if (page === 'providers') {
     return (
       <main className="shell">
-        <header className="topbar"><div><p className="eyebrow">ww / ORCHESTRATION</p><h1>API sağlayıcıları</h1></div><div className="topbar-actions"><button type="button" onClick={() => setPage('workspace')}>← Çalışma alanı</button></div></header>
+        <TopBar title="API sağlayıcıları" onBack={() => setPage('workspace')} />
         <ProvidersPage />
       </main>
     );
@@ -56,7 +51,21 @@ export default function App() {
 
   return (
     <main className="shell">
-      <header className="topbar"><div><p className="eyebrow">ww / ORCHESTRATION</p><h1>Agent çalışma alanı</h1></div><div className="topbar-actions"><span className={`conn conn--${connection}`} title="Canlı olay bağlantısı"><span className="conn__dot" aria-hidden="true" />{connectionLabel(connection)}</span><button type="button" onClick={() => setPage('providers')}>API'ler</button><NotificationBell signals={{ budget: budgetReport.budget, providers: providerList, tasks, escalations: auditReport.escalations, recordFindings: auditReport.recordFindings }} /><input aria-label="Proje kimliği" placeholder="Proje UUID" value={projectId} onChange={(event) => setProjectId(event.target.value)} /></div></header>
+      <TopBar
+        title="Agent çalışma alanı"
+        connection={connection}
+        projectId={projectId}
+        onProjectId={setProjectId}
+        onProviders={() => setPage('providers')}
+      >
+        <NotificationBell signals={{
+          budget: budgetReport.budget,
+          providers: providerList,
+          tasks,
+          escalations: auditReport.escalations,
+          recordFindings: auditReport.recordFindings,
+        }} />
+      </TopBar>
 
       <section className={`status-card status-card--${state}`} aria-live="polite">
         <div>
@@ -84,17 +93,38 @@ export default function App() {
         {messageStatus ? <small>{messageStatus}</small> : null}
       </section>
       {projectId ? <section className="workspace-card">
-        <div className="project-controls"><span className={`pill pill--${projectStatus}`}>{projectStatus || 'yükleniyor'}</span><button type="button" onClick={() => void updateProjectStatus(projectStatus === 'paused' ? 'running' : 'paused')}>{projectStatus === 'paused' ? 'Devam et' : 'Duraklat'}</button><button type="button" onClick={() => void updateProjectStatus('archived')}>Arşivle</button></div>
+        <ProjectControls status={projectStatus} onStatus={(next) => void updateProjectStatus(next)} />
         <RequirementWizard projectId={projectId} /><PendingQuestions projectId={projectId} /><BudgetPanel projectId={projectId} />
         <AuditPanel projectId={projectId} />
-        {usage ? <div className="metrics usage-metrics"><div><strong>${usage.costUsd.toFixed(4)}</strong><span>Maliyet</span></div><div><strong>{usage.calls}</strong><span>Çağrı</span></div><div><strong>{usage.promptTokens + usage.completionTokens}</strong><span>Token</span></div></div> : null}
-        {providerHealth.length > 0 ? <div className="provider-health" aria-label="Sağlayıcı sağlığı">{providerHealth.map((provider) => <span key={provider.provider_id} className={`provider-badge provider-badge--${provider.health_status}`}><i aria-hidden="true" />{provider.provider_id}: {healthStatusLabel(provider.health_status)}</span>)}</div> : null}
+        <UsageMetrics usage={usage ?? undefined} />
+        <ProviderHealthBadges providers={providerHealth} />
         <p className="hint">API sağlayıcıları ve anahtarlar <button type="button" className="linklike" onClick={() => setPage('providers')}>API'ler sayfasında</button> yönetilir.</p>
         {workspaceError === '' ? null : (
           <p className="audit-error" role="alert">{workspaceError}</p>
         )}
         <TabBar tab={tab} onTab={setTab} counts={{ tasks: tasks.length, events: events.length }} />
-        {tab === 'tasks' ? <TaskListPanel tasks={tasks} statusCounts={statusCounts} /> : tab === 'timeline' ? <TimelinePanel events={events} cursor={timelineCursor} onCursor={setTimelineCursor} visible={replay.visible} at={replay.at} /> : tab === 'canvas' ? <CanvasPanel projectId={projectId} events={events} cursor={timelineCursor} onCursor={setTimelineCursor} at={replay.at} tasks={tasks} statusByTask={timelineCursor >= events.length ? undefined : replay.statusByTask} selectedAgent={selectedAgent} onSelectAgent={setSelectedAgent} /> : tab === 'files' ? <FileBrowserPanel projectId={projectId} files={files} selectedFile={selectedFile} onSelectFile={setSelectedFile} narratorQuestion={narratorQuestion} onNarratorQuestion={setNarratorQuestion} onAskNarrator={() => void askNarrator()} narratorResult={narratorResult ?? undefined} /> : tab === 'api' ? <ApiConsole projectId={projectId} artifacts={apiArtifacts} /> : <><PreviewPanel projectId={projectId} onActiveUrl={screen.setActiveUrl} /><MobilePreviewPanel projectId={projectId} onActiveSession={screen.setActiveSession} /></>}
+        <WorkspaceTabs
+          tab={tab}
+          projectId={projectId}
+          tasks={tasks}
+          statusCounts={statusCounts}
+          events={events}
+          timelineCursor={timelineCursor}
+          onTimelineCursor={setTimelineCursor}
+          replay={replay}
+          files={files}
+          selectedFile={selectedFile}
+          onSelectFile={setSelectedFile}
+          selectedAgent={selectedAgent}
+          onSelectAgent={setSelectedAgent}
+          narratorQuestion={narratorQuestion}
+          onNarratorQuestion={setNarratorQuestion}
+          onAskNarrator={() => void askNarrator()}
+          narratorResult={narratorResult ?? undefined}
+          apiArtifacts={apiArtifacts}
+          onActiveUrl={screen.setActiveUrl}
+          onActiveSession={screen.setActiveSession}
+        />
       </section> : <ProjectPicker projects={projects} draft={projectDraft} onDraft={(patch) => setProjectDraft((current) => ({ ...current, ...patch }))} onCreate={() => void createProject()} statusMessage={projectStatusMessage} onSelect={setProjectId} loadError={projectsError} />}
     </main>
   );
