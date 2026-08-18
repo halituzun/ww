@@ -7,18 +7,26 @@
 //
 // Narrator sorusu dosyaya göre ÜRETİLİR; kullanıcı soruyu kendisi yazmak
 // zorunda kalmaz ve "bu dosya nasıl yapıldı" sorusu tek tıkla cevaplanır.
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   askNarrator,
   fetchArtifact,
+  fetchKnowledge,
   type ArtifactDetail,
   type FileIndex,
+  type KnowledgeEntry,
 } from '../services/projects.js';
 
 export interface FileFihristViewModel {
   readonly file: FileIndex | undefined;
   readonly relatedTaskIds: readonly string[];
   readonly relatedArtifactIds: readonly string[];
+  /**
+   * Bu dosyayı doğuran işlerde alınan kararlar — BAŞLIKLARIYLA. Ham kimlik
+   * kullanıcıya hiçbir şey anlatmaz; docs/08 tel kafesi de "K-12 fiyat
+   * yuvarlama" diye başlık gösterir.
+   */
+  readonly relatedKnowledge: readonly KnowledgeEntry[];
   /** Açılan çıktı kaydı; tıklanmadan yüklenmez. */
   readonly artifact: ArtifactDetail | undefined;
   openArtifact(artifactId: string): Promise<void>;
@@ -36,6 +44,7 @@ export function narratorQuestionForFile(filePath: string): string {
 export interface FileFihristPorts {
   ask?: typeof askNarrator;
   loadArtifact?: typeof fetchArtifact;
+  loadKnowledge?: typeof fetchKnowledge;
 }
 
 export function useFileFihristViewModel(
@@ -49,6 +58,28 @@ export function useFileFihristViewModel(
   const [narrative, setNarrative] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [knowledge, setKnowledge] = useState<readonly KnowledgeEntry[]>([]);
+
+  const loadKnowledge = ports.loadKnowledge ?? fetchKnowledge;
+  const knowledgeIds = file?.related_knowledge_ids ?? [];
+  // Kimlikler bağımlılık olarak DİZİ verilemez (her render yeni referans);
+  // metne çevrilir, böylece yalnızca gerçekten değiştiğinde yeniden yüklenir.
+  const knowledgeKey = knowledgeIds.join(',');
+
+  useEffect(() => {
+    if (projectId === '' || knowledgeKey === '') { setKnowledge([]); return; }
+    let active = true;
+    void loadKnowledge(projectId)
+      .then((rows) => {
+        if (!active) return;
+        const wanted = new Set(knowledgeKey.split(','));
+        setKnowledge(rows.filter((row) => wanted.has(row.knowledge_id)));
+      })
+      // Karar başlıkları alınamazsa fihristin kalanı yine gösterilir; bu bir
+      // eksiklik, yalan değil.
+      .catch(() => { if (active) setKnowledge([]); });
+    return () => { active = false; };
+  }, [projectId, knowledgeKey, loadKnowledge]);
 
   const explain = async (): Promise<void> => {
     if (file === undefined || projectId === '') return;
@@ -84,6 +115,7 @@ export function useFileFihristViewModel(
     file,
     relatedTaskIds: file?.related_task_ids ?? [],
     relatedArtifactIds: file?.related_artifact_ids ?? [],
+    relatedKnowledge: knowledge,
     artifact,
     openArtifact,
     narrative,

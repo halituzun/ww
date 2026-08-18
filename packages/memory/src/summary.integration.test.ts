@@ -173,4 +173,36 @@ describe.skipIf(!up)('MemoryService.appendSummary', () => {
     });
     expect(pack.chunks.map((chunk) => chunk.text).join('\n')).not.toContain('GELECEKTEN');
   });
+
+  // Canlı veride ölçüldü: iki görevde değiştirilmiş bir dosyanın fihristinde
+  // (change_count=2) yalnızca BİR görev kimliği kalmıştı.
+  it('fihrist ilgili gorevleri biriktirir, uzerine yazmaz', async () => {
+    const projectId = randomUUID();
+    const memory = new MemoryService(ch);
+    const first = randomUUID();
+    const second = randomUUID();
+
+    await memory.updateFileIndex({
+      projectId: projectId as never, filePath: 'src/Counter.tsx',
+      summary: 'sayaç bileşeni', layer: 'view',
+      relatedTaskIds: [first as never], relatedArtifactIds: [randomUUID() as never],
+      lastCommitHash: 'aaa1111', updatedAt: '2026-08-18T10:00:00.000Z',
+    });
+    await memory.updateFileIndex({
+      projectId: projectId as never, filePath: 'src/Counter.tsx',
+      summary: 'sayaç bileşeni: sıfırlama eklendi', layer: 'view',
+      relatedTaskIds: [second as never], relatedArtifactIds: [randomUUID() as never],
+      lastCommitHash: 'bbb2222', updatedAt: '2026-08-18T11:00:00.000Z',
+    });
+
+    const rows = await ch.query({
+      query: `SELECT related_task_ids, related_artifact_ids FROM file_index
+        WHERE project_id = {projectId:UUID} AND file_path = 'src/Counter.tsx'
+        ORDER BY version DESC LIMIT 1`,
+      query_params: { projectId }, format: 'JSONEachRow',
+    }).then((r) => r.json<Record<string, unknown>>());
+
+    expect(rows[0]!['related_task_ids']).toEqual([first, second]);
+    expect((rows[0]!['related_artifact_ids'] as string[]).length).toBe(2);
+  });
 });

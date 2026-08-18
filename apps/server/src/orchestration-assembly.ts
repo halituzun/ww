@@ -24,7 +24,7 @@ import { createExecutionErrorRecorder } from './execution-error-recorder.js';
 import { renderContextPack } from './context-pack-render.js';
 import { classifyArtifact, classifyLayer } from './artifact-classify.js';
 import { buildAgentCapabilities } from './agent-capabilities.js';
-import { appendArtifact, appendEvent, appendPromptInputSnapshot, getPromptVersion, getTaskCausalCursor, getAssignmentAttempt, getLatestTask, listLatestAgents, listLatestApiProviders } from '@ww/db';
+import { appendArtifact, appendEvent, appendPromptInputSnapshot, listKnowledgeIdsBySourceTask, getPromptVersion, getTaskCausalCursor, getAssignmentAttempt, getLatestTask, listLatestAgents, listLatestApiProviders } from '@ww/db';
 import type { RuntimeModels } from './runtime-context.js';
 import type { Phase9RuntimeCompositionInput } from './runtime-composition.js';
 import { createLateBoundPort, type LateBoundPort } from './late-binding.js';
@@ -156,6 +156,11 @@ export async function createOrchestrationComposition(
     recordArtifacts: async ({ projectId, taskId, agentId, commitHash, summary, targetFiles }) => {
       const now = new Date().toISOString();
       const ids: string[] = [];
+      // docs/08 fihristi "Kararlar: [K-12 …]" satırını gösterir ama
+      // `related_knowledge_ids` canlı veride HER SATIRDA boştu: kolon ve
+      // panel satırı vardı, dolduran yer yoktu. Bağ, kararın zaten taşıdığı
+      // `source_task_id` üzerinden kurulur.
+      const knowledgeIds = await listKnowledgeIdsBySourceTask(input.ch, projectId, taskId);
       for (const filePath of targetFiles) {
         const artifactId = randomUUID() as EntityId;
         await appendArtifact(input.ch, {
@@ -178,6 +183,7 @@ export async function createOrchestrationComposition(
           layer: classifyLayer(filePath),
           relatedTaskIds: [taskId],
           relatedArtifactIds: [artifactId],
+          relatedKnowledgeIds: knowledgeIds,
           lastCommitHash: commitHash,
           updatedAt: now,
         } as never);

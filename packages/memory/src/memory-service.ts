@@ -4,7 +4,7 @@ import {
   canonicalSha256V1,
   type EntityId,
 } from '@ww/shared';
-import { getTaskAsOf, listFileIndex, listLatestKnowledgeByStatus, listRecentSummaries, upsertFileIndex, type FileIndexLayer, type KnowledgeRow } from '@ww/db';
+import { getFileIndex, getTaskAsOf, listFileIndex, listLatestKnowledgeByStatus, listRecentSummaries, upsertFileIndex, type FileIndexLayer, type KnowledgeRow } from '@ww/db';
 
 export interface MemoryChunk {
   readonly sourceTable: 'knowledge' | 'summaries' | 'file_index' | 'messages';
@@ -148,6 +148,32 @@ export function rankMemoryCandidates(
       || left.sourceId.localeCompare(right.sourceId))
     .slice(0, limit)
     .map((chunk) => Object.freeze(chunk));
+}
+
+/** Fihrist ilişkilerinde tutulan azami kimlik sayısı. */
+export const MAX_FILE_RELATIONS = 50;
+
+/**
+ * docs/08 fihristi: "İlişkili işler: #T-142 · #T-98". Bir dosyanın geçmişi
+ * BİRİKİR.
+ *
+ * NEDEN VAR: `updateFileIndex` ilişkileri her yazımda ÜZERİNE yazıyordu.
+ * Canlı veride ölçüldü: iki ayrı görevde değiştirilmiş bir dosyanın
+ * (change_count=2) fihristinde yalnızca bir görev kimliği kalmıştı —
+ * dosyanın geçmişi her commit'te siliniyordu.
+ */
+export function mergeFileRelations(
+  current: readonly string[],
+  incoming: readonly string[],
+  limit: number = MAX_FILE_RELATIONS,
+): readonly string[] {
+  if (!Number.isSafeInteger(limit) || limit < 1 || limit > 1_000) {
+    throw new Error('fihrist ilişki siniri gecersiz');
+  }
+  const merged = [...new Set([...current, ...incoming])];
+  // Sınır aşılırsa EN YENİLER kalır: "bu dosyayı en son kim değiştirdi"
+  // daha sık sorulan sorudur.
+  return Object.freeze(merged.slice(Math.max(0, merged.length - limit)));
 }
 
 export function selectMemoryChunks(
@@ -302,15 +328,26 @@ export class MemoryService {
   }
 
   async updateFileIndex(input: FileIndexInput): Promise<EntityId> {
+    // İLİŞKİLER BİRİKİR, ÜZERİNE YAZILMAZ. Dosyanın hangi işlerde
+    // değiştiğini bilmek fihristin varlık sebebidir; her commit'te listeyi
+    // sıfırlamak "bu dosyayı kim, neden değiştirdi" sorusunu son commit'e
+    // indirger.
+    const current = await getFileIndex(this.#ch, input.projectId, input.filePath);
     const row = await upsertFileIndex(this.#ch, {
       project_id: input.projectId,
       file_path: input.filePath,
       summary: input.summary,
       layer: input.layer,
       exports: input.exports ?? [],
-      related_task_ids: input.relatedTaskIds ?? [],
-      related_artifact_ids: input.relatedArtifactIds ?? [],
-      related_knowledge_ids: input.relatedKnowledgeIds ?? [],
+      related_task_ids: mergeFileRelations(
+        current?.related_task_ids ?? [], input.relatedTaskIds ?? [],
+      ) as EntityId[],
+      related_artifact_ids: mergeFileRelations(
+        current?.related_artifact_ids ?? [], input.relatedArtifactIds ?? [],
+      ) as EntityId[],
+      related_knowledge_ids: mergeFileRelations(
+        current?.related_knowledge_ids ?? [], input.relatedKnowledgeIds ?? [],
+      ) as EntityId[],
       last_commit_hash: input.lastCommitHash ?? '',
       updated_at: input.updatedAt,
     });

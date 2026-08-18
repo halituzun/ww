@@ -360,3 +360,30 @@ export async function getKnowledgeSourceRefAsOf(
     hash: knowledgeSourceHash(row),
   });
 }
+
+/**
+ * Bir görevin DOĞURDUĞU bilgi kayıtlarının kimlikleri (docs/08 fihristi:
+ * "Kararlar: [K-12 fiyat yuvarlama]").
+ *
+ * NEDEN VAR: `file_index.related_knowledge_ids` canlı veride HER SATIRDA
+ * boştu — kolon ve panel satırı vardı, doldurulan yer yoktu. Kaynağı olan
+ * bilgi zaten `source_task_id` taşıyor; bağ buradan kurulur.
+ */
+export async function listKnowledgeIdsBySourceTask(
+  ch: ClickHouseClient,
+  projectId: string,
+  sourceTaskId: string,
+): Promise<readonly string[]> {
+  const project = concreteEntityId(projectId, 'projectId');
+  const task = concreteEntityId(sourceTaskId, 'sourceTaskId');
+  const result = await ch.query({
+    query: `SELECT DISTINCT knowledge_id FROM knowledge
+      WHERE project_id = {projectId:UUID} AND source_task_id = {taskId:UUID}
+      ORDER BY knowledge_id ASC LIMIT 100`,
+    query_params: { projectId: project, taskId: task },
+    format: 'JSONEachRow',
+  });
+  return (await result.json<Record<string, unknown>>())
+    .map((row) => String(row['knowledge_id']))
+    .filter((value) => value.length > 0);
+}

@@ -3,17 +3,21 @@
 // docs/11 Faz 5: "bir dosyanın fihristinden ilgili göreve ve narrator
 // anlatısına gidilir". Bu bağlar veride vardı ama panelde hiç görünmüyordu.
 import type { FileIndex } from '../services/projects.js';
-import { useFileFihristViewModel } from '../viewmodels/useFileFihristViewModel.js';
+import {
+  useFileFihristViewModel, type FileFihristPorts,
+} from '../viewmodels/useFileFihristViewModel.js';
 
-export function FileFihrist({ projectId, file, onSelectTask }: {
+export function FileFihrist({ projectId, file, onSelectTask, ports }: {
   readonly projectId: string;
   readonly file: FileIndex | undefined;
   readonly onSelectTask?: ((taskId: string) => void) | undefined;
+  /** Testler gerçek uca gitmeden görünümü sürebilsin diye. */
+  readonly ports?: FileFihristPorts;
 }) {
   const {
-    relatedTaskIds, relatedArtifactIds, artifact, openArtifact,
+    relatedTaskIds, relatedArtifactIds, relatedKnowledge, artifact, openArtifact,
     narrative, error, loading, explain,
-  } = useFileFihristViewModel(projectId, file);
+  } = useFileFihristViewModel(projectId, file, ports);
 
   if (file === undefined) {
     return <p className="hint">Fihristi görmek için bir dosya seçin.</p>;
@@ -43,6 +47,19 @@ export function FileFihrist({ projectId, file, onSelectTask }: {
               <button type="button" className="linklike" onClick={() => onSelectTask?.(taskId)}>
                 <code>{taskId.slice(0, 8)}</code>
               </button>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      <h5>Bu dosyayı doğuran kararlar</h5>
+      {relatedKnowledge.length === 0 ? (
+        <p className="hint">Bu dosyaya bağlı karar kaydı yok.</p>
+      ) : (
+        <ul className="fihrist__tasks">
+          {relatedKnowledge.map((entry) => (
+            <li key={entry.knowledge_id}>
+              <span className="pill">{entry.kind}</span> {entry.title}
             </li>
           ))}
         </ul>

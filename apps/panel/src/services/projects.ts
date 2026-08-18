@@ -36,6 +36,8 @@ export interface FileIndex {
   related_task_ids: string[];
   /** Bu dosyayı üreten çıktı kayıtları (docs/08 fihrist). */
   related_artifact_ids?: string[];
+  /** Bu dosyayı doğuran işlerde alınan kararlar (docs/08 fihrist). */
+  related_knowledge_ids?: string[];
   last_commit_hash: string;
   change_count: number;
   updated_at: string;
@@ -59,6 +61,20 @@ export const fetchArtifact = (
 ): Promise<ArtifactDetail> =>
   getJson<ArtifactDetail>(scope(projectId, `/artifacts/${artifactId}`), options,
     'Çıktı kaydı alınamadı');
+
+export interface KnowledgeEntry {
+  knowledge_id: string;
+  kind: string;
+  title: string;
+}
+
+/** Projenin aktif bilgi kayıtları (docs/06 kararlar/kısıtlar/gereksinimler). */
+export const fetchKnowledge = (
+  projectId: string,
+  options: RequestOptions = {},
+): Promise<KnowledgeEntry[]> =>
+  getJson<KnowledgeEntry[]>(scope(projectId, '/knowledge'), options,
+    'Karar kayıtları alınamadı');
 
 export interface ProviderHealth {
   provider_id: string;

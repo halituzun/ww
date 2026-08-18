@@ -9,6 +9,7 @@ import {
   getKnowledgeAsOf,
   getKnowledgeSourceRefAsOf,
   getLatestKnowledge,
+  listKnowledgeIdsBySourceTask,
   listLatestKnowledgeByStatus,
   type AppendKnowledgeVersionInput,
   type KnowledgeRow,
@@ -250,4 +251,32 @@ describe.skipIf(!up)('knowledge repository', () => {
     );
     expect(legacy?.observed_at).toBe(input.created_at);
   });
+
+// docs/08 fihristi "Kararlar: [K-12 …]" satırını gösterir ama
+// `file_index.related_knowledge_ids` canlı veride HER SATIRDA boştu:
+// kolon ve panel satırı vardı, dolduran yer yoktu. Bağ, kararın zaten
+// taşıdığı `source_task_id` üzerinden kurulur.
+describe('listKnowledgeIdsBySourceTask', () => {
+  it('gorevin dogurdugu kararlari dondurur, baskasininkini dondurmez', async () => {
+    const projectId = randomUUID();
+    const taskId = randomUUID();
+    const otherTaskId = randomUUID();
+    const mine = randomUUID();
+    const at = '2026-08-18T09:00:00.000Z';
+    const row = (knowledgeId: string, sourceTaskId: string) => ({
+      knowledge_id: knowledgeId, project_id: projectId, kind: 'decision' as const,
+      title: 'karar', content: 'içerik', tags: [],
+      source_task_id: sourceTaskId, source_message_id: NIL_UUID,
+      status: 'active' as const, superseded_by: NIL_UUID, created_at: at, row_hash: '',
+    });
+    await appendKnowledgeVersion(ch, row(mine, taskId) as never);
+    await appendKnowledgeVersion(ch, row(randomUUID(), otherTaskId) as never);
+
+    expect(await listKnowledgeIdsBySourceTask(ch, projectId, taskId)).toEqual([mine]);
+  });
+
+  it('karar yoksa bos dizi doner', async () => {
+    expect(await listKnowledgeIdsBySourceTask(ch, randomUUID(), randomUUID())).toEqual([]);
+  });
+});
 });

@@ -108,3 +108,34 @@ describe('FileFihrist — çıktı bağları', () => {
     await waitFor(() => expect(screen.getByText(/artifact bulunamadi|Çıktı kaydı alınamadı/)).toBeDefined());
   });
 });
+
+// docs/08 fihrist tel kafesi "Kararlar: [K-12 fiyat yuvarlama]" satırını
+// gösteriyor. Kolon (`related_knowledge_ids`) vardı, panel satırı YOKTU ve
+// kolonu dolduran da yoktu: canlı veride her satırda boştu.
+describe('FileFihrist — karar bağları', () => {
+  const withKnowledge: FileIndex = {
+    ...file,
+    related_knowledge_ids: ['11111111-1111-4111-8111-111111111111'],
+  };
+
+  it('karara BAŞLIĞIYLA baglanir, ham kimlikle degil', async () => {
+    render(
+      <FileFihrist
+        projectId="p1"
+        file={withKnowledge}
+        ports={{
+          loadKnowledge: async () => [{
+            knowledge_id: '11111111-1111-4111-8111-111111111111',
+            kind: 'decision', title: 'Fiyat yuvarlama kuralı',
+          }],
+        }}
+      />,
+    );
+    await waitFor(() => expect(screen.getByText(/Fiyat yuvarlama kuralı/)).toBeDefined());
+  });
+
+  it('kararsiz dosyada bunu acikca soyler', () => {
+    render(<FileFihrist projectId="p1" file={file} />);
+    expect(screen.getByText(/karar kaydı yok/i)).toBeDefined();
+  });
+});

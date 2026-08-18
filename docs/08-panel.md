@@ -92,6 +92,14 @@ React Flow tabanlı canlı organizasyon şeması:
   │ [Geçmişi gör] [Bu dosyayı kim neden değiştirdi?]         │
   └─────────────────────────────────────────────────────────┘
   ```
+*(2026-08-18: fihristin ilişkileri her commit'te ÜZERİNE YAZILIYORDU — canlı
+veride iki görevde değişmiş bir dosyanın (change_count=2) fihristinde tek
+görev kimliği kalmıştı, yani "İlişkili işler: #T-142 · #T-98" satırı yapısal
+olarak imkânsızdı. Artık birikiyor (en yeni 50). "Kararlar" satırının kaynağı
+`related_knowledge_ids` ise HER SATIRDA boştu: kolon ve panel satırı vardı,
+dolduran yoktu. Bağ artık kararın taşıdığı `source_task_id` üzerinden commit
+anında kuruluyor ve panelde ham kimlikle değil BAŞLIKLA gösteriliyor.)*
+
 - "Kim neden değiştirdi?" → narrator akışını çağırır
   ([06 — Nasıl Yaptın](06-hafiza-ve-baglam.md#nasıl-yaptın-akışı)), cevap yan panelde.
 - Commit geçmişi sekmesi: dosyanın commit'leri + görev bağlantıları + diff görünümü.

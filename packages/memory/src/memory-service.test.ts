@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { rankMemoryCandidates, selectMemoryChunks } from './memory-service.js';
+import {
+  mergeFileRelations, rankMemoryCandidates, selectMemoryChunks,
+} from './memory-service.js';
 
 const chunk = (sourceId: string, text: string, score: number) => ({
   sourceTable: 'knowledge' as const,
@@ -69,5 +71,30 @@ describe('bellek adaylarını sıralama', () => {
       candidate('summaries', '00000000-0000-0000-0000-000000000002', 'renk'),
     ], terms, 12);
     expect(first.map((chunk) => chunk.sourceId)).toEqual(second.map((chunk) => chunk.sourceId));
+  });
+});
+
+// ASIL KUSUR (canlı veride ölçüldü, 2026-08-18): `Counter.tsx` iki ayrı
+// görevde değiştirilmişti (change_count=2) ama fihristte YALNIZ BİR görev
+// kimliği duruyordu. `updateFileIndex` ilişkileri her yazımda üzerine
+// yazıyordu, yani docs/08'in "İlişkili işler: #T-142 · #T-98" satırı
+// yapısal olarak imkânsızdı: dosyanın geçmişi her commit'te siliniyordu.
+describe('fihrist ilişkilerini birleştirme', () => {
+  it('yeni kimlikleri mevcutlarin uzerine EKLER', () => {
+    expect(mergeFileRelations(['a', 'b'], ['c'], 10)).toEqual(['a', 'b', 'c']);
+  });
+
+  it('tekrari eler ve sirayi korur', () => {
+    expect(mergeFileRelations(['a', 'b'], ['b', 'a', 'c'], 10)).toEqual(['a', 'b', 'c']);
+  });
+
+  // Sınırsız büyüyen bir dizi satırı ve prompt'u şişirir; EN YENİLER kalır
+  // çünkü "bu dosyayı en son kim değiştirdi" daha sık sorulan sorudur.
+  it('sinira uyar ve en yenileri tutar', () => {
+    expect(mergeFileRelations(['a', 'b', 'c'], ['d'], 2)).toEqual(['c', 'd']);
+  });
+
+  it('gecersiz siniri fail-closed reddeder', () => {
+    expect(() => mergeFileRelations([], [], 0)).toThrow(/sinir/);
   });
 });
