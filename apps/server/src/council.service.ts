@@ -9,7 +9,7 @@
 // `api_usage`'a yazılırlar, ama göreve bağlı olmadıkları için 'completion'ın
 // brief/attempt provenance'ını taşımazlar.
 import { randomUUID } from 'node:crypto';
-import { Inject, Injectable, Logger } from '@nestjs/common';
+import { Inject, Injectable, Logger, Optional } from '@nestjs/common';
 import {
   createPlan,
   getLatestProject,
@@ -17,7 +17,13 @@ import {
   listLatestApiProviders,
   listLatestPlansByStatus,
 } from '@ww/db';
-import { CouncilService as CouncilProtocol } from '@ww/agents';
+import {
+  CommunicationService,
+  CouncilService as CouncilProtocol,
+  PrincipalResolver,
+} from '@ww/agents';
+import { CommunicationWakeupPublisher, createRedis } from '@ww/db';
+import { buildAgentCapabilities } from './agent-capabilities.js';
 import { Keystore, ModelRouter, buildProviderRegistry, chUsageSink } from '@ww/providers';
 import type { EntityId } from '@ww/shared';
 import { composeCouncil } from './council-members.js';
@@ -26,6 +32,15 @@ import { loadRoutingIndex } from './routing.loader.js';
 import { SERVER_DATABASE, type ServerDatabase } from './orchestration.module.js';
 
 export class CouncilRunError extends Error {}
+
+/** Konsey turunu kalıcı yazan taşıma; testte sahte, üretimde mesaj kanalı. */
+export type CouncilTransportSend = (turn: Readonly<{
+  sessionId: EntityId;
+  speakerId: EntityId;
+  recipientId: EntityId;
+  kind: string;
+  text: string;
+}>) => Promise<{ messageId: string }>;
 
 export interface CouncilRunResult {
   readonly planId: EntityId;
@@ -58,8 +73,55 @@ export class CouncilApplicationService {
   readonly #logger = new Logger(CouncilApplicationService.name);
   readonly #database: ServerDatabase;
 
-  constructor(@Inject(SERVER_DATABASE) database: ServerDatabase) {
+  readonly #transport: CouncilTransportSend | undefined;
+
+  constructor(
+    @Inject(SERVER_DATABASE) database: ServerDatabase,
+    // Testler gerçek modele gitmeden taşımayı doğrulayabilsin diye enjekte
+    // edilebilir; üretimde varsayılan mesaj kanalı kurulur. @Optional()
+    // olmadan Nest bu parametreyi çözmeye çalışıp tüm modülü düşürüyordu.
+    @Optional() transport?: CouncilTransportSend,
+  ) {
     this.#database = database;
+    this.#transport = transport;
+  }
+
+  /** Konsey turlarını gerçek mesaj kanalına yazan varsayılan taşıma. */
+  async #defaultTransport(
+    projectId: EntityId,
+    agents: readonly { readonly agent_id: string; readonly role: string; readonly status: string }[],
+  ): Promise<CouncilTransportSend> {
+    const token = process.env['WW_LOCAL_SESSION_TOKEN'];
+    if (token === undefined || token.trim() === '') {
+      throw new CouncilRunError('WW_LOCAL_SESSION_TOKEN ayarli degil: konsey turlari yazilamaz');
+    }
+    const redis = this.#database.redis ?? await createRedis();
+    const built = buildAgentCapabilities(projectId, agents as never);
+    const resolver = new PrincipalResolver(this.#database.ch, {
+      localSessionToken: token,
+      agentCapabilities: built.capabilities as never,
+    });
+    const communication = new CommunicationService(
+      this.#database.ch, redis, resolver, new CommunicationWakeupPublisher(redis),
+    );
+    return async (turn) => {
+      const credential = built.credentialFor(turn.speakerId);
+      if (credential === undefined) {
+        throw new CouncilRunError(`konsey uyesi kimlik bilgisi yok: ${turn.speakerId}`);
+      }
+      const envelope = await communication.send(
+        { type: 'agent', credential, issuedAt: new Date().toISOString() } as never,
+        {
+          projectId,
+          sessionId: turn.sessionId,
+          recipient: { type: 'agent', id: turn.recipientId },
+          kind: turn.kind,
+          payload: { type: turn.kind, text: turn.text },
+          idempotencyKey: `council:${turn.sessionId}:${turn.speakerId}:${turn.kind}:${turn.text.length}`,
+        } as never,
+      );
+      return { messageId: String((envelope as { messageId: string }).messageId) };
+    };
   }
 
   async run(projectId: string, goal: string): Promise<CouncilRunResult> {
@@ -102,17 +164,31 @@ export class CouncilApplicationService {
     });
 
     const sessionId = randomUUID() as EntityId;
-    // Taşıma: turlar mesaj olarak da yazılır ki "bu karar nasıl alındı"
-    // zinciri (plan → oturum → mesajlar) kopmasın. Mesaj yazımı düşerse
-    // konsey DURUR: yarısı kayıtlı bir tartışma, kaydı hiç olmayandan
-    // daha yanıltıcıdır.
+    // TURLAR KALICI YAZILIR. Önceki hâli yalnızca bellekte bir diziye
+    // topluyordu: plan `council_session_id` ile oturuma bağlanıyor ama o
+    // oturumun HİÇBİR mesajı yoktu, yani "bu karar nasıl alındı" zinciri
+    // (plan → oturum → mesajlar) boşa çıkıyordu.
+    //
+    // Mesaj yazımı düşerse konsey DURUR: yarısı kayıtlı bir tartışma,
+    // kaydı hiç olmayandan daha yanıltıcıdır.
     const transcript: { kind: string; text: string; memberId: string }[] = [];
+    const chair = composition.members[0]!;
+    const send = this.#transport ?? await this.#defaultTransport(
+      project.project_id as EntityId, active,
+    );
     const protocol = new CouncilProtocol({
       send: async (input) => {
         transcript.push({
           kind: input.kind, text: input.text, memberId: String(input.recipient),
         });
-        return { messageId: randomUUID() };
+        // Konuşan üye kendi adına yazar; alıcı başkandır (sentezi o üretir).
+        return send({
+          sessionId: input.sessionId,
+          speakerId: input.recipient as EntityId,
+          recipientId: chair.agentId,
+          kind: input.kind,
+          text: input.text,
+        });
       },
     });
 
