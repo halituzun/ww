@@ -19,6 +19,7 @@ import {
   getTaskBrief,
   getTaskDurableMaxLeaseFence,
   getTaskHandoff,
+  listLatestAgents,
   listLatestAgentsByStatus,
   listLatestTaskEffectsByStates,
   listTaskArtifacts,
@@ -64,6 +65,8 @@ import {
 import { TaskBriefService } from './task-brief-service.js';
 import { TaskCausalLog } from './task-causal-log.js';
 import { isRetryableFailedCommand } from './retryable-command.js';
+import { AgentCloneService } from './agent-clone-service.js';
+import { pickCloneSource } from './agent-clone-plan.js';
 import {
   TaskTransitionService,
   assignmentAttemptIdForAssign,
@@ -115,6 +118,8 @@ class DefaultHandoffContext implements HandoffContextPort {
 }
 
 export interface AssignmentServiceOptions {
+  /** Klon servisi; testler kapatabilir. */
+  readonly clones?: AgentCloneService;
   readonly clock?: ClockPort;
   readonly taskLeaseTtlMs?: number;
   readonly fileLockTtlSec?: number;
@@ -217,6 +222,7 @@ export class AssignmentService {
   readonly #taskLeaseTtlMs: number;
   readonly #fileLockTtlSec: number;
   readonly #briefPolicy: TaskBriefPolicyPort;
+  readonly #clones: AgentCloneService | undefined;
   readonly #handoffContext: HandoffContextPort;
 
   constructor(
@@ -241,6 +247,9 @@ export class AssignmentService {
     this.#fileLockTtlSec = options.fileLockTtlSec ?? DEFAULT_FILE_LOCK_TTL_SEC;
     this.#briefPolicy = options.briefPolicy ?? new DefaultTaskBriefPolicy();
     this.#handoffContext = options.handoffContext ?? new DefaultHandoffContext(ch);
+    // docs/03 klonlama: varsayılan olarak AÇIK. Kapalıyken eşleşen agent'lar
+    // meşgulse görev "idle worker bulunamadi" ile ertelenir.
+    this.#clones = options.clones ?? new AgentCloneService(ch);
   }
 
   async assign(taskId: string): Promise<AssignmentAttemptV1> {
@@ -1977,12 +1986,24 @@ export class AssignmentService {
       .filter((agent) => agent.current_task_id === task.task_id);
     const candidates = [...idle, ...reserved].sort((left, right) =>
       left.agent_id.localeCompare(right.agent_id));
-    const worker = candidates.find((agent) =>
+    let worker = candidates.find((agent) =>
       agent.role === 'worker' && agent.group === task.group &&
       agent.agent_id !== excludedWorkerId &&
       (brief === undefined || brief.promptRefs.some((ref) =>
         ref.sourceType === 'prompt' && ref.sourceId === agent.prompt_name &&
         ref.version === agent.prompt_version)));
+    if (worker === undefined) {
+      // docs/03: "uygun agent meşgulse aynı rol/prompt/bağlamla klon açılır".
+      // Klon servisi yazılıydı ama hiçbir yerden çağrılmıyordu; eşleşen tüm
+      // agent'lar meşgulken atama burada düşüyordu (canlı koşuda görüldü).
+      const cloned = await this.#cloneBusyAgent(task, 'worker', brief);
+      if (cloned === undefined) {
+        throw new TaskDeferredError('NO_ELIGIBLE_AGENT', `idle worker bulunamadi: ${task.group}`);
+      }
+      candidates.push(cloned);
+      worker = cloned;
+    }
+    // Klonlama sonrası worker kesindir; tip daralması için açık kontrol.
     if (worker === undefined) {
       throw new TaskDeferredError('NO_ELIGIBLE_AGENT', `idle worker bulunamadi: ${task.group}`);
     }
@@ -2735,4 +2756,34 @@ export class AssignmentService {
       throw schedulerBoundaryError(error, context);
     }
   }
+
+  /**
+   * Eşleşen agent'lar MEŞGULSE bir klon açar (docs/03). Klon sınırı aşılırsa
+   * `undefined` döner ve çağıran görevi ERTELER — sınırsız klon açmak agent
+   * kadrosunu ve sağlayıcı kotasını tüketir.
+   */
+  async #cloneBusyAgent(
+    task: TaskRow,
+    role: 'worker' | 'verifier',
+    brief: TaskBriefV1 | undefined,
+  ): Promise<AgentRow | undefined> {
+    if (this.#clones === undefined) return undefined;
+    const agents = await listLatestAgents(this.#ch, this.#projectId, { limit: 1_000 });
+    const promptRef = brief?.promptRefs.find((ref) => ref.sourceType === 'prompt');
+    const source = pickCloneSource(agents as never, {
+      role,
+      group: task.group,
+      ...(promptRef === undefined ? {} : {
+        promptName: promptRef.sourceId, promptVersion: promptRef.version,
+      }),
+    });
+    if (source === undefined) return undefined;
+    try {
+      return await this.#clones.cloneIfBusy(this.#projectId, source.agent_id as EntityId);
+    } catch {
+      // Klon limiti aşıldıysa görev ertelenir; bu bir HATA DEĞİL, sınırdır.
+      return undefined;
+    }
+  }
+
 }
