@@ -1,33 +1,20 @@
 // Agent geçmişi yan paneli — SALT GÖRÜNÜM (docs/08 → "düğüme tık → yan
 // panelde agent geçmişi: görevleri, mesajları, harcadığı token").
-import { useEffect, useState } from 'react';
-import { fetchAgentDetail, type AgentDetail as Detail } from '../services/canvas.js';
+import {
+  useAgentDetailViewModel, type AgentDetailViewModelPorts,
+} from '../viewmodels/useAgentDetailViewModel.js';
 
 const RELATION_LABEL: Record<string, string> = {
   issuer: 'iş verdi', worker: 'yaptı', verifier: 'denetledi',
 };
 
-export function AgentDetail({ projectId, agentId }: {
+export function AgentDetail({ projectId, agentId, ports }: {
   readonly projectId: string;
   readonly agentId: string | undefined;
+  /** Testler gerçek uca gitmeden görünümü sürebilsin diye. */
+  readonly ports?: AgentDetailViewModelPorts;
 }) {
-  const [detail, setDetail] = useState<Detail | undefined>();
-  const [error, setError] = useState('');
-
-  useEffect(() => {
-    if (agentId === undefined || projectId === '') { setDetail(undefined); return; }
-    let active = true;
-    setError('');
-    void fetchAgentDetail(projectId, agentId)
-      .then((next) => { if (active) setDetail(next); })
-      .catch((reason: unknown) => {
-        // Hata yutulursa boş panel "bu agent hiçbir şey yapmadı" yalanını söyler.
-        if (!active) return;
-        setDetail(undefined);
-        setError(reason instanceof Error ? reason.message : 'Agent geçmişi alınamadı');
-      });
-    return () => { active = false; };
-  }, [projectId, agentId]);
+  const { detail, error } = useAgentDetailViewModel(projectId, agentId, ports);
 
   if (agentId === undefined) {
     return <p className="hint">Geçmişi görmek için tuvalden bir agent seçin.</p>;
