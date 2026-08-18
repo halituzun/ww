@@ -1,0 +1,21 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "record_knowledge",
+  "description": "Persist a decision, constraint or concept so the project never forgets it.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "kind": {
+      "type": "string",
+      "enum": ["requirement", "decision", "constraint", "concept", "standard", "glossary"]
+    },
+    "title": { "type": "string", "minLength": 1, "maxLength": 200 },
+    "content": { "type": "string", "minLength": 1, "maxLength": 20000 },
+    "tags": {
+      "type": "array",
+      "maxItems": 20,
+      "items": { "type": "string", "minLength": 1, "maxLength": 60 }
+    }
+  },
+  "required": ["kind", "title", "content"]
+}

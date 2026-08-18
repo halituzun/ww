@@ -9,7 +9,10 @@ import { EXECUTOR_TOOL_CAPABILITIES } from './capability-policy.js';
 import { TOOL_NAMES, executorToolRegistry } from './tool-registry.js';
 
 describe('araç kaydı', () => {
-  const added = ['list_dir', 'search_code', 'memory_query', 'create_subtask'] as const;
+  const added = [
+    'list_dir', 'search_code', 'memory_query', 'create_subtask',
+    'record_knowledge', 'record_artifact',
+  ] as const;
 
   it('yeni araclarin hepsi kayitli', () => {
     for (const name of added) expect(TOOL_NAMES).toContain(name);
@@ -55,5 +58,18 @@ describe('araç kaydı', () => {
     for (const name of ['list_dir', 'search_code', 'memory_query'] as const) {
       expect(EXECUTOR_TOOL_CAPABILITIES[name].replaySafety).toBe('replay_safe');
     }
+  });
+
+  // KALICI YAZAN araçlar tekrar güvenli sayılmamalıdır: aynı çağrının iki kez
+  // yazması aynı kararı/çıktıyı iki kez kaydeder.
+  it('kalici yazan araclar tekrar guvenli sayilmaz', () => {
+    for (const name of ['record_knowledge', 'record_artifact'] as const) {
+      expect(EXECUTOR_TOOL_CAPABILITIES[name].replaySafety).toBe('non_replay_safe');
+    }
+  });
+
+  // Agent ÜRETMEDİĞİ bir dosyayı kendi çıktısı gibi kaydedememeli.
+  it('cikti kaydi muhurlu hedef ister', () => {
+    expect(EXECUTOR_TOOL_CAPABILITIES['record_artifact'].requiresDeclaredTarget).toBe(true);
   });
 });

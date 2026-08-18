@@ -12,6 +12,8 @@ export const TOOL_NAMES = [
   'search_code',
   'create_subtask',
   'memory_query',
+  'record_knowledge',
+  'record_artifact',
   'write_file',
   'edit_file',
   'run_command',

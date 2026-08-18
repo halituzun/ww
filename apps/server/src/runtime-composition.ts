@@ -1,6 +1,8 @@
 import {
-  CommunicationWakeupPublisher, enqueueTask, getFencedLease, getLatestTask, getTaskBrief, taskLockKey,
+  CommunicationWakeupPublisher, appendArtifact, appendKnowledgeVersion, enqueueTask,
+  getFencedLease, getLatestTask, getTaskBrief, taskLockKey,
 } from '@ww/db';
+import { NIL_UUID } from '@ww/shared';
 import type { EntityId } from '@ww/shared';
 import { applyLateBinding, type LateBinder } from './late-bind-runtime.js';
 import { internalServiceTokenMap } from './internal-service-tokens.js';
@@ -411,6 +413,46 @@ export function createPhase9RuntimeComposition(
     sandboxInputs: input.executor.sandboxInputs,
     sandbox: input.executor.sandbox,
     gitWorkspace,
+    // docs/01 "asla unutmama": agent keşfettiği kararı/kısıtı ve ürettiği
+    // çıktıyı KALICI yazabilir. Araçlar olmadan bilgi tek görevin içinde
+    // ölüyor, artifact ise yalnızca commit anında dolaylı türetiliyordu.
+    records: {
+      recordKnowledge: async (entry) => {
+        const now = new Date().toISOString();
+        const knowledgeId = randomUUID();
+        await appendKnowledgeVersion(input.ch, {
+          knowledge_id: knowledgeId,
+          project_id: entry.projectId,
+          kind: entry.kind,
+          title: entry.title,
+          content: entry.content,
+          tags: [...entry.tags],
+          // Kaynağı olan bilgi izlenebilir olur: "bu kararı hangi iş doğurdu".
+          source_task_id: entry.taskId,
+          source_message_id: NIL_UUID,
+          status: 'active',
+          superseded_by: NIL_UUID,
+          created_at: now,
+        } as never);
+        return { knowledgeId } as never;
+      },
+      recordArtifact: async (entry) => {
+        const artifactId = randomUUID();
+        await appendArtifact(input.ch, {
+          artifact_id: artifactId,
+          project_id: entry.projectId,
+          task_id: entry.taskId,
+          agent_id: entry.agentId,
+          artifact_type: entry.type,
+          name: entry.name,
+          path: entry.path,
+          summary: entry.summary,
+          commit_hash: '',
+          created_at: new Date().toISOString(),
+        } as never);
+        return { artifactId } as never;
+      },
+    },
     // docs/06 sorgu modu: agent kendi projesinin hafızasına sorabilir.
     // Araç olmadan geçmiş kararlar görünmüyor, agent aynı işi baştan
     // tasarlıyor ya da kullanıcıya soruyordu.

@@ -145,6 +145,30 @@ export interface ExecutorMemoryPort {
   }>): Promise<JsonValue>;
 }
 
+/**
+ * Kalıcı proje belleği (docs/05 → `record_knowledge` / `record_artifact`;
+ * docs/01 → "asla unutmama" çekirdeği). Bağlı değilse araçlar AÇIK hata verir.
+ */
+export interface ExecutorRecordPort {
+  recordKnowledge(input: Readonly<{
+    projectId: string;
+    taskId: string;
+    kind: string;
+    title: string;
+    content: string;
+    tags: readonly string[];
+  }>): Promise<JsonValue>;
+  recordArtifact(input: Readonly<{
+    projectId: string;
+    taskId: string;
+    agentId: string;
+    type: string;
+    name: string;
+    path: string;
+    summary: string;
+  }>): Promise<JsonValue>;
+}
+
 export interface ExecutorCommunicationPort {
   askQuestion(input: AskQuestionToolInput): Promise<JsonValue>;
   reportResult(input: ReportResultToolInput): Promise<JsonValue>;

@@ -52,6 +52,22 @@ export const EXECUTOR_TOOL_CAPABILITIES: Readonly<Record<ToolName, ToolCapabilit
     allowedRoles: ['worker', 'verifier'], allowedTaskStatuses: ACTIVE_TOOL_STATUSES,
     requiresDeclaredTarget: false, requiresFileLock: false, replaySafety: 'replay_safe',
   }),
+  record_knowledge: capability({
+    // YAZAR: proje belleğine kalıcı kayıt düşer. Tekrar güvenli DEĞİLDİR —
+    // aynı çağrının iki kez yazması aynı kararı iki kez kaydeder.
+    toolName: 'record_knowledge', rule: { ruleId: 'TASK-004', ruleVersion: 1 },
+    allowedRoles: ['worker'], allowedTaskStatuses: ['working'],
+    requiresDeclaredTarget: false, requiresFileLock: false,
+    replaySafety: 'non_replay_safe',
+  }),
+  record_artifact: capability({
+    // Üretilen çıktının kaydı; dosya yolu MÜHÜRLÜ hedeflerden olmalıdır,
+    // yoksa agent üretmediği bir dosyayı kendi çıktısı gibi kaydedebilir.
+    toolName: 'record_artifact', rule: { ruleId: 'TASK-004', ruleVersion: 1 },
+    allowedRoles: ['worker'], allowedTaskStatuses: ['working'],
+    requiresDeclaredTarget: true, requiresFileLock: false,
+    replaySafety: 'non_replay_safe',
+  }),
   write_file: capability({
     toolName: 'write_file', rule: { ruleId: 'TOOL-003', ruleVersion: 1 },
     allowedRoles: ['worker'], allowedTaskStatuses: ['working'],

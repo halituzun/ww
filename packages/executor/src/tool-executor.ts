@@ -36,6 +36,7 @@ import type {
   ExecutorToolIntent,
   ExecutorDelegationPort,
   ExecutorMemoryPort,
+  ExecutorRecordPort,
 } from './ports.js';
 import { WorkspacePaths, normalizeWorkspaceRelativePath } from './workspace-paths.js';
 
@@ -153,6 +154,7 @@ export class ToolExecutor {
   readonly #communication: ExecutorCommunicationPort;
   readonly #delegation: ExecutorDelegationPort | undefined;
   readonly #memory: ExecutorMemoryPort | undefined;
+  readonly #records: ExecutorRecordPort | undefined;
   readonly #audit: ExecutorAuditPort;
   readonly #effects: ExecutorEffectPort;
   readonly #intents: ExecutorIntentPort;
@@ -175,6 +177,8 @@ export class ToolExecutor {
     delegation?: ExecutorDelegationPort;
     /** Bağlı değilse memory_query AÇIK hata verir. */
     memory?: ExecutorMemoryPort;
+    /** Bağlı değilse record_* araçları AÇIK hata verir. */
+    records?: ExecutorRecordPort;
     fenceHeartbeatMs?: number;
   }>) {
     this.#registry = input.registry ?? executorToolRegistry;
@@ -182,6 +186,7 @@ export class ToolExecutor {
     this.#communication = input.communication;
     this.#delegation = input.delegation;
     this.#memory = input.memory;
+    this.#records = input.records;
     this.#audit = input.audit;
     this.#effects = input.effects;
     this.#intents = input.intents;
@@ -356,6 +361,38 @@ export class ToolExecutor {
       case 'git_diff': {
         const result = await this.#git.diff(context.brief.projectId, workspace, context.brief.targetFiles);
         return { diff: result.diff, truncated: result.truncated };
+      }
+      case 'record_knowledge': {
+        // docs/01 "asla unutmama": agent bir karar ya da kısıt keşfettiğinde
+        // onu KALICI yazabilmeli; yoksa bilgi tek bir görevin içinde ölür.
+        if (this.#records === undefined) {
+          throw new ExecutorError('INVALID_TOOL', 'record_knowledge bu koşuda bağlı değil');
+        }
+        return await this.#records.recordKnowledge({
+          projectId: context.brief.projectId,
+          taskId: context.brief.taskId,
+          kind: text(args, 'kind'),
+          title: text(args, 'title'),
+          content: text(args, 'content'),
+          tags: optionalTextArray(args, 'tags'),
+        });
+      }
+      case 'record_artifact': {
+        if (this.#records === undefined) {
+          throw new ExecutorError('INVALID_TOOL', 'record_artifact bu koşuda bağlı değil');
+        }
+        // Yol mühürlü hedeflerden olmalı: agent üretmediği bir dosyayı kendi
+        // çıktısı gibi kaydedememeli.
+        const relativePath = workspace.assertDeclared(text(args, 'path'), context.brief.targetFiles);
+        return await this.#records.recordArtifact({
+          projectId: context.brief.projectId,
+          taskId: context.brief.taskId,
+          agentId: context.agentId,
+          type: text(args, 'type'),
+          name: text(args, 'name'),
+          path: relativePath,
+          summary: optionalText(args, 'summary') ?? '',
+        });
       }
       case 'memory_query': {
         // docs/06: "bunu nasıl yaptın" boru hattının sorgu modu. Araç
