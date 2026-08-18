@@ -169,6 +169,12 @@ folded `max(ordinal)+1` ile sürer. Aynı ordinal'de farklı entry fail-closed'd
 | `event_type` | LowCardinality(String) | `tool_call` \| `tool_result` \| `api_call` \| `decision` \| `status_change` \| `error` \| `commit` \| `lock_acquired` \| `lock_released` \| `escalation` \| `clone_spawned` \| `test_run` \| `process_started` \| `process_stopped` \| `recovery_completed`; Faz 1 iletişim timeline türlerini ekler |
 | `tool_name` | LowCardinality(String) | `read_file`, `write_file`, `run_command`, `git`, `web_search`, `memory_query` … |
 | `payload` | String (JSON) | Olaya özgü ayrıntı (argümanlar, sonuç özeti, exit code…) |
+
+> **`payload` NESNE yazılır, JSON metni olarak DEĞİL.** Alan zaten `JsonValue`
+> ve depo onu serileştirir; yazarken bir kez daha `JSON.stringify` yapmak yükü
+> çift kodlar ve `JSONExtract*` sorgularının hepsini sessizce boş döndürür.
+> (2026-08-18: 69 `error` olayının 69'u böyleydi; sebep yazılıydı ama denetim
+> ekranı, anlatıcı ve analitik sorgular okuyamıyordu.)
 | `duration_ms` | UInt32 | |
 | `created_at` | DateTime64(3) | |
 

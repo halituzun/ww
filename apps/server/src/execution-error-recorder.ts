@@ -67,13 +67,20 @@ export function createExecutionErrorRecorder(input: ExecutionErrorRecorderInput)
         agent_id: attempt.workerAgentId ?? null,
         event_type: 'error',
         tool_name: '',
-        payload: JSON.stringify({
+        // NESNE olarak yazılır, JSON METNİ olarak değil. `payload` alanı
+        // zaten JsonValue'dur ve depo onu serileştirir; burada bir kez daha
+        // JSON.stringify yapmak yükü ÇİFT KODLUYORDU. Sonuç: 69 hata
+        // olayının 69'unda `JSONExtractString(payload,'reason')` boş
+        // dönüyordu — sebep yazılı olduğu hâlde denetim ekranı, anlatıcı ve
+        // her analitik sorgu onu okuyamıyordu. Anlatıcı bu yüzden "hata:
+        // sebep kaydedilmemiş" diyordu; kayıt vardı, okunamıyordu.
+        payload: {
           phase: call.phase,
           reason,
           // Yığın izi olmadan "nerede patladı" sorusu koda bakarak aranıyor.
           stack: call.error instanceof Error ? (call.error.stack ?? '') : '',
           assignmentAttemptId: attempt.assignmentAttemptId,
-        }),
+        },
         duration_ms: 0,
         created_at: input.now(),
       });

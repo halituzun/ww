@@ -46,27 +46,28 @@ describe('createExecutionErrorRecorder', () => {
     expect(row['event_type']).toBe('error');
     expect(row['task_id']).toBe(id(2));
     expect(row['project_id']).toBe(id(1));
-    expect(String(row['payload'])).toContain('deepseek 429 rate limit');
+    // Yük artık NESNE; metne çevirip aramak alanların varlığını doğrular.
+    expect(JSON.stringify(row['payload'])).toContain('deepseek 429 rate limit');
   });
 
   it('hangi aşamada düştüğünü kaydeder', async () => {
     const { appendEvent, handle } = recorder();
     await handle(call({ phase: 'verifying' }));
-    expect(String((appendEvent.mock.calls[0]![0] as never as Record<string, unknown>)['payload']))
+    expect(JSON.stringify((appendEvent.mock.calls[0]![0] as never as Record<string, unknown>)['payload']))
       .toContain('verifying');
   });
 
   it('denemeyi olaya bağlar', async () => {
     const { appendEvent, handle } = recorder();
     await handle(call());
-    expect(String((appendEvent.mock.calls[0]![0] as never as Record<string, unknown>)['payload']))
+    expect(JSON.stringify((appendEvent.mock.calls[0]![0] as never as Record<string, unknown>)['payload']))
       .toContain(id(4));
   });
 
   it('Error olmayan sebebi de metne çevirir', async () => {
     const { appendEvent, handle } = recorder();
     await handle(call({ error: 'düz metin hata' }));
-    expect(String((appendEvent.mock.calls[0]![0] as never as Record<string, unknown>)['payload']))
+    expect(JSON.stringify((appendEvent.mock.calls[0]![0] as never as Record<string, unknown>)['payload']))
       .toContain('düz metin hata');
   });
 
@@ -130,7 +131,7 @@ describe('createExecutionErrorRecorder', () => {
   it('Error ise yığın izini de kaydeder', async () => {
     const { appendEvent, handle } = recorder();
     await handle(call());
-    const payload = String((appendEvent.mock.calls[0]![0] as never as Record<string, unknown>)['payload']);
+    const payload = JSON.stringify((appendEvent.mock.calls[0]![0] as never as Record<string, unknown>)['payload']);
     expect(JSON.parse(payload).stack).toContain('execution-error-recorder.test');
   });
 
@@ -148,5 +149,37 @@ describe('createExecutionErrorRecorder', () => {
     await handle(call({ phase: 'verifying' }));
     expect((transition.mock.calls[0]![0] as never as Record<string, unknown>)['action'])
       .toBe('verifier_rejected');
+  });
+
+  // ÖLÇÜLDÜ (canlı ClickHouse, 2026-08-18): 69 `error` olayının 69'unda
+  // `JSONExtractString(payload,'reason')` BOŞ dönüyor. Sebep aslında YAZILI
+  // ama yük ÇİFT KODLANMIŞ: `payload` alanı zaten JsonValue ve depo onu
+  // serileştiriyor; kaydedici önceden JSON.stringify yapınca ortaya JSON
+  // NESNESİ değil JSON METNİ çıkıyor.
+  //
+  // Bedeli: denetim ekranı, anlatıcı ve her analitik sorgu sebebi okuyamıyor.
+  // Anlatıcı bu yüzden "hata: sebep kaydedilmemiş" diyor — sebep orada
+  // duruyorken. Yani kayıt var, okunamıyor: sessiz yanlışlığın en kötü türü.
+  it('yuku NESNE olarak yazar, cift kodlamaz', async () => {
+    const { appendEvent, handle } = recorder();
+    await handle(call());
+
+    const row = appendEvent.mock.calls[0]![0] as unknown as Record<string, unknown>;
+    const payload = row['payload'];
+    expect(typeof payload).toBe('object');
+    expect(payload).toMatchObject({
+      phase: 'working',
+      reason: expect.stringContaining('deepseek 429 rate limit'),
+    });
+  });
+
+  it('sebep JSONExtract ile okunabilir olmali', async () => {
+    const { appendEvent, handle } = recorder();
+    await handle(call());
+    const row = appendEvent.mock.calls[0]![0] as unknown as Record<string, unknown>;
+    // ClickHouse tarafında `JSONExtractString(payload,'reason')` bunu okur.
+    const reason = (row['payload'] as Record<string, unknown>)['reason'];
+    expect(typeof reason).toBe('string');
+    expect(String(reason).length).toBeGreaterThan(0);
   });
 });
