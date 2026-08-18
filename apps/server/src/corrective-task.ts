@@ -61,7 +61,7 @@ export function correctiveTargetFiles(viewPath: string): readonly string[] {
  * üretirdi; worker onu ya yapamaz ya da yanlış dosya yaratır.
  */
 export function correctiveTargetFilesFor(
-  ruleId: 'STD-001' | 'STD-002' | 'STD-003',
+  ruleId: 'STD-001' | 'STD-002' | 'STD-003' | 'STD-004',
   filePath: string,
 ): readonly string[] {
   // Katman ihlallerinde düzeltilecek dosya ihlalin KENDİSİDİR; ikinci bir
@@ -70,7 +70,13 @@ export function correctiveTargetFilesFor(
   return correctiveTargetFiles(filePath);
 }
 
-const LAYER_RULE: Record<'STD-002' | 'STD-003', readonly string[]> = {
+const LAYER_RULE: Record<'STD-002' | 'STD-003' | 'STD-004', readonly string[]> = {
+  'STD-004': [
+    'Kural: her form alanının erişilebilir bir adı olmalı.',
+    '- <input> ya `aria-label` taşır ya da eşleşen bir <label> ile bağlanır.',
+    '- Yalnız `placeholder` YETMEZ: odaklanınca kaybolur ve ekran okuyucu',
+    '  onu ad olarak saymaz.',
+  ],
   'STD-002': [
     'Kural: ViewModel katmanı DOM’a dokunmaz.',
     '- document/querySelector/getElementById/innerHTML kullanımı View’a aittir.',
@@ -85,7 +91,7 @@ const LAYER_RULE: Record<'STD-002' | 'STD-003', readonly string[]> = {
 
 /** Kurala uygun, KENDİ KENDİNE YETERLİ düzeltme görevi tanımı. */
 export function correctiveDescriptionFor(input: Readonly<{
-  ruleId: 'STD-001' | 'STD-002' | 'STD-003';
+  ruleId: 'STD-001' | 'STD-002' | 'STD-003' | 'STD-004';
   summary: string;
   filePath: string;
   evidenceRefs: readonly string[];

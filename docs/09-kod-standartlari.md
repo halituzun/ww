@@ -119,6 +119,10 @@ ekranına düşer, her bulgu düzeltme görevine bağlanır ([08 — Denetim](08
 
 ### `ui_audit` — UI-dostu denetçisi
 
+*(kısmen uygulandı 2026-08-18: STD-004 erişilebilir ad kontrolü. Listenin
+görsel maddeleri — kontrast, boşluk tutarlılığı, taşma — statik olarak
+güvenilir biçimde karara bağlanamaz; onlar hâlâ insan/model denetimidir.)*
+
 - [ ] Ekranlar arasında yazı tipi/boşluk/renk tutarlı mı (tasarım sistemine uyum)?
 - [ ] Yükleme/boş/hata durumları her ekranda tasarlanmış mı?
 - [ ] Formlarda doğrulama mesajları anlaşılır ve yerinde mi?

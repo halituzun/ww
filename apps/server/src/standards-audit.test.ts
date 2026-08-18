@@ -122,4 +122,61 @@ describe('auditMvvmView', () => {
     expect(found).toHaveLength(1);
     expect(found[0]!.ruleId).toBe('STD-001');
   });
+
+  // docs/09 `ui_audit` — "Erişilebilirlik: kontrast, dokunma hedefi boyutu,
+  // LABEL'lar". Bu denetçinin hiç uygulaması yoktu; yalnız profil adı bir
+  // sabit olarak duruyordu.
+  //
+  // ww'nin KENDİ paneli bu kuralda temiz (ölçüldü). Kuralın asıl işi
+  // ÜRETİLEN projeleri denetlemek — docs/09 zaten böyle tanımlıyor.
+  describe('ui_audit — erişilebilir ad', () => {
+    it('etiketsiz inputu bulgu olarak acar', () => {
+      const found = auditStandards(
+        'src/components/Form.tsx',
+        'export function Form() { return <input value={x} onChange={f} />; }\n',
+      );
+      expect(found.map((v) => v.ruleId)).toEqual(['STD-004']);
+      expect(found[0]!.summary).toContain('erişilebilir ad');
+    });
+
+    it('aria-label tasiyan inputu bulgu saymaz', () => {
+      expect(auditStandards(
+        'src/components/Form.tsx',
+        'export function Form() { return <input aria-label="Ad" value={x} />; }\n',
+      )).toEqual([]);
+    });
+
+    // Çok satırlı JSX yaygındır; tek satır varsayan bir kontrol gerçek
+    // kodda çalışmaz (bu ölçümü elle yaparken tam da buna takıldım).
+    it('cok satirli inputta aria-labeli gorur', () => {
+      expect(auditStandards(
+        'src/components/Form.tsx',
+        ['export function Form() {', '  return (', '    <input', '      type="range"',
+         '      aria-label="Geçmişte konum"', '    />', '  );', '}'].join('\n'),
+      )).toEqual([]);
+    });
+
+    // <label for> ile eşleşebilecek input'u ihlal saymak YANLIŞ POZİTİF olur.
+    it('id tasiyan inputu bulgu saymaz', () => {
+      expect(auditStandards(
+        'src/components/Form.tsx',
+        'export function Form() { return <input id="ad" value={x} />; }\n',
+      )).toEqual([]);
+    });
+
+    it('gizli inputu bulgu saymaz', () => {
+      expect(auditStandards(
+        'src/components/Form.tsx',
+        'export function Form() { return <input type="hidden" value={x} />; }\n',
+      )).toEqual([]);
+    });
+
+    // Kural yalnız GÖRÜNÜM katmanına uygulanır.
+    it('viewmodel dosyasinda input arayip bulgu uretmez', () => {
+      expect(auditStandards(
+        'src/viewmodels/useForm.ts',
+        'export const template = "<input value=1>";\n',
+      )).toEqual([]);
+    });
+  });
 });

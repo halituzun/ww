@@ -12,9 +12,10 @@
 export interface StandardsViolation {
   /**
    * STD-001 görünüm katmanı (fetch / durum), STD-002 ViewModel'in DOM'a
-   * dokunması, STD-003 servisin UI framework'ü import etmesi.
+   * dokunması, STD-003 servisin UI framework'ü import etmesi,
+   * STD-004 erişilebilir adı olmayan form alanı (docs/09 `ui_audit`).
    */
-  readonly ruleId: 'STD-001' | 'STD-002' | 'STD-003';
+  readonly ruleId: 'STD-001' | 'STD-002' | 'STD-003' | 'STD-004';
   readonly filePath: string;
   readonly summary: string;
   readonly evidenceRefs: readonly string[];
@@ -119,6 +120,45 @@ export function auditService(
  * `viewmodels/` hiç denetlenmiyordu. docs/09'un altı mvvm kontrolünden
  * yazılı olan bir kısmı fiilen uygulanmıyordu.
  */
+/**
+ * docs/09 `ui_audit` — "Erişilebilirlik: ... LABEL'lar".
+ *
+ * YANLIŞ POZİTİFTEN KAÇINMA: `id` taşıyan alan `<label for>` ile
+ * eşleşebilir; `type="hidden"` zaten görünmez. İkisi de ihlal DEĞİLDİR.
+ * Ayrıca JSX çok satırlıdır — tek satır varsayan bir kontrol gerçek kodda
+ * çalışmaz (bu ölçümü elle yaparken tam da buna takıldım ve olmayan bir
+ * ihlal gördüm sandım).
+ */
+export function auditAccessibility(
+  filePath: string,
+  content: string,
+): readonly StandardsViolation[] {
+  if (!isViewFile(filePath)) return [];
+  const violations: StandardsViolation[] = [];
+  // Etiketi açılıştan kapanışa kadar bütün olarak alır; satır sonları dahil.
+  const pattern = /<input\b([^>]*)>/gs;
+  let hit: RegExpExecArray | null = pattern.exec(content);
+  while (hit !== null) {
+    const attributes = hit[1] ?? '';
+    const labelled = /\baria-label(ledby)?\s*=/.test(attributes)
+      || /\bid\s*=/.test(attributes)
+      || /type\s*=\s*["']hidden["']/.test(attributes);
+    if (!labelled) {
+      const line = content.slice(0, hit.index).split('\n').length;
+      violations.push({
+        ruleId: 'STD-004',
+        filePath,
+        summary: `Form alanının erişilebilir adı yok: ${filePath}. `
+          + 'docs/09 gereği aria-label veya eşleşen bir <label> gerekir.',
+        evidenceRefs: [`file:${filePath}:${line}`],
+        severity: 'medium',
+      });
+    }
+    hit = pattern.exec(content);
+  }
+  return Object.freeze(violations);
+}
+
 export function auditStandards(
   filePath: string,
   content: string,
@@ -127,6 +167,7 @@ export function auditStandards(
     ...auditMvvmView(filePath, content),
     ...auditViewModel(filePath, content),
     ...auditService(filePath, content),
+    ...auditAccessibility(filePath, content),
   ]);
 }
 
