@@ -1,5 +1,5 @@
 // Denetim ekranı IO (docs/08 → Denetim Ekranı).
-import { getJsonOr, requestJson, type RequestOptions } from './http.js';
+import { getJson, requestJson, type RequestOptions } from './http.js';
 
 export type AuditFindingStatus = 'open' | 'correction_pending' | 'resolved' | 'dismissed';
 
@@ -51,11 +51,17 @@ export const EMPTY_AUDIT_REPORT: AuditReport = {
   recordFindings: [],
 };
 
+/**
+ * HATAYI YUTMAZ. Diğer uçlar `getJsonOr` ile varsayılana düşer, ama denetim
+ * ekranının İŞİ sorun bildirmektir: rapor alınamadığında boş rapor döndürmek
+ * ekrana "0 açık bulgu" dedirtir, yani "denetim temiz" yalanını söyler.
+ * Veri gelmemesiyle temiz olmak aynı şey değildir.
+ */
 export const fetchAuditReport = (
   projectId: string,
   options: RequestOptions = {},
 ): Promise<AuditReport> =>
-  getJsonOr<AuditReport>(`/projects/${encodeURIComponent(projectId)}/audit`, EMPTY_AUDIT_REPORT, options);
+  getJson<AuditReport>(`/projects/${encodeURIComponent(projectId)}/audit`, options);
 
 /** Fren türünü kullanıcıya anlaşılır Türkçeye çevirir. */
 export function brakeLabel(kind: string): string {

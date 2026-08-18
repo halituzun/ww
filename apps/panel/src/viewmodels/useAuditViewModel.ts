@@ -18,7 +18,11 @@ export const AUDIT_POLL_MS = 10_000;
 
 export interface AuditViewModel {
   readonly report: AuditReport;
+  /** Kullanıcı eyleminden doğan hata (doğrulama, kapatma). */
   readonly error: string;
+  /** Raporun kendisi alınamadı. AYRI tutulur: başarılı bir arka plan
+   * yenilemesi kullanıcının doğrulama mesajını silmemeli. */
+  readonly loadError: string;
   readonly openCount: number;
   noteFor(findingId: string): string;
   setNote(findingId: string, value: string): void;
@@ -43,12 +47,25 @@ export function useAuditViewModel(
   // Karar kullanıcıdan gelir; gerekçesiz kapatmayı sunucu da reddeder.
   const [notes, setNotes] = useState<Record<string, string>>({});
   const [error, setError] = useState('');
+  // YÜKLEME hatası KULLANICI hatasından ayrıdır. Tek alanda tutmak, başarılı
+  // bir arka plan yenilemesinin kullanıcının doğrulama mesajını ("gerekçe
+  // zorunludur") sessizce silmesine yol açıyordu.
+  const [loadError, setLoadError] = useState('');
 
   useEffect(() => {
     if (!projectId) return;
     let active = true;
     const refresh = (): void => {
-      void load(projectId).then((next) => { if (active) setReport(next); });
+      void load(projectId)
+        .then((next) => { if (active) { setReport(next); setLoadError(''); } })
+        .catch((reason: unknown) => {
+          // Hata YUTULURSA ekran "0 açık bulgu" der, yani "denetim temiz"
+          // yalanını söyler. Veri gelmemesiyle temiz olmak aynı şey değildir.
+          // Aynı kural useCanvasViewModel'de yazılı; burada unutulmuştu.
+          if (active) {
+            setLoadError(reason instanceof Error ? reason.message : 'Denetim raporu alınamadı');
+          }
+        });
     };
     refresh();
     const timer = window.setInterval(refresh, pollMs);
@@ -77,6 +94,7 @@ export function useAuditViewModel(
   return {
     report,
     error,
+    loadError,
     openCount: report.counts.open + report.counts.correction_pending,
     noteFor: (findingId) => notes[findingId] ?? '',
     setNote: (findingId, value) => setNotes((current) => ({ ...current, [findingId]: value })),

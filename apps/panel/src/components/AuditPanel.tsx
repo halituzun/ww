@@ -1,5 +1,7 @@
 import { brakeLabel, recordRuleLabel, severityTone } from '../services/audit.js';
-import { useAuditViewModel } from '../viewmodels/useAuditViewModel.js';
+import {
+  useAuditViewModel, type AuditViewModelPorts,
+} from '../viewmodels/useAuditViewModel.js';
 
 const STATUS_LABEL: Record<string, string> = {
   open: 'Açık',
@@ -9,9 +11,15 @@ const STATUS_LABEL: Record<string, string> = {
 };
 
 // docs/08 → Denetim Ekranı: denetçi bulguları, tırmandırma geçmişi, fren olayları.
-export function AuditPanel({ projectId }: { projectId: string }) {
+export function AuditPanel({ projectId, ports }: {
+  readonly projectId: string;
+  /** Testler gerçek uca gitmeden görünümü sürebilsin diye (bkz. AgentDetail). */
+  readonly ports?: AuditViewModelPorts;
+}) {
   // docs/09: View'da fetch/iş mantığı yasak — hepsi ViewModel'de.
-  const { report, error, openCount, noteFor, setNote, decide } = useAuditViewModel(projectId);
+  const {
+    report, error, loadError, openCount, noteFor, setNote, decide,
+  } = useAuditViewModel(projectId, ports);
 
   return (
     <section className="audit-panel" aria-label="Denetim">
@@ -19,6 +27,17 @@ export function AuditPanel({ projectId }: { projectId: string }) {
         <h3>Denetim</h3>
         <small>Denetçi bulguları, tırmandırmalar ve fren olayları</small>
       </div>
+
+      {/* HATA EN ÜSTTE. Eskiden bulgu listesinin İÇİNDEYDİ: rapor hiç
+          alınamadığında liste boş olduğu için hata da HİÇ görünmüyor, ekran
+          "0 açık bulgu" diyordu — yani "denetim temiz" yalanını söylüyordu.
+          Veri gelmemesiyle temiz olmak aynı şey değildir. */}
+      {loadError === '' ? null : (
+        <p className="audit-error" role="alert">{loadError}</p>
+      )}
+      {error === '' ? null : (
+        <p className="audit-error" role="alert">{error}</p>
+      )}
 
       <div className="budget-tiles">
         <div className={`budget-tile${openCount > 0 ? ' budget-tile--attention' : ''}`}>
@@ -58,7 +77,6 @@ export function AuditPanel({ projectId }: { projectId: string }) {
         <div className="budget-block">
           <h4>Bulgular</h4>
           <ul className="audit-findings">
-            {error !== '' ? <li className="audit-error">{error}</li> : null}
             {report.findings.map((finding) => (
               <li key={finding.findingId} className={`audit-finding audit-finding--${severityTone(finding.severity)}`}>
                 <div className="audit-finding__head">

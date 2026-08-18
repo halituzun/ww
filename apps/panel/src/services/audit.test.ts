@@ -15,9 +15,12 @@ describe('fetchAuditReport', () => {
       .toBe(`${DEFAULT_API_BASE}/projects/p1/audit`);
   });
 
-  it('okuma hatasında boş rapor döner', async () => {
-    const fetchImpl = vi.fn(async () => jsonResponse({}, { status: 503 })) as unknown as typeof fetch;
-    await expect(fetchAuditReport('p1', { fetchImpl })).resolves.toEqual(EMPTY_AUDIT_REPORT);
+  // DEĞİŞTİ: eskiden okuma hatasında BOŞ RAPOR dönüyordu ve ekran
+  // "0 açık bulgu" diyordu — yani "denetim temiz" yalanı. Denetim ekranının
+  // İŞİ sorun bildirmektir; veri gelmemesiyle temiz olmak aynı şey değildir.
+  it('okuma hatasini YUTMAZ, cagirana bildirir', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('bozuk', { status: 500 })));
+    await expect(fetchAuditReport('p1')).rejects.toBeTruthy();
   });
 });
 
