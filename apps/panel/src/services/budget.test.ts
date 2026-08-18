@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { fetchBudgetReport, formatUsd, budgetTone, EMPTY_BUDGET_REPORT } from './budget.js';
+import { fetchBudgetReport, formatUsd, budgetTone } from './budget.js';
 import { DEFAULT_API_BASE } from './http.js';
 
 const jsonResponse = (body: unknown, init: ResponseInit = {}) =>
@@ -24,9 +24,13 @@ describe('fetchBudgetReport', () => {
       .toBe(`${DEFAULT_API_BASE}/projects/p1/budget`);
   });
 
-  it('okuma hatasında boş rapor döner, paneli düşürmez', async () => {
-    const fetchImpl = vi.fn(async () => jsonResponse({}, { status: 500 })) as unknown as typeof fetch;
-    await expect(fetchBudgetReport('p1', { fetchImpl })).resolves.toEqual(EMPTY_BUDGET_REPORT);
+  // DEĞİŞTİ: eskiden okuma hatasında BOŞ RAPOR dönüyordu ve panel
+  // "0 harcandı" gösteriyordu. Para söz konusuyken bu tehlikeli bir yalan:
+  // kullanıcı hiçbir şey çalışmıyor sanar. Veri gelmemesiyle sıfır harcama
+  // aynı şey değildir; hata çağırana bildirilir ve panelde görünür.
+  it('okuma hatasini YUTMAZ, cagirana bildirir', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('bozuk', { status: 500 })));
+    await expect(fetchBudgetReport('p1')).rejects.toBeTruthy();
   });
 
   it('proje kimliğini URL için kodlar', async () => {

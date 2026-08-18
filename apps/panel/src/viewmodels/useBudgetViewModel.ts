@@ -28,13 +28,25 @@ export function useBudgetViewModel(
   const [limitDraft, setLimitDraft] = useState('');
   const [limitNote, setLimitNote] = useState('');
   const [limitError, setLimitError] = useState('');
+  // YÜKLEME hatası KULLANICI hatasından ayrıdır: başarılı bir arka plan
+  // yenilemesi, kullanıcının limit doğrulama mesajını silmemeli.
+  const [loadError, setLoadError] = useState('');
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     if (!projectId) return;
     let active = true;
     const refresh = (): void => {
-      void load(projectId).then((next) => { if (active) setReport(next); });
+      void load(projectId)
+        .then((next) => { if (active) { setReport(next); setLoadError(''); } })
+        .catch((reason: unknown) => {
+          // Hata YUTULURSA panel "0 harcandı" der. Para söz konusuyken bu
+          // tehlikeli bir yalandır: kullanıcı hiçbir şey çalışmıyor sanır.
+          // Veri gelmemesiyle sıfır harcama aynı şey DEĞİLDİR.
+          if (active) {
+            setLoadError(reason instanceof Error ? reason.message : 'Kontör raporu alınamadı');
+          }
+        });
     };
     refresh();
     const timer = window.setInterval(refresh, pollMs);
@@ -68,5 +80,5 @@ export function useBudgetViewModel(
     }
   };
 
-  return { report, limitDraft, setLimitDraft, limitNote, limitError, saving, saveLimit };
+  return { report, loadError, limitDraft, setLimitDraft, limitNote, limitError, saving, saveLimit };
 }

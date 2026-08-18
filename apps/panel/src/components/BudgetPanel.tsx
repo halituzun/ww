@@ -2,7 +2,9 @@ import {
   budgetTone,
   formatUsd,
 } from '../services/budget.js';
-import { useBudgetViewModel } from '../viewmodels/useBudgetViewModel.js';
+import {
+  useBudgetViewModel, type BudgetViewModelPorts,
+} from '../viewmodels/useBudgetViewModel.js';
 
 // Kategorik palet: dataviz referans paletinin koyu sütunu, panelin yüzeyine
 // (#0b1220) karşı validate_palette.js ile doğrulandı — 5 kontrolün beşi PASS.
@@ -12,11 +14,15 @@ const MAX_SERIES = SERIES.length;
 
 const pct = (value: number): string => `${Math.min(100, Math.max(0, value * 100)).toFixed(0)}%`;
 
-export function BudgetPanel({ projectId }: { projectId: string }) {
+export function BudgetPanel({ projectId, ports }: {
+  readonly projectId: string;
+  /** Testler gerçek uca gitmeden görünümü sürebilsin diye. */
+  readonly ports?: BudgetViewModelPorts;
+}) {
   // docs/09: View'da fetch yasak — yükleme ve yoklama ViewModel'de.
   const {
-    report, limitDraft, setLimitDraft, limitNote, limitError, saving, saveLimit,
-  } = useBudgetViewModel(projectId);
+    report, loadError, limitDraft, setLimitDraft, limitNote, limitError, saving, saveLimit,
+  } = useBudgetViewModel(projectId, ports);
 
   const { totals, budget } = report;
   const tone = budgetTone(budget.state);
@@ -31,6 +37,12 @@ export function BudgetPanel({ projectId }: { projectId: string }) {
 
   return (
     <section className="budget-panel" aria-label="Kontör panosu">
+      {/* Rapor alınamadıysa AÇIKÇA söylenir. Sessizce sıfır göstermek, para
+          söz konusuyken tehlikeli bir yalandır: kullanıcı hiçbir şey
+          çalışmıyor sanır. */}
+      {loadError === '' ? null : (
+        <p className="audit-error" role="alert">{loadError}</p>
+      )}
       <div className="section-heading">
         <h3>Kontör</h3>
         <small>Son {report.windowDays} gün</small>

@@ -1,5 +1,5 @@
 // Kontör panosu IO + sunum yardımcıları (docs/08 → Kontör Panosu).
-import { getJsonOr, requestJson, type RequestOptions } from './http.js';
+import { getJson, requestJson, type RequestOptions } from './http.js';
 
 export type BudgetState = 'unlimited' | 'ok' | 'warning' | 'exceeded';
 
@@ -31,11 +31,9 @@ export const fetchBudgetReport = (
   projectId: string,
   options: RequestOptions = {},
 ): Promise<BudgetReport> =>
-  getJsonOr<BudgetReport>(
-    `/projects/${encodeURIComponent(projectId)}/budget`,
-    EMPTY_BUDGET_REPORT,
-    options,
-  );
+  // HATAYI YUTMAZ (bkz. fetchAuditReport). Varsayılana düşmek panele
+  // "0 harcandı" dedirtir; para söz konusuyken bu tehlikeli bir yalandır.
+  getJson<BudgetReport>(`/projects/${encodeURIComponent(projectId)}/budget`, options);
 
 // LLM maliyetleri çoğu zaman sent altındadır; iki basamağa yuvarlamak
 // küçük tutarları '$0.00' yapıp bilgiyi yok eder.
