@@ -67,6 +67,7 @@ import { TaskCausalLog } from './task-causal-log.js';
 import { isRetryableFailedCommand } from './retryable-command.js';
 import { AgentCloneService } from './agent-clone-service.js';
 import { pickCloneSource } from './agent-clone-plan.js';
+import { idleCloneCutoff } from './idle-clone-cutoff.js';
 import {
   TaskTransitionService,
   assignmentAttemptIdForAssign,
@@ -2779,6 +2780,22 @@ export class AssignmentService {
     brief: TaskBriefV1 | undefined,
   ): Promise<AgentRow | undefined> {
     if (this.#clones === undefined) return undefined;
+    // docs/03: "boşta kalan klonlar 10 dk sonra stopped yapılır". Süpürme
+    // TAM BURADA koşar çünkü tam burada gerekir: klon açmadan önce ölü
+    // klonları toplamak, `max_clones_per_agent`/`max_parallel_agents`
+    // sınırlarının birikmiş çöple dolmasını engeller. Süpürme hiç
+    // çağrılmıyordu; sınırlar dolunca klonlama sessizce duruyordu.
+    //
+    // Süpürme hatası ATAMAYI DÜŞÜRMEZ: temizlik yapılamadı diye görevi
+    // ertelemek, çözdüğünden fazlasını bozar.
+    const cutoff = idleCloneCutoff(this.#clock.now());
+    if (cutoff !== undefined) {
+      try {
+        await this.#clones.stopIdleClones(this.#projectId, cutoff);
+      } catch {
+        // Sessiz değil: bir sonraki sınır hatası zaten görünür olacak.
+      }
+    }
     const agents = await listLatestAgents(this.#ch, this.#projectId, { limit: 1_000 });
     const promptRef = brief?.promptRefs.find((ref) => ref.sourceType === 'prompt');
     const source = pickCloneSource(agents as never, {

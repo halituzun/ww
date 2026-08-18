@@ -170,6 +170,27 @@ describe('sınıf metotları', () => {
 
   // Nest controller metotlarını FRAMEWORK çağırır, ad ile değil. Onları ihlal
   // saymak kapıyı gürültüye boğar ve gürültü kapıyı aşındırır.
+
+  // KÖR NOKTA: metot taraması yalnız "testte var, üretimde yok" durumunu
+  // raporluyordu. HİÇ kullanılmayan metot (ne üretim ne test) hiçbir listeye
+  // girmiyordu — `AgentCloneService.stopIdleClones` tam böyleydi ve docs/03'ün
+  // "boşta klonlar 10 dk sonra durdurulur" kuralı bu yüzden hiç koşmadı.
+  it('hic kullanilmayan metodu olu kod olarak raporlar', () => {
+    const report = analyzeWiring([
+      { path: 'src/clone.ts', text: 'export class Clones {\n  stopIdle(x: number) { return x; }\n}\n' },
+    ]);
+    expect(report.untested).toContain('src/clone.ts:Clones.stopIdle');
+    expect(report.unwired).not.toContain('src/clone.ts:Clones.stopIdle');
+  });
+
+  it('uretimde kullanilan metot olu kod sayilmaz', () => {
+    const report = analyzeWiring([
+      { path: 'src/clone.ts', text: 'export class Clones {\n  stopIdle(x: number) { return x; }\n}\n' },
+      { path: 'src/use.ts', text: 'declare const c: Clones; c.stopIdle(1);\n' },
+    ]);
+    expect(report.untested).not.toContain('src/clone.ts:Clones.stopIdle');
+  });
+
   it('controller metotlarini bulgu saymaz', () => {
     const report = analyzeWiring([
       { path: 'src/audit.controller.ts', text: '@Controller()\nexport class AuditController {\n  report() { return 1; }\n}\n' },

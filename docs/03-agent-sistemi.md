@@ -162,7 +162,11 @@ görevden iyidir.)
 - Klon `events`'e `clone_spawned` olayıyla duyurulur (tuvalde görünür).
 - Sınır: `settings.max_clones_per_agent` (varsayılan 5) ve global
   `settings.max_parallel_agents` (varsayılan 8). Sınıra takılan görev kuyrukta bekler.
-- Boşta kalan klonlar 10 dk sonra `stopped` yapılır (kayıt silinmez — tarih kalır).
+- Boşta kalan klonlar 10 dk sonra `stopped` yapılır (kayıt silinmez — tarih
+  kalır). *(2026-08-18'de bağlandı: `stopIdleClones` yazılmıştı ama HİÇ
+  çağrılmıyordu, ne üretimde ne testte. Klonlar birikiyor ve sınırlara
+  dayanınca klonlama sessizce duruyordu — kaynak koruması kendini korumasız
+  bırakıyordu. Süpürme klon AÇMADAN ÖNCE koşar: tam orada gerekir.)*
 
 ## İletişim Protokolü
 

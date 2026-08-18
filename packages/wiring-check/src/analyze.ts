@@ -78,6 +78,8 @@ const METHOD_PATTERN = /^ {2}(?:public\s+|readonly\s+)?(?:async\s+)?([a-zA-Z_][A
 const FRAMEWORK_METHODS = new Set([
   'onModuleInit', 'onModuleDestroy', 'onApplicationBootstrap',
   'beforeApplicationShutdown', 'onApplicationShutdown', 'constructor',
+  // WebSocket ağ geçidi kancalarını da FRAMEWORK çağırır, ad ile değil.
+  'handleConnection', 'handleDisconnect', 'afterInit',
 ]);
 
 const CONTROL_KEYWORDS = new Set(['if', 'for', 'while', 'switch', 'catch', 'return', 'function']);
@@ -104,10 +106,15 @@ function classMethods(files: readonly SourceFile[]): ClassMethod[] {
   return found;
 }
 
-/** `.metot(` çağrısı — polimorfik çağrılar da aynı adı kullanır. */
+/**
+ * `.metot(` çağrısı — polimorfik çağrılar da aynı adı kullanır.
+ *
+ * İSTEĞE BAĞLI ÇAĞRI da sayılır (`x?.metot?.(...)`): saymamak, gerçekten
+ * bağlı bir metodu "ölü kod" diye raporlar ve listeye güven kalmaz.
+ */
 function countCalls(text: string, name: string): number {
   const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  return (text.match(new RegExp(`\\.${escaped}\\s*\\(`, 'g')) ?? []).length;
+  return (text.match(new RegExp(`\\.${escaped}\\s*\\??\\.?\\s*\\(`, 'g')) ?? []).length;
 }
 
 export function analyzeWiring(files: readonly SourceFile[]): WiringReport {
@@ -158,7 +165,12 @@ export function analyzeWiring(files: readonly SourceFile[]): WiringReport {
       else production += hits;
     }
     if (production > 0) continue;
+    // HİÇ kullanılmayan metot da raporlanır. Eskiden yalnız "testte var,
+    // üretimde yok" durumu görülüyordu; hiç dokunulmamış metot sessizce
+    // geçiyordu. Canlı örnek: `AgentCloneService.stopIdleClones` — ne üretim
+    // ne test çağırıyordu ve docs/03'ün klon süpürme kuralı hiç koşmadı.
     if (testing > 0) unwired.push(method.key);
+    else untested.push(method.key);
   }
 
   return { unwired: unwired.sort(), untested: untested.sort() };
