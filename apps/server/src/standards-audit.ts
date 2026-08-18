@@ -54,8 +54,19 @@ const VIEWMODEL_PATH = /(^|\/)viewmodels\//;
 const SERVICE_PATH = /(^|\/)services\//;
 const SCRIPT_FILE = /\.(ts|tsx|js|jsx)$/;
 
+/**
+ * KÖK bileşen de görünümdür. `components/views/pages` şartı onu atlıyordu ve
+ * App.tsx panelin en çok dokunulan dosyası — kuralın en önemli dosyayı
+ * atlaması kuralı yarı yarıya işlevsiz bırakır.
+ *
+ * Giriş dosyası (main/index) bileşen DEĞİLDİR: yalnız kökü DOM'a bağlar ve
+ * orada durum tutmak zaten anlamsızdır; onu denetlemek gürültü olurdu.
+ */
+const ROOT_VIEW = /(^|\/)App\.(tsx|jsx)$/;
+
 export function isViewFile(filePath: string): boolean {
-  return VIEW_FILE.test(filePath) && VIEW_PATH.test(filePath);
+  if (!VIEW_FILE.test(filePath)) return false;
+  return VIEW_PATH.test(filePath) || ROOT_VIEW.test(filePath);
 }
 
 export function isViewModelFile(filePath: string): boolean {

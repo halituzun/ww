@@ -121,6 +121,12 @@ ekranına düşer, her bulgu düzeltme görevine bağlanır ([08 — Denetim](08
 - [ ] Controller'da iş mantığı / repository dışında SQL var mı? (API)
 - [ ] Katmanlar arası bağımlılık yönü doğru mu? (View→VM→Service→Model)
 
+*(2026-08-18: denetçinin bir KÖR NOKTASI kapatıldı — `isViewFile` yalnız
+`components/views/pages` altına bakıyor, yani KÖK bileşen (`App.tsx`) hiç
+denetlenmiyordu. Panelin en çok dokunulan dosyasını atlayan bir kural yarı
+yarıya işlevsizdir. Giriş dosyası (`main.tsx`) denetlenmez: bileşen değildir,
+yalnız kökü DOM'a bağlar.)*
+
 ### `ui_audit` — UI-dostu denetçisi
 
 *(kısmen uygulandı 2026-08-18: STD-004 erişilebilir ad kontrolü. Listenin

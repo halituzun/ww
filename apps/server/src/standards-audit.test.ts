@@ -179,4 +179,34 @@ describe('auditMvvmView', () => {
       )).toEqual([]);
     });
   });
+
+  // KÖR NOKTA: `isViewFile` yalnız components/views/pages altına bakıyordu,
+  // yani KÖK bileşen (App.tsx) hiç denetlenmiyordu — oysa o da bir görünüm
+  // ve panelin en çok dokunulan dosyası. Kuralın en önemli dosyayı atlaması,
+  // kuralı yarı yarıya işlevsiz bırakır.
+  describe('kök bileşen', () => {
+    it('App.tsx gorunum sayilir', () => {
+      const found = auditStandards(
+        'apps/panel/src/App.tsx',
+        'export default function App() { const [a] = useState(1); return a; }\n',
+      );
+      expect(found.map((v) => v.ruleId)).toEqual(['STD-001']);
+    });
+
+    // Giriş dosyası bileşen DEĞİLDİR: yalnız kökü DOM'a bağlar ve orada
+    // durum tutmak zaten anlamsızdır. Onu denetlemek gürültü olurdu.
+    it('main.tsx denetlenmez', () => {
+      expect(auditStandards(
+        'apps/panel/src/main.tsx',
+        'createRoot(document.getElementById("root")!).render(<App />);\n',
+      )).toEqual([]);
+    });
+
+    it('rastgele bir kok dosya gorunum sayilmaz', () => {
+      expect(auditStandards(
+        'apps/panel/src/vite-env.d.ts',
+        'const x = 1;\n',
+      )).toEqual([]);
+    });
+  });
 });
