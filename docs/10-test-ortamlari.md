@@ -71,7 +71,11 @@ Emülatör **host'ta** çalışır (Docker'a girmez); gereksinimler ve akış:
 ## Ortak Davranışlar
 
 - Her ortam başlat/durdur olayları `events`'e yazılır; süreç çökerse panelde
-  rozet + tek tık yeniden başlatma.
+  rozet + tek tık yeniden başlatma. *(Olay yazımı 2026-08-18'de eklendi:
+  `process_started`/`process_stopped` türleri şemada tanımlıydı ama hiçbir
+  üretim kodu yazmıyordu — canlı veritabanında sıfır satır. Önizleme açılıp
+  kapanıyor, zaman çizelgesinde hiç iz kalmıyordu. Emülatör tarafı ve "çöktü"
+  rozeti hâlâ eksik.)*
 - Aynı anda proje başına en çok 1 önizleme + 1 emülatör süreci (kaynak koruması).
 - Proje duraklatılırsa/arşivlenirse süreçler kapatılır.
 - Test ortamındayken kullanıcının verdiği emirler normal akışla PM'e gider;

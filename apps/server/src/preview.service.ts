@@ -14,11 +14,12 @@ import { spawn, type ChildProcess } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { Inject, Injectable, Logger, OnModuleDestroy } from '@nestjs/common';
-import { appendProjectVersion, getLatestProject } from '@ww/db';
+import { appendEvent, appendProjectVersion, getLatestProject } from '@ww/db';
 import { OutputRing, PORT_POOL_END, PORT_POOL_START, PortPool } from './process-pool.js';
 import { readDevPort, withDevPort, withoutDevPort } from './preview-port-store.js';
 import { resolveWorkspaceRoot } from './runtime-context.js';
 import { SERVER_DATABASE, type ServerDatabase } from './orchestration.module.js';
+import { processLifecycleEvent } from './process-event.js';
 
 export class PreviewError extends Error {}
 
@@ -48,6 +49,31 @@ export class PreviewApplicationService implements OnModuleDestroy {
 
   constructor(@Inject(SERVER_DATABASE) database: ServerDatabase) {
     this.#database = database;
+  }
+
+
+  /**
+   * docs/10: "Her ortam başlat/durdur olayları `events`'e yazılır."
+   *
+   * Olay yazımı ÖNİZLEMEYİ DÜŞÜRMEZ: süreç zaten başladı/durdu, kaydı
+   * tutamamak onu geri almaz. Sessiz de kalmaz.
+   */
+  async #recordLifecycle(
+    projectId: string,
+    state: 'started' | 'stopped',
+    port?: number,
+  ): Promise<void> {
+    try {
+      await appendEvent(this.#database.ch, processLifecycleEvent({
+        projectId,
+        kind: 'dev',
+        state,
+        occurredAt: new Date().toISOString(),
+        ...(port === undefined ? {} : { port }),
+      }) as never);
+    } catch (reason) {
+      this.#logger.warn(`süreç olayı yazılamadı (${state}): ${String(reason)}`);
+    }
   }
 
   async #workspaceOf(projectId: string): Promise<string> {
@@ -97,6 +123,7 @@ export class PreviewApplicationService implements OnModuleDestroy {
         updated_at: new Date().toISOString(),
       },
     });
+    await this.#recordLifecycle(projectId, 'started', port);
     this.#logger.log(`önizleme açıldı: ${projectId} → http://localhost:${port}`);
     return this.status(projectId);
   }
@@ -107,6 +134,7 @@ export class PreviewApplicationService implements OnModuleDestroy {
       running.child.kill('SIGTERM');
       this.#running.delete(projectId);
       this.#pool.release(projectId);
+      await this.#recordLifecycle(projectId, 'stopped', running.port);
       // Kayıt "çalışıyor" yalanını söylememeli: durdurulan önizlemenin portu
       // projeden silinir.
       try {
