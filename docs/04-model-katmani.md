@@ -93,6 +93,11 @@ Normalizasyon kuralları:
 ## Sağlık Kontrolü
 
 - Periyodik (60 sn) hafif ping: 1-token'lık ucuz istek `purpose='health_check'`.
+- TAKLİT sağlayıcı (`base_url` boş) pinglenmez; durumu `unknown` yazılır.
+  Anahtarsız GERÇEK sağlayıcı atlanmaz, `down` yazılır — yapılandırma eksikliği
+  gerçek bir sağlık sorunudur. (Ölçüm 2026-08-18: taklide 1352 ping atılmış,
+  hepsi hata; bunlar `api_usage`'ın %45'iydi, hata oranını şişiriyordu ve
+  panelde kalıcı sahte kırmızı üretiyordu.)
 - Pasif sinyal: `mv_provider_errors` — son 5 dk hata oranı > %50 → `degraded`,
   art arda 3 ping hatası → `down`; ilk başarılı ping → `ok`.
 - Durum `api_providers.health_status`'a yazılır + pub/sub ile panele düşer

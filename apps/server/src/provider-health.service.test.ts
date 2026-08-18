@@ -1,8 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
 import { runHealthSweep, type HealthSweepPorts } from './provider-health.service.js';
 
-const provider = (over: Partial<{ provider_id: string; enabled: boolean; key_ref: string; health_status: string }> = {}) => ({
-  provider_id: 'deepseek', display_name: 'DeepSeek', base_url: '', enabled: true,
+const provider = (over: Partial<{ provider_id: string; base_url: string; enabled: boolean; key_ref: string; health_status: string }> = {}) => ({
+  provider_id: 'deepseek', display_name: 'DeepSeek', base_url: 'https://api.deepseek.com', enabled: true,
   is_default: false, fallback_order: 0, models: ['deepseek-chat'], key_ref: 'deepseek',
   health_status: 'unknown', last_health_check: '1970-01-01T00:00:00.000Z',
   updated_at: '1970-01-01T00:00:00.000Z', version: '1',
@@ -207,5 +207,65 @@ describe('runHealthSweep', () => {
     }), new Map());
     // Kayıt patlasa da sağlık durumu yazılmaya devam etmeli.
     expect(persist).toHaveBeenCalled();
+  });
+
+  // ÖLÇÜLDÜ (canlı ClickHouse, 2026-08-18): `mock` sağlayıcısına 1352 kez ping
+  // atılmış ve hepsi `no_key` hatası vermiş. `mock` TAKLİTTİR — `base_url`'ü
+  // boştur, ağ çağrısı yapmaz; konsey kodu onu zaten üye saymıyor.
+  //
+  // Bedeli üç katlı: (1) bu satırlar tüm api_usage tablosunun %45'i,
+  // (2) mv_provider_errors'tan beslenen hata oranını kalıcı olarak şişiriyor,
+  // (3) panelde sonsuza dek kırmızı duran sahte bir alarm — kullanıcıyı
+  // kırmızıyı görmezden gelmeye alıştırır.
+  //
+  // NOT: anahtarsız GERÇEK sağlayıcı atlanmaya devam ETMEZ; o hâlâ pinglenip
+  // 'down' yazılır (yapılandırma eksikliği gerçek bir sağlık sorunudur).
+  it('taklit saglayiciyi (base_url bos) hic pinglemez', async () => {
+    const ping = vi.fn(async () => ({ ok: false, latencyMs: 0, error: 'no_key', fatal: true }));
+    const persist = vi.fn(async () => undefined);
+    const recordUsage = vi.fn(async () => undefined);
+    await runHealthSweep(ports({
+      listProviders: async () => [provider({ provider_id: 'mock', base_url: '', key_ref: '' })],
+      ping, persist, recordUsage,
+    }), new Map());
+
+    expect(ping).not.toHaveBeenCalled();
+    // Kontör kaydı da yazılmaz: sahte hata satırı üretmek tabloyu kirletir.
+    expect(recordUsage).not.toHaveBeenCalled();
+  });
+
+  it('anahtarsiz GERCEK saglayiciyi yine de pingler', async () => {
+    const ping = vi.fn(async () => ({ ok: false, latencyMs: 0, error: 'no_key', fatal: true }));
+    await runHealthSweep(ports({
+      listProviders: async () => [provider({ key_ref: '' })],
+      ping,
+    }), new Map());
+
+    expect(ping).toHaveBeenCalledTimes(1);
+  });
+
+  // Ping'i kesmek TEK BAŞINA yetmez: taklit sağlayıcı en son yazılan
+  // durumda (canlı veride 'down') donup kalır ve panelde sonsuza dek kırmızı
+  // görünür — yani düzeltmek istediğimiz sahte alarm sürer. Taklit için
+  // dürüst durum 'unknown'dır: onu hiç kontrol etmiyoruz.
+  it('taklit saglayicinin bayat down durumunu unknowna cevirir', async () => {
+    const persist = vi.fn(async () => undefined);
+    await runHealthSweep(ports({
+      listProviders: async () => [provider({ provider_id: 'mock', base_url: '', health_status: 'down' })],
+      persist,
+    }), new Map());
+
+    expect(persist).toHaveBeenCalledTimes(1);
+    expect(persist.mock.calls[0]![0]).toMatchObject({ provider_id: 'mock', health_status: 'unknown' });
+  });
+
+  it('zaten unknown olan taklit saglayiciyi bosuna yazmaz', async () => {
+    const persist = vi.fn(async () => undefined);
+    await runHealthSweep(ports({
+      listProviders: async () => [provider({ provider_id: 'mock', base_url: '', health_status: 'unknown' })],
+      persist,
+    }), new Map());
+
+    expect(persist).not.toHaveBeenCalled();
   });
 });

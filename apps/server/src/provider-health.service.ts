@@ -59,7 +59,18 @@ export const HEALTH_SWEEP_INTERVAL_MS = 60_000;
 
 // Pasif sağlayıcı hiç kontrol edilmez. Anahtarsız olan ATLANMAZ: yapılandırma
 // eksikliği de bir sağlık sorunudur ve panelde 'unknown' değil 'down' görünmelidir.
-const isCheckable = (provider: ApiProviderRow): boolean => provider.enabled;
+//
+// TAKLİT sağlayıcı ise atlanır: `base_url`'ü boş olan ağ çağrısı YAPMAZ
+// (konsey kodu da onu üye saymıyor). Ölçüldü (canlı ClickHouse, 2026-08-18):
+// `mock`'a 1352 kez ping atılmış, hepsi `no_key` hatası. Bedeli üç katlı —
+// bu satırlar tüm api_usage tablosunun %45'i; mv_provider_errors'tan beslenen
+// hata oranını kalıcı olarak şişiriyor; ve panelde sonsuza dek kırmızı duran
+// sahte bir alarm üretiyor, ki bu kullanıcıyı kırmızıyı görmezden gelmeye
+// alıştırır — bir uyarının verebileceği en büyük zarar budur.
+const isStubProvider = (provider: ApiProviderRow): boolean => provider.base_url.trim() === '';
+
+const isCheckable = (provider: ApiProviderRow): boolean =>
+  provider.enabled && !isStubProvider(provider);
 
 export async function runHealthSweep(
   ports: HealthSweepPorts,
@@ -69,7 +80,36 @@ export async function runHealthSweep(
   const providers = await ports.listProviders();
 
   for (const provider of providers) {
-    if (!isCheckable(provider)) continue;
+    if (!isCheckable(provider)) {
+      // Ping'i kesmek TEK BAŞINA yetmez: taklit sağlayıcı en son yazılan
+      // durumda donar (canlı veride 'down') ve panelde sonsuza dek kırmızı
+      // kalır — yani düzeltmek istediğimiz sahte alarm sürer. Taklit için
+      // dürüst durum 'unknown'dır: onu hiç kontrol etmiyoruz.
+      //
+      // Yalnız DEĞİŞİM yazılır; her turda aynı değeri yazmak gereksiz
+      // sürüm üretir.
+      if (isStubProvider(provider) && provider.enabled && provider.health_status !== 'unknown') {
+        const checkedAt = ports.now();
+        try {
+          await ports.persist({
+            provider_id: provider.provider_id,
+            display_name: provider.display_name,
+            base_url: provider.base_url,
+            enabled: provider.enabled,
+            is_default: provider.is_default,
+            fallback_order: provider.fallback_order,
+            models: provider.models,
+            key_ref: provider.key_ref,
+            health_status: 'unknown',
+            last_health_check: checkedAt,
+            updated_at: checkedAt,
+          });
+        } catch (reason) {
+          ports.onError?.(provider.provider_id, reason);
+        }
+      }
+      continue;
+    }
 
     try {
       const ping = await ports.ping(provider.provider_id);
