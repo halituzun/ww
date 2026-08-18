@@ -4,6 +4,12 @@
 > özetleyici işleyişi, embedding boru hattı, Context Builder ve "nasıl yaptın?" akışı.
 
 *(2026-08-18: anlatıcı olayları İMLEÇSİZ okuyordu, yani en ESKİ 200 olayı.
+
+*(2026-08-18: anlatı kapsamı TAMAMLANDI — şemadaki 15 olay türünün 15'i insan
+cümlesine çevriliyor. Önceden 7'si ham tür adı basıyordu ("policy_decision
+receipt_changed"), ki ham tür adı anlatı değildir. Şema dışı bir tür için ad
+KORUNUR: anlamadığı bir olaya inandırıcı cümle yazan anlatıcı, okunamaz
+dökümden tehlikelidir.)*
 4393 olaylı bir projede sorulan işe değil, projenin en eski geçmişine cevap
 veriyordu. Artık `listRecentEvents` ile en yeni 200 olay kronolojik sırada
 okunur.)*

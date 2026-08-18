@@ -118,6 +118,21 @@ export function narrateEvent(event: NarratableEvent): string {
       const verdict = allowed === false ? 'reddetti' : 'izin verdi';
       return `politika ${verdict}${reason === undefined ? '' : `: ${reason}`}`;
     }
+    case 'clone_spawned': {
+      // docs/03: klon tuvalde görünür. Anlatı, "neden ikinci bir worker
+      // çıktı?" sorusunun tek cevabıdır.
+      const name = read(payload, 'name');
+      const source = read(payload, 'cloneOf') ?? read(payload, 'clone_of');
+      if (name === undefined && source === undefined) return 'agent klonu açıldı';
+      return `agent klonu açıldı${name === undefined ? '' : `: ${name}`}`
+        + `${source === undefined ? '' : ` (kaynak ${source})`}`;
+    }
+    case 'api_call': {
+      const model = read(payload, 'modelRef') ?? read(payload, 'model');
+      return `model çağrısı${model === undefined ? '' : `: ${model}`}`;
+    }
+    case 'decision':
+      return `karar: ${read(payload, 'reason') ?? 'gerekçe kaydedilmemiş'}`;
     case 'process_started': {
       const port = read(payload, 'port') ?? String(asObject(payload)?.['port'] ?? '');
       return `önizleme süreci başladı${port === '' ? '' : ` (port ${port})`}`;

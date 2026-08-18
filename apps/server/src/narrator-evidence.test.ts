@@ -92,9 +92,12 @@ describe('narrateEvent', () => {
         .toContain('delivered');
     });
 
-    // Bilinmeyen tür için ad KORUNUR, uydurulmaz.
+    // Bilinmeyen tür için ad KORUNUR, uydurulmaz. Şemadaki TÜM türler artık
+    // çevriliyor; bu yüzden örnek şema DIŞINDAN seçildi — ileride eklenecek
+    // bir tür sessizce okunamaz döküme dönmesin diye korunuyor.
     it('bilinmeyen turde ad korunur', () => {
-      expect(narrateEvent(event('clone_spawned' as never, {}))).toBe('clone_spawned');
+      expect(narrateEvent(event('gelecekte_eklenecek' as never, {})))
+        .toBe('gelecekte_eklenecek');
     });
   });
 
@@ -178,5 +181,32 @@ describe('narrateEvent', () => {
     expect(narrateEvent(event('process_stopped', { reason: 'exit:137' })))
       .toContain('exit:137');
     expect(narrateEvent(event('process_stopped', {}))).toContain('durduruldu');
+  });
+
+  // Son üç çevrilmeyen tür. `clone_spawned` özellikle önemli: docs/03 klonu
+  // "tuvalde görünür" diye tanımlıyor ve anlatı "neden ikinci bir worker
+  // çıktı?" sorusunun tek cevabı.
+  describe('kalan olay türleri', () => {
+    it('klon acilmasini kaynagiyla anlatir', () => {
+      const text = narrateEvent(event('clone_spawned', {
+        cloneOf: 'Worker-Coding-1', name: 'Worker-Coding-2',
+      }));
+      expect(text).toContain('Worker-Coding-2');
+      expect(text).toContain('Worker-Coding-1');
+    });
+
+    it('klon adi yoksa uydurmaz', () => {
+      expect(narrateEvent(event('clone_spawned', {}))).toContain('klon');
+    });
+
+    it('model cagrisini modeliyle anlatir', () => {
+      expect(narrateEvent(event('api_call', { modelRef: 'deepseek:chat' })))
+        .toContain('deepseek:chat');
+    });
+
+    it('karari gerekcesiyle anlatir', () => {
+      expect(narrateEvent(event('decision', { reason: 'plan onaylandı' })))
+        .toContain('plan onaylandı');
+    });
   });
 });
