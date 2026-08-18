@@ -143,6 +143,25 @@ describe('createLiveEventSubscription', () => {
       onState: () => undefined, onEvent: () => undefined,
     })).not.toThrow();
   });
+
+  // ASIL KUSUR: sunucu aboneliği reddettiğinde (geçersiz proje kimliği, bozuk
+  // imleç) istemciye hiçbir şey dönmüyordu; panel soketi açık gördüğü için
+  // "Canlı" yazıyor ama tek bir olay bile gelmiyordu. Sunucu artık RET
+  // bildiriyor; panel de onu OLAY SANMAMALI ve durumu düzeltmelidir.
+  it('abonelik reddini olay saymaz ve baglantiyi canli gostermez', () => {
+    const { sockets, states, received } = harness();
+    sockets[0]!.onopen?.();
+    sockets[0]!.onmessage?.({
+      data: JSON.stringify({
+        event: 'subscribe.rejected', projectId: '', taskId: '',
+        cursor: '', ts: '2026-08-18T00:00:00.000Z',
+        data: { reason: 'gecersiz proje kimligi' },
+      }),
+    });
+
+    expect(received).toHaveLength(0);
+    expect(states.at(-1)).toBe('offline');
+  });
 });
 
 const vitestUnused = vi;

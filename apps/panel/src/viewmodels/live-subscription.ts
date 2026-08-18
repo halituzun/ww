@@ -83,6 +83,14 @@ export function createLiveEventSubscription(input: LiveSubscriptionInput): () =>
         // Tek bozuk çerçeve tüm beslemeyi düşürmemeli.
         return;
       }
+      // ABONELİK REDDİ OLAY DEĞİLDİR. Sunucu geçersiz proje kimliği ya da
+      // bozuk imleç yüzünden aboneliği reddettiğinde soket AÇIK kalır; bunu
+      // olay sayıp "Canlı" göstermek, hiç veri gelmeyen bir paneli sağlıklı
+      // gibi sunar. Durum düşürülür, kullanıcı bağlantının çalışmadığını görür.
+      if (next.event === 'subscribe.rejected') {
+        input.onState('offline');
+        return;
+      }
       if (typeof next.cursor === 'string' && compareCursors(next.cursor, cursor) > 0) {
         cursor = next.cursor;
       }

@@ -192,6 +192,11 @@ type WsEventName =
   | 'notification';       // genel bildirimler
 ```
 
+- Abonelik REDDİ istemciye bildirilir: geçersiz proje kimliği ya da bozuk
+  imleçte sunucu `subscribe.rejected` zarfı gönderir ve yoklamayı başlatmaz.
+  *(2026-08-18: doğrulama istisnası sessizce yutuluyordu — soket açık kalıyor,
+  panel "Canlı" yazıyor ve tek bir olay bile gelmiyordu. Panel bu zarfı olay
+  saymaz, bağlantıyı canlı göstermez.)*
 - Abonelik: `{ subscribe: { projectId, events: [...] } }` — tuval yalnız
   ihtiyacını dinler; `event.created` yüksek hacimlidir, yalnız denetim/zaman
   çizelgesi açıkken abone olunur.

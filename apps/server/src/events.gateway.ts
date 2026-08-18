@@ -37,10 +37,24 @@ export class EventsGateway implements OnModuleDestroy {
   @SubscribeMessage('subscribe')
   async subscribe(client: WebSocket, payload: unknown): Promise<void> {
     const value = payload === null || typeof payload !== 'object' ? {} : payload as Record<string, unknown>;
-    const projectId = EntityIdSchema.parse(value['projectId']);
-    // İstemci imleci OPAKTIR; sunucu onu yalnız doğrular ve geri verir.
-    const rawAfter = value['afterCursor'] === undefined ? EMPTY_EVENT_CURSOR : String(value['afterCursor']);
-    decodeEventCursor(rawAfter);
+    let projectId: string;
+    let rawAfter: string;
+    try {
+      projectId = EntityIdSchema.parse(value['projectId']);
+      // İstemci imleci OPAKTIR; sunucu onu yalnız doğrular ve geri verir.
+      rawAfter = value['afterCursor'] === undefined
+        ? EMPTY_EVENT_CURSOR
+        : String(value['afterCursor']);
+      decodeEventCursor(rawAfter);
+    } catch (reason) {
+      // RET SESSİZ KALMAZ. Doğrulama istisnası burada yutulunca istemciye
+      // hiçbir şey dönmüyordu: panel soketi açık gördüğü için "Canlı" yazıyor
+      // ama tek bir olay bile gelmiyordu — "bağlı görünüp donan panel".
+      // Yoklama zamanlayıcısı da KURULMAZ: aboneliği olmayan istemci için
+      // saniyede bir ClickHouse sorgusu sessiz bir yüktür.
+      this.reject(client, reason);
+      return;
+    }
     const current = this.#clients.get(client);
     if (current === undefined) return;
     if (current.timer !== undefined) clearInterval(current.timer);
@@ -48,6 +62,20 @@ export class EventsGateway implements OnModuleDestroy {
     this.#clients.set(client, state);
     await this.publish(client, state);
     state.timer = setInterval(() => { void this.publish(client, state); }, 1_000);
+  }
+
+  /** Aboneliği reddeder ve SEBEBİNİ istemciye söyler. */
+  private reject(client: WebSocket, reason: unknown): void {
+    if (client.readyState !== client.OPEN) return;
+    const envelope: WsEnvelope = {
+      event: 'subscribe.rejected',
+      projectId: '',
+      taskId: '',
+      cursor: EMPTY_EVENT_CURSOR,
+      ts: new Date().toISOString(),
+      data: { reason: reason instanceof Error ? reason.message : String(reason) },
+    };
+    client.send(JSON.stringify(envelope));
   }
 
   onModuleDestroy(): void {
