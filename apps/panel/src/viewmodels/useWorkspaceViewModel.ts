@@ -57,8 +57,6 @@ export function useWorkspaceViewModel() {
   const eventsRef = useRef<TimelineEvent[]>([]);
   const [message, setMessage] = useState('');
   const [messageStatus, setMessageStatus] = useState('');
-  const [apiPath, setApiPath] = useState('/health');
-  const [apiResponse, setApiResponse] = useState('');
   const [narratorQuestion, setNarratorQuestion] = useState('Bunu nasıl yaptın?');
   const [narratorResult, setNarratorResult] = useState<
     { answer: string; evidenceRefs: string[] } | null
@@ -144,15 +142,6 @@ export function useWorkspaceViewModel() {
     }
   }, [projectId, message]);
 
-  const runApiRequest = useCallback(async () => {
-    setApiResponse('Çalışıyor…');
-    try {
-      const response = await fetch(`${apiBase}${apiPath}`);
-      setApiResponse(`${response.status} ${await response.text()}`);
-    } catch {
-      setApiResponse('İstek başarısız');
-    }
-  }, [apiPath]);
 
   const askNarrator = useCallback(async () => {
     if (!projectId || narratorQuestion.trim() === '') return;
@@ -197,9 +186,8 @@ export function useWorkspaceViewModel() {
     timelineCursor, setTimelineCursor,
     replay: replayAt(events, timelineCursor),
     message, setMessage, messageStatus,
-    apiPath, setApiPath, apiResponse,
     narratorQuestion, setNarratorQuestion, narratorResult,
     tab, setTab,
-    sendCommand, runApiRequest, askNarrator, updateProjectStatus, createProject,
+    sendCommand, askNarrator, updateProjectStatus, createProject,
   };
 }
