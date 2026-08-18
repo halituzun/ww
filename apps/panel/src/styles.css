@@ -358,3 +358,9 @@ dd {
 
 .budget-limit { display: flex; gap: 8px; align-items: flex-end; margin: 8px 0; }
 .budget-limit__error { color: var(--danger, #d95926); }
+
+/* Gereksinim sihirbazı (docs/08). */
+.wizard { margin-top: 12px; padding: 12px; border: 1px solid var(--line, #2a2f3a); border-radius: 8px; }
+.wizard__list { list-style: none; padding: 0; display: grid; gap: 10px; }
+.wizard__list label { display: grid; gap: 4px; }
+.wizard__error { color: var(--danger, #d95926); }
