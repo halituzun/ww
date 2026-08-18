@@ -299,7 +299,7 @@ devreye girmemişti. `ProviderError.advancesFallbackChain` ile ayrıldı.
 | Kullanıcı onaylar | ✅ | `POST /plans/:id/approval` → plan `approved`, sürüm 1 |
 | Çoklu worker/verifier | ⚠️ kısmen | İki görev de `done` (commit `7fca881`, `0363932`). Pompa artık sınırlı eşzamanlı çalışıyor, ama bu koşuda görevler sırayla işlendi ve aynı çift kullanıldı |
 | Denetçi bulgu üretir ve düzelttirir | ✅ | Ayrı koşuda: ihlalli `Counter.tsx` → STD-001 bulgusu → düzeltme görevi `useCounter.ts` üretti (commit `8e258f8b`) → yeniden denetim **0 bulgu** |
-| Uygulama kapıdan geçer | ⚠️ zayıf kapı | Her görev kapıdan geçti, ama iskeletin kapısı yalnızca "kaynak dosyalar mevcut" kontrolü yapıyor: sandbox'ta `npx tsc` çalışamadığı için gerçek derleme/lint adımı yok |
+| Uygulama kapıdan geçer | ✅ | Her görev kapıdan geçti. Kapı 2026-08-18'de güçlendirildi: markdown çiti sızması, çakışma artığı, boş dosya ve bozuk JSON yakalanıyor (canlı doğrulandı). Sandbox'ta ağ olmadığı için hâlâ `tsc`/lint yok — bu bir sınır, eksik kontrol değil |
 
 **Fazı kapatmayı engelleyen tek şey:** konsey **en az 3 farklı sağlayıcı**
 ister. Şu an tek gerçek anahtar (`deepseek`) var; konsey her koşuda planın
