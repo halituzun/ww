@@ -3,7 +3,7 @@
 import { usePendingQuestionsViewModel } from '../viewmodels/usePendingQuestionsViewModel.js';
 
 export function PendingQuestions({ projectId }: { readonly projectId: string }) {
-  const { questions, error, busy, draftFor, setDraft, answer } =
+  const { questions, error, busy, draftFor, setDraft, answer, confirmedFor } =
     usePendingQuestionsViewModel(projectId);
 
   return (
@@ -29,6 +29,14 @@ export function PendingQuestions({ projectId }: { readonly projectId: string }) 
                 <time>{new Date(question.createdAt).toLocaleString()}</time>
               </div>
               <p className="questions__text">{question.payload?.text ?? '(metin yok)'}</p>
+              {/* Kaydedilmiş cevap OKUNARAK gösterilir: "gönderdim" demek
+                  yetmez, bu oturumda cevapların hiçbir yere ulaşmadığı bir
+                  kusur vardı. */}
+              {confirmedFor(question.messageId) === undefined ? null : (
+                <p className="questions__confirmed">
+                  Kaydedilen cevap: {confirmedFor(question.messageId)}
+                </p>
+              )}
               <div className="questions__answer">
                 <input
                   aria-label={`Cevap ${question.messageId}`}

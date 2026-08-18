@@ -2,6 +2,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import {
   answerQuestion,
+  fetchAnswers,
   fetchPendingQuestions,
   type PendingQuestion,
 } from '../services/questions.js';
@@ -11,6 +12,7 @@ export const QUESTIONS_POLL_MS = 10_000;
 export interface PendingQuestionsPorts {
   load?: typeof fetchPendingQuestions;
   answer?: typeof answerQuestion;
+  loadAnswers?: typeof fetchAnswers;
   pollMs?: number;
 }
 
@@ -20,12 +22,17 @@ export function usePendingQuestionsViewModel(
 ) {
   const load = ports.load ?? fetchPendingQuestions;
   const send = ports.answer ?? answerQuestion;
+  const readAnswers = ports.loadAnswers ?? fetchAnswers;
   const pollMs = ports.pollMs ?? QUESTIONS_POLL_MS;
 
   const [questions, setQuestions] = useState<PendingQuestion[]>([]);
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  // Cevaplanan sorunun KAYDEDİLMİŞ hâli. Bu oturumda cevapların hiçbir yere
+  // ulaşmadığı bir kusur vardı; "gönderdim" demek yetmez, kaydın okunması
+  // gerekir.
+  const [confirmed, setConfirmed] = useState<Record<string, string>>({});
 
   const refresh = useCallback((): void => {
     if (!projectId) return;
@@ -53,6 +60,17 @@ export function usePendingQuestionsViewModel(
     try {
       await send(projectId, messageId, text);
       setDrafts((current) => ({ ...current, [messageId]: '' }));
+      // YAZDIKTAN SONRA OKU: cevabın gerçekten kaydedildiğini kanıtlar.
+      try {
+        const stored = await readAnswers(projectId, messageId);
+        const last = stored.answers[stored.answers.length - 1];
+        if (last !== undefined) {
+          setConfirmed((current) => ({ ...current, [messageId]: last.text }));
+        }
+      } catch {
+        // Doğrulama okuması düşerse cevabı gönderilmemiş SAYMAYIZ; yalnızca
+        // onay gösterilmez.
+      }
       refresh();
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'Cevap gönderilemedi');
@@ -65,6 +83,7 @@ export function usePendingQuestionsViewModel(
     questions,
     error,
     busy,
+    confirmedFor: (messageId: string) => confirmed[messageId],
     draftFor: (messageId: string) => drafts[messageId] ?? '',
     setDraft: (messageId: string, value: string) =>
       setDrafts((current) => ({ ...current, [messageId]: value })),

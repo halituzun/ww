@@ -34,6 +34,16 @@ console.log(`taranan dosya: ${files.length}`);
 console.log(`bağlantısız (testte var, üretimde yok): ${report.unwired.length}`);
 console.log(`hiç kullanılmayan: ${report.untested.length}`);
 
+// ADLARI YAZ. Eskiden yalnız SAYI yazılıyordu: ölü kod sayılıyor ama kimse
+// üzerine gidemiyordu. `AgentCloneService` bu yüzden proje boyunca
+// bağlanmadan kaldı — docs/03'ün klonlama mekanizması yazılmıştı ama hiç
+// çağrılmıyordu ve hiçbir çıktı bunu söylemiyordu.
+if (report.untested.length > 0) {
+  console.log('\n· hiç kullanılmayan (ne üretimde ne testte):');
+  for (const entry of report.untested) console.log(`    ${entry}`);
+  console.log('  Bunlar ya bağlanmalı ya silinmelidir; sayı tek başına eyleme dönüşmez.');
+}
+
 if (diff.resolved.length > 0) {
   console.log(`\n✓ bağlandı (${diff.resolved.length}) — wiring-baseline.json'dan düşürülebilir:`);
   for (const entry of diff.resolved) console.log(`    ${entry}`);

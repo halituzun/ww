@@ -73,3 +73,46 @@ describe('PendingQuestions', () => {
     await waitFor(() => expect(screen.getByText(/PM yok|Bekleyen sorular alınamadı/)).toBeDefined());
   });
 });
+
+describe('PendingQuestions — cevap doğrulaması', () => {
+  // Bu oturumda cevapların hiçbir yere ulaşmadığı bir kusur vardı:
+  // "gönderdim" demek yetmez, kaydın OKUNMASI gerekir.
+  it('gonderdikten sonra kaydedilen cevabi okuyup gosterir', async () => {
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (url, init) => {
+      const target = String(url);
+      if ((init as RequestInit | undefined)?.method === 'POST') return respond({ messageId: 'a1' }) as never;
+      if (target.includes('/answers')) {
+        return respond({
+          replyToMessageId: 'm1', count: 1,
+          answers: [{ messageId: 'a1', senderPrincipalId: 'u', createdAt: 'x', text: 'yok, oluştur' }],
+        }) as never;
+      }
+      return respond(pending) as never;
+    });
+
+    render(<PendingQuestions projectId="p1" />);
+    await waitFor(() => expect(screen.getByText('src/Board.tsx var mı?')).toBeDefined());
+
+    fireEvent.change(screen.getByLabelText('Cevap m1'), { target: { value: 'yok, oluştur' } });
+    fireEvent.click(screen.getByText('Cevapla'));
+
+    await waitFor(() => expect(screen.getByText(/Kaydedilen cevap: yok, oluştur/)).toBeDefined());
+  });
+
+  // Doğrulama okuması düşerse cevabı gönderilmemiş SAYMAYIZ.
+  it('dogrulama okumasi dusunce cevabi basarisiz saymaz', async () => {
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (url, init) => {
+      if ((init as RequestInit | undefined)?.method === 'POST') return respond({ messageId: 'a1' }) as never;
+      if (String(url).includes('/answers')) return respond({ message: 'yok' }, false, 500) as never;
+      return respond(pending) as never;
+    });
+
+    render(<PendingQuestions projectId="p1" />);
+    await waitFor(() => expect(screen.getByText('src/Board.tsx var mı?')).toBeDefined());
+
+    fireEvent.change(screen.getByLabelText('Cevap m1'), { target: { value: 'cevap' } });
+    fireEvent.click(screen.getByText('Cevapla'));
+
+    await waitFor(() => expect(screen.queryByText(/Cevap gönderilemedi/)).toBeNull());
+  });
+});
