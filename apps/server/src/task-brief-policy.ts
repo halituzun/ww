@@ -18,10 +18,13 @@ export const WORKER_TOOLS = [
   // göremediği için canlı koşuda soru sorup duruyordu.
   'list_dir', 'search_code', 'memory_query',
   'record_knowledge', 'record_artifact', 'create_subtask',
+  'move_file', 'delete_file', 'git_log',
   'read_file', 'write_file', 'edit_file', 'ask_question', 'report_result',
 ] as const;
 /** Verifier diff'i bunlarla okur (salt-okuma sınırı tool-factory'de). */
-export const VERIFIER_TOOLS = ['git_diff', 'list_dir', 'search_code', 'memory_query'] as const;
+export const VERIFIER_TOOLS = [
+  'git_diff', 'git_log', 'list_dir', 'search_code', 'memory_query',
+] as const;
 
 export interface BriefPolicyResult {
   readonly acceptanceCriteria: readonly string[];

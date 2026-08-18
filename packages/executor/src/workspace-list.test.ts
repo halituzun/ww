@@ -1,4 +1,6 @@
-import { mkdtempSync, mkdirSync, writeFileSync, symlinkSync, rmSync } from 'node:fs';
+import {
+  existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -108,5 +110,48 @@ describe('WorkspacePaths.searchText', () => {
   it('cok uzun satiri keser', async () => {
     const { paths } = workspace({ 'src/a.ts': `ara${'x'.repeat(500)}` });
     expect((await paths.searchText('ara'))[0]!.text.length).toBeLessThanOrEqual(300);
+  });
+});
+
+describe('WorkspacePaths.trashFile / moveFile', () => {
+  // docs/05: silme ÇÖPE TAŞIMADIR. Gerçek silme, modelin tek bir hatalı
+  // adımını kalıcı veri kaybına çevirir.
+  it('silinen dosyayi cop klasorune tasir, gercekten silmez', async () => {
+    const { root, paths } = workspace({ 'src/a.ts': 'içerik' });
+    const target = await paths.trashFile('src/a.ts', 'cagri1');
+
+    expect(target).toBe('.ww-trash/cagri1/src/a.ts');
+    expect(readFileSync(join(root, target), 'utf8')).toBe('içerik');
+    expect(existsSync(join(root, 'src/a.ts'))).toBe(false);
+  });
+
+  // Aynı ada ikinci silme öncekini EZMEZ.
+  it('ayni dosyanin ikinci silinisi oncekini ezmez', async () => {
+    const { root, paths } = workspace({ 'src/a.ts': 'ilk' });
+    await paths.trashFile('src/a.ts', 'cagri1');
+    writeFileSync(join(root, 'src/a.ts'), 'ikinci');
+    await paths.trashFile('src/a.ts', 'cagri2');
+
+    expect(readFileSync(join(root, '.ww-trash/cagri1/src/a.ts'), 'utf8')).toBe('ilk');
+    expect(readFileSync(join(root, '.ww-trash/cagri2/src/a.ts'), 'utf8')).toBe('ikinci');
+  });
+
+  it('dosyayi tasir', async () => {
+    const { root, paths } = workspace({ 'src/a.ts': 'içerik' });
+    await paths.moveFile('src/a.ts', 'src/b.ts');
+
+    expect(readFileSync(join(root, 'src/b.ts'), 'utf8')).toBe('içerik');
+    expect(existsSync(join(root, 'src/a.ts'))).toBe(false);
+  });
+
+  // Sessiz üzerine yazma veri kaybıdır.
+  it('var olan hedefin uzerine yazmaz', async () => {
+    const { paths } = workspace({ 'src/a.ts': 'a', 'src/b.ts': 'b' });
+    await expect(paths.moveFile('src/a.ts', 'src/b.ts')).rejects.toThrow(/zaten var/);
+  });
+
+  it('olmayan dosyayi tasimaz', async () => {
+    const { paths } = workspace({ 'src/a.ts': 'a' });
+    await expect(paths.moveFile('src/yok.ts', 'src/c.ts')).rejects.toThrow();
   });
 });

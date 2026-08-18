@@ -247,6 +247,32 @@ export class GitWorkspace {
     this.#access = access;
   }
 
+  /**
+   * Son commit'ler (docs/05 → `git_log`).
+   *
+   * NEDEN VAR: verifier ve worker projenin geçmişini göremiyordu; "bu dosya
+   * daha önce nasıl değişti" sorusunun cevabı yalnızca kullanıcıya sorularak
+   * alınabiliyordu.
+   */
+  async log(
+    projectKey: string,
+    workspace: WorkspacePaths,
+    limit = 20,
+  ): Promise<readonly { readonly hash: string; readonly subject: string; readonly date: string }[]> {
+    const bounded = Number.isSafeInteger(limit) && limit > 0 ? Math.min(limit, 100) : 20;
+    const result = await this.#git(projectKey, workspace, [
+      'log', `-${bounded}`, '--no-color', '--date=iso-strict', '--pretty=format:%H%x1f%ad%x1f%s',
+    ]);
+    // Yeni depoda commit yoktur; bu HATA DEĞİLDİR, boş geçmiştir.
+    if (result.exitCode !== 0) return Object.freeze([]);
+    return Object.freeze(result.stdout.split('\n')
+      .map((line) => line.split('\u001f'))
+      .filter((parts) => parts.length === 3)
+      .map(([hash, date, subject]) => Object.freeze({
+        hash: String(hash), date: String(date), subject: String(subject),
+      })));
+  }
+
   async diff(
     projectKey: string,
     workspace: WorkspacePaths,

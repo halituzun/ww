@@ -12,6 +12,7 @@ describe('araç kaydı', () => {
   const added = [
     'list_dir', 'search_code', 'memory_query', 'create_subtask',
     'record_knowledge', 'record_artifact',
+    'move_file', 'delete_file', 'git_log',
   ] as const;
 
   it('yeni araclarin hepsi kayitli', () => {
@@ -66,6 +67,22 @@ describe('araç kaydı', () => {
     for (const name of ['record_knowledge', 'record_artifact'] as const) {
       expect(EXECUTOR_TOOL_CAPABILITIES[name].replaySafety).toBe('non_replay_safe');
     }
+  });
+
+  // Dosya sistemini değiştiren araçlar kilit ister; kilitsiz yazma iki
+  // worker'ın aynı dosyayı ezmesine yol açar.
+  it('tasima ve silme kilit ister', () => {
+    for (const name of ['move_file', 'delete_file'] as const) {
+      expect(EXECUTOR_TOOL_CAPABILITIES[name].requiresFileLock).toBe(true);
+      expect(EXECUTOR_TOOL_CAPABILITIES[name].requiresDeclaredTarget).toBe(true);
+    }
+  });
+
+  // git_log salt okumadır; verifier'ın da erişmesi gerekir.
+  it('git_log salt okuma ve verifiera aciktir', () => {
+    const capability = EXECUTOR_TOOL_CAPABILITIES['git_log'];
+    expect(capability.replaySafety).toBe('replay_safe');
+    expect(capability.allowedRoles).toContain('verifier');
   });
 
   // Agent ÜRETMEDİĞİ bir dosyayı kendi çıktısı gibi kaydedememeli.

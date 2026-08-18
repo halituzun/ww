@@ -160,7 +160,7 @@ export class ToolExecutor {
   readonly #intents: ExecutorIntentPort;
   readonly #sandboxInputs: ExecutorSandboxInputPolicyPort;
   readonly #sandbox: SandboxPort;
-  readonly #git: Pick<GitWorkspace, 'diff'>;
+  readonly #git: Pick<GitWorkspace, 'diff' | 'log'>;
   readonly #fenceHeartbeatMs: number;
 
   constructor(input: Readonly<{
@@ -172,7 +172,7 @@ export class ToolExecutor {
     intents: ExecutorIntentPort;
     sandboxInputs: ExecutorSandboxInputPolicyPort;
     sandbox: SandboxPort;
-    gitWorkspace: Pick<GitWorkspace, 'diff'>;
+    gitWorkspace: Pick<GitWorkspace, 'diff' | 'log'>;
     /** Bağlı değilse create_subtask AÇIK hata verir; sessizce yok sayılmaz. */
     delegation?: ExecutorDelegationPort;
     /** Bağlı değilse memory_query AÇIK hata verir. */
@@ -361,6 +361,30 @@ export class ToolExecutor {
       case 'git_diff': {
         const result = await this.#git.diff(context.brief.projectId, workspace, context.brief.targetFiles);
         return { diff: result.diff, truncated: result.truncated };
+      }
+      case 'move_file': {
+        const from = workspace.assertDeclared(text(args, 'from'), context.brief.targetFiles);
+        // Hedef de MÜHÜRLÜ olmalı: aksi halde worker dosyayı kapsamı dışına
+        // taşıyıp denetimden kaçırabilirdi.
+        const to = workspace.assertDeclared(text(args, 'to'), context.brief.targetFiles);
+        await this.#access.assertAuthorized(access);
+        const moved = await workspace.moveFile(from, to);
+        return { from, to: moved, moved: true };
+      }
+      case 'delete_file': {
+        const relativePath = workspace.assertDeclared(text(args, 'path'), context.brief.targetFiles);
+        await this.#access.assertAuthorized(access);
+        // docs/05: silme ÇÖPE TAŞIMADIR. Gerçek silme, modelin tek bir hatalı
+        // adımını kalıcı veri kaybına çevirir.
+        // Damga çağrı kimliğidir: aynı ada ikinci silme öncekini EZMEZ.
+        const trashed = await workspace.trashFile(relativePath, callId);
+        return { path: relativePath, trashedTo: trashed, deleted: false };
+      }
+      case 'git_log': {
+        const entries = await this.#git.log(
+          context.brief.projectId, workspace, optionalInteger(args, 'limit') ?? 20,
+        );
+        return { commits: entries, count: entries.length };
       }
       case 'record_knowledge': {
         // docs/01 "asla unutmama": agent bir karar ya da kısıt keşfettiğinde

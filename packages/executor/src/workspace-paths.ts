@@ -7,8 +7,7 @@ import {
   realpath,
   rename,
   stat,
-  unlink,
-} from 'node:fs/promises';
+  unlink,  } from 'node:fs/promises';
 import { constants as fsConstants } from 'node:fs';
 import type { BigIntStats, Dirent } from 'node:fs';
 import type { FileHandle } from 'node:fs/promises';
@@ -230,6 +229,46 @@ export class WorkspacePaths {
       });
     }
     return Object.freeze(out);
+  }
+
+  /** docs/05: silinen dosya bu klasöre TAŞINIR, gerçekten silinmez. */
+  static readonly TRASH_DIR = '.ww-trash';
+
+  /**
+   * Dosyayı çöp klasörüne taşır (docs/05 → `delete_file`).
+   *
+   * NEDEN SİLMİYORUZ: agent'ın yanlış kararı geri alınabilir olmalıdır. Gerçek
+   * silme, modelin tek bir hatalı adımını kalıcı veri kaybına çevirir.
+   * Aynı ada ikinci silme öncekini EZMEZ: zaman damgası eklenir.
+   */
+  async trashFile(relativePath: string, stamp: string): Promise<string> {
+    const source = await this.resolveExisting(relativePath);
+    const normalized = normalizeWorkspaceRelativePath(relativePath);
+    const target = `${WorkspacePaths.TRASH_DIR}/${stamp}/${normalized}`;
+    const destination = await this.resolveForWrite(target);
+    await mkdir(path.dirname(destination), { recursive: true });
+    await rename(source, destination);
+    return target;
+  }
+
+  /**
+   * Dosyayı çalışma alanı içinde taşır (docs/05 → `move_file`).
+   * Hedef VARSA üzerine yazılmaz: sessiz üzerine yazma veri kaybıdır.
+   */
+  async moveFile(fromPath: string, toPath: string): Promise<string> {
+    const source = await this.resolveExisting(fromPath);
+    const normalizedTo = normalizeWorkspaceRelativePath(toPath);
+    const destination = await this.resolveForWrite(normalizedTo);
+    try {
+      await stat(destination);
+      throw new ExecutorError('PATH_INVALID', `Hedef zaten var: ${normalizedTo}`);
+    } catch (error) {
+      if (error instanceof ExecutorError) throw error;
+      // ENOENT beklenen durumdur: hedef yoksa taşıma güvenlidir.
+    }
+    await mkdir(path.dirname(destination), { recursive: true });
+    await rename(source, destination);
+    return normalizedTo;
   }
 
   async resolveForWrite(relativePath: string): Promise<string> {
