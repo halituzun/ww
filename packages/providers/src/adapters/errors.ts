@@ -1,4 +1,5 @@
 import { ProviderError, type ProviderErrorKind } from '../types.js';
+import { redactKeys } from '../keystore.js';
 
 interface HttpLikeError {
   status?: number;
@@ -26,5 +27,9 @@ export function mapError(e: unknown, providerId: string): ProviderError {
               ? 'timeout'
               : 'connection';
 
-  return new ProviderError(`${providerId}: ${err.message ?? String(e)}`, kind);
+  // ANAHTAR SIZINTISI: bu mesaj api_usage'a, events'e (yığın izi dahil) ve
+  // sunucu loglarına KALICI olarak yazılır. Sağlayıcılar kimlik hatalarında
+  // anahtarı mesaja koyabilir; `redactKeys` tam bunun için yazılmıştı ama
+  // hiçbir yerden çağrılmıyordu.
+  return new ProviderError(redactKeys(`${providerId}: ${err.message ?? String(e)}`), kind);
 }
