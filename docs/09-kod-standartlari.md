@@ -125,7 +125,14 @@ ekranına düşer, her bulgu düzeltme görevine bağlanır ([08 — Denetim](08
 
 *(kısmen uygulandı 2026-08-18: STD-004 erişilebilir ad kontrolü. Listenin
 görsel maddeleri — kontrast, boşluk tutarlılığı, taşma — statik olarak
-güvenilir biçimde karara bağlanamaz; onlar hâlâ insan/model denetimidir.)*
+güvenilir biçimde karara bağlanamaz; onlar hâlâ insan/model denetimidir.*
+
+*BOŞ DURUM maddesi de denetçiye KONMADI ve nedeni ölçüldü: "listeyi map'leyip
+uzunluk kontrolü yapmayan bileşen" sezgisi panelde 2 aday buldu, biri yanlış
+pozitifti (sabit sekme listesi — veri değil). %50 yanlış pozitif bir kapıyı
+aşındırır ve aşınan kapı susturulur. Kural elle uygulanıyor; bu turlarda
+TaskListPanel, FileBrowserPanel, ProjectPicker ve TaskCanvas'a boş durum
+eklendi.)*
 
 - [ ] Ekranlar arasında yazı tipi/boşluk/renk tutarlı mı (tasarım sistemine uyum)?
 - [ ] Yükleme/boş/hata durumları her ekranda tasarlanmış mı?

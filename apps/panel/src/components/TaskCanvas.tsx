@@ -39,6 +39,13 @@ export function TaskCanvas({ tasks, statusByTask }: {
     labelStyle: { fill: '#9fb3c8', fontSize: 11 },
   }));
 
+  // Boş durum AÇIKÇA söylenir (docs/09 ui_audit). Boş bir TUVAL, hata mı yok
+  // mu belli olmayan bir beyaz alandır: kullanıcı "yükleniyor mu?" diye
+  // bakakalır. Metin, sessiz boşluktan her zaman iyidir.
+  if (tasks.length === 0) {
+    return <p className="hint">Bu projede henüz görev yok — tuvalde çizilecek bir şey yok.</p>;
+  }
+
   return (
     <div className="flow-canvas">
       <ReactFlow nodes={nodes} edges={edges} fitView>
