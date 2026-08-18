@@ -35,6 +35,19 @@ describe('AgentDetail', () => {
     expect(screen.getByText('4')).toBeDefined();
   });
 
+  // docs/02 "performans sayaçları". Bu iki sayı yüzeyde HİÇ yoktu; REST de
+  // onları hiç yazılmayan kolonlardan döndürdüğü için her agent "0" idi.
+  it('tamamlanan ve reddedilen sayilarini gosterir', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      respond({ ...detail, tasksDone: 3, tasksRejected: 2 }) as never,
+    );
+    render(<AgentDetail projectId="p1" agentId="a1" />);
+
+    await waitFor(() => expect(screen.getByText('Tamamladı')).toBeDefined());
+    expect(screen.getByText('Tamamladı').nextElementSibling?.textContent).toBe('3');
+    expect(screen.getByText('Reddedildi').nextElementSibling?.textContent).toBe('2');
+  });
+
   it('gorevi hangi rolde yaptigini yazar', async () => {
     vi.spyOn(globalThis, 'fetch').mockResolvedValue(respond(detail) as never);
     render(<AgentDetail projectId="p1" agentId="a1" />);

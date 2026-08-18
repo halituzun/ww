@@ -71,7 +71,7 @@ Engine: `ReplacingMergeTree(version) ORDER BY project_id`
 | `status` | LowCardinality(String) | `idle` \| `busy` \| `waiting_verify` \| `waiting_answer` \| `stopped` |
 | `current_task_id` | UUID | Meşgulse hangi görev |
 | `prompt_name`, `prompt_version` | String, UInt32 | Kullandığı sistem promptu (bkz. `prompts`) |
-| `tasks_done`, `tasks_rejected` | UInt32 | Performans sayaçları |
+| `tasks_done`, `tasks_rejected` | UInt32 | Performans sayaçları — **TÜRETİLMİŞ**: bu kolonlara üretimde hiç yazılmaz (ölçüldü 2026-08-18: 426 agent, hepsi 0). Gerçek değerler `readAgentActivity` içinde `tasks` ve ret olaylarından hesaplanır; karar ya da gösterim için kolonlar okunmaz. |
 | `created_at`, `updated_at`, `version` | | |
 
 Engine: `ReplacingMergeTree(version) ORDER BY (project_id, agent_id)`

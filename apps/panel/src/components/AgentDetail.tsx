@@ -33,6 +33,8 @@ export function AgentDetail({ projectId, agentId, ports }: {
 
       <dl className="fihrist__meta">
         <dt>Görev</dt><dd>{detail.tasks.length}</dd>
+        <dt>Tamamladı</dt><dd>{detail.tasksDone}</dd>
+        <dt>Reddedildi</dt><dd>{detail.tasksRejected}</dd>
         <dt>Mesaj</dt><dd>{detail.messageCount}</dd>
         <dt>Çağrı</dt><dd>{detail.calls}</dd>
         <dt>Token</dt><dd>{detail.promptTokens + detail.completionTokens}</dd>

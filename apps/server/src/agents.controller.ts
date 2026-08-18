@@ -38,8 +38,12 @@ export class AgentsController {
       modelRef: (await loadRoutingIndex(this.database.ch)).modelForRole(agent.role)
         ?? agent.model_ref,
       status: agent.status,
-      tasksDone: agent.tasks_done,
-      tasksRejected: agent.tasks_rejected,
+      // SAYAÇLAR VERİDEN TÜRETİLİR. `agents.tasks_done`/`tasks_rejected`
+      // kolonlarına üretimde hiç yazılmıyor (ölçüldü: 426 agent, hepsi 0):
+      // bu uç, 8 görev bitmiş bir projede bile her agent için "0 tamamlandı"
+      // diyordu.
+      tasksDone: activity.tasksDone,
+      tasksRejected: activity.tasksRejected,
       tasks: activity.tasks,
       messageCount: activity.messageCount,
       promptTokens: activity.promptTokens,

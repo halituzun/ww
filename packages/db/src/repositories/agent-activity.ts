@@ -18,6 +18,13 @@ export interface AgentTaskSummary {
 export interface AgentActivity {
   readonly agentId: string;
   readonly tasks: readonly AgentTaskSummary[];
+  /**
+   * docs/02 "performans sayaçları". VERİDEN TÜRETİLİR: `agents.tasks_done` /
+   * `tasks_rejected` kolonlarına üretimde hiç yazılmıyor (ölçüldü: 426
+   * agent, hepsi 0), yani o kolonları döndüren her yüzey yalan söylüyordu.
+   */
+  readonly tasksDone: number;
+  readonly tasksRejected: number;
   readonly messageCount: number;
   readonly promptTokens: number;
   readonly completionTokens: number;
@@ -70,6 +77,21 @@ export async function readAgentActivity(
     format: 'JSONEachRow',
   })).json<Record<string, unknown>>())[0] ?? {};
 
+  // Reddedilen DENEME sayısı: ret olayları, görevi YAPAN'ın hanesine yazılır
+  // (olayın agent_id'si denetçidir, o yüzden görev üzerinden bağlanır).
+  const rejectedRow = (await (await ch.query({
+    query: `SELECT count() AS total FROM events
+      WHERE project_id = {projectId:UUID}
+        AND event_type = 'status_change'
+        AND JSONExtractString(payload, 'action') = 'verifier_rejected'
+        AND task_id IN (
+          SELECT task_id FROM tasks WHERE project_id = {projectId:UUID}
+          GROUP BY task_id HAVING argMax(worker_agent_id, version) = {agentId:UUID}
+        )`,
+    query_params: { projectId: project, agentId: agent },
+    format: 'JSONEachRow',
+  })).json<Record<string, unknown>>())[0] ?? {};
+
   const messageRow = (await (await ch.query({
     query: `SELECT count() AS total FROM messages
       WHERE project_id = {projectId:UUID} AND from_agent_id = {agentId:UUID}`,
@@ -85,6 +107,8 @@ export async function readAgentActivity(
       status: String(row['status'] ?? ''),
       relation: String(row['relation']) as AgentTaskSummary['relation'],
     }))),
+    tasksDone: taskRows.filter((row) => row['relation'] === 'worker' && row['status'] === 'done').length,
+    tasksRejected: num(rejectedRow['total']),
     messageCount: num(messageRow['total']),
     promptTokens: num(usageRow['prompt_tokens']),
     completionTokens: num(usageRow['completion_tokens']),
