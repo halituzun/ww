@@ -5,6 +5,10 @@ import { ExecutorError } from './errors.js';
 
 export const TOOL_NAMES = [
   'read_file',
+  // docs/05'te tanımlıydı ama hiç yazılmamıştı: worker hangi dosyaların var
+  // olduğunu göremiyor, canlı koşuda "Workspace'te hangi dosyalar mevcut?"
+  // diye sorup duruyordu.
+  'list_dir',
   'write_file',
   'edit_file',
   'run_command',

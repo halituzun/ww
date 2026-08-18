@@ -14,10 +14,13 @@ import type { TaskRowLike } from './task-brief-policy-types.js';
  * aracı istedi: report_result" ile düşüyordu — yani worker işini bitiremiyordu.
  */
 export const WORKER_TOOLS = [
+  // Görmeden yazmak tahmin etmektir: worker hangi dosyaların var olduğunu
+  // göremediği için canlı koşuda soru sorup duruyordu.
+  'list_dir',
   'read_file', 'write_file', 'edit_file', 'ask_question', 'report_result',
 ] as const;
 /** Verifier diff'i bunlarla okur (salt-okuma sınırı tool-factory'de). */
-export const VERIFIER_TOOLS = ['git_diff'] as const;
+export const VERIFIER_TOOLS = ['git_diff', 'list_dir'] as const;
 
 export interface BriefPolicyResult {
   readonly acceptanceCriteria: readonly string[];

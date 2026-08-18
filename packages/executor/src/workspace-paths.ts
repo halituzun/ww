@@ -139,6 +139,54 @@ export class WorkspacePaths {
     return resolved;
   }
 
+  /**
+   * Çalışma alanındaki dosyaları listeler (docs/05 → `list_dir`).
+   *
+   * NEDEN VAR: worker hangi dosyaların var olduğunu göremiyordu. Canlı koşuda
+   * ilk sorusu birebir şuydu: "Workspace'te hangi dosyalar mevcut?" — araç
+   * olmadığı için görev durup kullanıcı cevabını bekledi ve bir tur boşa gitti.
+   *
+   * Listeleme kapsam DIŞINA çıkamaz: `.git` ve sembolik bağlantı hedefleri
+   * kök dışına işaret ediyorsa atlanır.
+   */
+  async listFiles(relativeDir: string, maxEntries = 500): Promise<readonly string[]> {
+    await this.#ensureInitialized();
+    const normalized = relativeDir.trim() === '' || relativeDir.trim() === '.'
+      ? ''
+      : normalizeWorkspaceRelativePath(relativeDir);
+    const base = normalized === '' ? this.root : path.join(this.root, ...normalized.split('/'));
+    let resolved: string;
+    try {
+      resolved = await realpath(base);
+    } catch (error) {
+      throw new ExecutorError('FILE_NOT_FOUND', `Dizin bulunamadı: ${normalized || '.'}`, {
+        cause: error instanceof Error ? error.message : String(error),
+      });
+    }
+    this.#assertInside(resolved);
+
+    const out: string[] = [];
+    const walk = async (directory: string, prefix: string): Promise<void> => {
+      if (out.length >= maxEntries) return;
+      const entries = await readdir(directory, { withFileTypes: true });
+      for (const entry of entries.sort((a, b) => a.name.localeCompare(b.name))) {
+        if (out.length >= maxEntries) return;
+        // `.git` içeriği agent'a açılmaz: depo iç yapısı iş değildir.
+        if (entry.name === '.git' || entry.name === 'node_modules') continue;
+        const child = path.join(directory, entry.name);
+        const label = prefix === '' ? entry.name : `${prefix}/${entry.name}`;
+        if (entry.isDirectory()) {
+          await walk(child, label);
+        } else if (entry.isFile()) {
+          out.push(label);
+        }
+        // Sembolik bağlantılar atlanır: hedefi kök dışına çıkabilir.
+      }
+    };
+    await walk(resolved, normalized);
+    return Object.freeze(out);
+  }
+
   async resolveForWrite(relativePath: string): Promise<string> {
     await this.#ensureInitialized();
     const normalized = normalizeWorkspaceRelativePath(relativePath);

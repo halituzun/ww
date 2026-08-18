@@ -78,6 +78,12 @@ function text(args: Readonly<Record<string, unknown>>, key: string): string {
   return value;
 }
 
+/** İsteğe bağlı metin argümanı; yoksa undefined döner. */
+function optionalText(args: Readonly<Record<string, unknown>>, key: string): string | undefined {
+  const value = args[key];
+  return typeof value === 'string' && value.trim() !== '' ? value : undefined;
+}
+
 function optionalInteger(args: Readonly<Record<string, unknown>>, key: string): number | undefined {
   const value = args[key];
   if (value === undefined) return undefined;
@@ -278,6 +284,17 @@ export class ToolExecutor {
         const limit = optionalInteger(args, 'limit') ?? 1_048_576;
         const content = await workspace.readText(relativePath, offset, limit);
         return { path: relativePath, offset, content, bytes: Buffer.byteLength(content) };
+      }
+      case 'list_dir': {
+        // docs/05'te tanımlı ama hiç yazılmamıştı. Worker hangi dosyaların var
+        // olduğunu göremediği için canlı koşuda "Workspace'te hangi dosyalar
+        // mevcut?" diye sorup durdu ve bir tur boşa gitti.
+        //
+        // OKUMA aracıdır: mühürlü hedef listesi YAZMAYI sınırlar, görmeyi
+        // değil. Kapsam çalışma alanıdır ve dışına çıkılamaz.
+        const requested = optionalText(args, 'path') ?? '';
+        const files = await workspace.listFiles(requested);
+        return { path: requested === '' ? '.' : requested, files, count: files.length };
       }
       case 'write_file': {
         const relativePath = workspace.assertDeclared(text(args, 'path'), context.brief.targetFiles);

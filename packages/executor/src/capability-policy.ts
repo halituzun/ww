@@ -20,6 +20,14 @@ export const EXECUTOR_TOOL_CAPABILITIES: Readonly<Record<ToolName, ToolCapabilit
     allowedRoles: ['worker', 'verifier'], allowedTaskStatuses: ACTIVE_TOOL_STATUSES,
     requiresDeclaredTarget: true, requiresFileLock: false, replaySafety: 'replay_safe',
   }),
+  list_dir: capability({
+    // GÖRME aracıdır: mühürlü hedef listesi YAZMAYI sınırlar, görmeyi değil.
+    // `requiresDeclaredTarget: true` verilseydi worker yalnızca zaten bildiği
+    // dosyaları listeleyebilirdi ve araç anlamsız olurdu.
+    toolName: 'list_dir', rule: { ruleId: 'TOOL-002', ruleVersion: 1 },
+    allowedRoles: ['worker', 'verifier'], allowedTaskStatuses: ACTIVE_TOOL_STATUSES,
+    requiresDeclaredTarget: false, requiresFileLock: false, replaySafety: 'replay_safe',
+  }),
   write_file: capability({
     toolName: 'write_file', rule: { ruleId: 'TOOL-003', ruleVersion: 1 },
     allowedRoles: ['worker'], allowedTaskStatuses: ['working'],
