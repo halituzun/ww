@@ -24,7 +24,7 @@ import { createExecutionErrorRecorder } from './execution-error-recorder.js';
 import { renderContextPack } from './context-pack-render.js';
 import { classifyArtifact, classifyLayer } from './artifact-classify.js';
 import { buildAgentCapabilities } from './agent-capabilities.js';
-import { appendArtifact, appendEvent, appendPromptInputSnapshot, getActivePrompt, getAssignmentAttempt, getLatestTask, listLatestAgents } from '@ww/db';
+import { appendArtifact, appendEvent, appendPromptInputSnapshot, getPromptVersion, getAssignmentAttempt, getLatestTask, listLatestAgents } from '@ww/db';
 import type { RuntimeModels } from './runtime-context.js';
 import type { Phase9RuntimeCompositionInput } from './runtime-composition.js';
 import { createLateBoundPort, type LateBoundPort } from './late-binding.js';
@@ -208,7 +208,17 @@ export async function createOrchestrationComposition(
     },
     runtimeContext: createRuntimeContextService({
       prompts: {
-        load: async (name) => (await getActivePrompt(input.ch, name))?.content ?? null,
+        /**
+         * MÜHÜRLÜ SÜRÜM okunur. Eskiden `version` parametresi yok sayılıp o an
+         * AKTİF prompt okunuyordu: brief v3'ü mühürlese bile prompt sonradan
+         * düzenlenmişse koşu v7 ile yapılıyor, yani mühür yalan oluyordu ve
+         * "bu çıktıyı hangi prompt üretti" sorusunun cevabı yanlış çıkıyordu.
+         *
+         * Mühürlenen sürüm bulunamazsa AKTİF olana düşülmez: sessiz bir
+         * sürüm kayması, hiç koşmamaktan daha kötüdür.
+         */
+        load: async (name, version) =>
+          (await getPromptVersion(input.ch, name, version))?.content ?? null,
       },
       workspaceRoot: input.projectRoot,
       models: input.models,
