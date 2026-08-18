@@ -9,8 +9,31 @@ Product-agent work must also read the normative communication contract in
 ## Current State
 
 Verified 2026-08-18 on branch `agent/agent-communication-contract`
-(186 commits ahead of `main`, in sync with its remote). Keep this section current:
+(244 commits ahead of `main`, in sync with its remote). Keep this section current:
 when it goes stale, the next session starts from the wrong place.
+
+- **The loop's stated priorities (1)-(3) are DONE and verified by measurement,
+  not by assumption.** (1) `App.tsx` is a dispatcher: its longest line went
+  2251 → 958 chars and five tested components were extracted; the project's own
+  `auditStandards` reports zero findings across every panel layer. (2) The
+  periodic health sweep writes real statuses AND now steers routing —
+  `health_status='down'` removes a provider from the fallback chain. (3) All
+  four docs/08 surfaces exist and are mounted (role→model table lives inside
+  `ProvidersPage`). Re-measure before re-doing any of them.
+- **The dominant defect class this session was "the surface lies".** Three
+  panels showed a calm default when their fetch had failed: the audit screen
+  said "0 findings", the kontör panel said "$0 spent", the project list said
+  "no projects yet". All three came from `getJsonOr` swallowing errors. Those
+  three now propagate; **the rest of the panel still uses `getJsonOr`**, so
+  when you touch a surface, ask what it shows when the fetch fails.
+- **Tests encode current behaviour, not correct behaviour.** Six times this
+  session a green test was hiding a defect: a fake DB returning the same row
+  for every query, an adb fake treating a process id as a device serial, a gate
+  assertion using `String(payload)` (only passes while the payload is a
+  string), a health fixture with an empty `base_url`, a REST test asserting the
+  narrator's *untranslated* output, and a panel fixture using `as never` to
+  silence missing required fields. When a test breaks during a fix, check
+  whether it was asserting the bug.
 
 - **Faz 0-3 are complete ✅.** Faz 3's acceptance scenario ran against the real
   DeepSeek API on 2026-08-17 (real key → real task → real cost in the kontör
@@ -44,9 +67,11 @@ when it goes stale, the next session starts from the wrong place.
   reports each rejection as `görev <id> işlenemedi: <reason>`; a task sitting in
   `queued`/`working` with no progress almost always has one of those lines behind
   it. `ANSWERED_TASK_RESUMED` confirms a user answer reached the engine.
-- Gate as of 2026-08-18: **1575 tests across 10 packages**, plus 4 opt-in live
-  Docker sandbox tests via `pnpm --filter @ww/executor test:live` (skipped by a
-  plain `pnpm test`). Build, lint and `pnpm wiring:check` green.
+- Gate as of 2026-08-18 (end of the long refactor session): **236 test files,
+  ~1710 `it(` cases across 10 packages** (counted, not parsed from the run),
+  plus 4 opt-in live Docker sandbox tests via
+  `pnpm --filter @ww/executor test:live` (skipped by a plain `pnpm test`).
+  Build, lint and `pnpm wiring:check` green.
 - Tests that flake **only under full-gate load** and pass in isolation:
   `packages/db effects.test.ts` (primary-key pruning), `packages/db plans.test.ts`
   (12-way concurrent append race), `packages/agents communication.integration.test.ts`,
