@@ -5,8 +5,9 @@
 
 *(2026-08-18: anlatıcı olayları İMLEÇSİZ okuyordu, yani en ESKİ 200 olayı.
 
-*(2026-08-18: anlatı kapsamı TAMAMLANDI — şemadaki 15 olay türünün 15'i insan
-cümlesine çevriliyor. Önceden 7'si ham tür adı basıyordu ("policy_decision
+*(2026-08-18: anlatı kapsamı TAMAMLANDI — şemadaki 22 olay türünün 22'si insan
+cümlesine çevriliyor ve bunu bir TEST sabitliyor (yeni tür eklenip anlatısı
+yazılmazsa test düşer). Önceden 7'si ham tür adı basıyordu ("policy_decision
 receipt_changed"), ki ham tür adı anlatı değildir. Şema dışı bir tür için ad
 KORUNUR: anlamadığı bir olaya inandırıcı cümle yazan anlatıcı, okunamaz
 dökümden tehlikelidir.)*

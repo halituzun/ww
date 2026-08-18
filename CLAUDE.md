@@ -78,6 +78,7 @@ when it goes stale, the next session starts from the wrong place.
 - Tests that flake **only under full-gate load** and pass in isolation:
   `packages/db effects.test.ts` (primary-key pruning), `packages/db plans.test.ts`
   (12-way concurrent append race), `packages/agents communication.integration.test.ts`,
+  `packages/db api-usage.test.ts` (50k multi-granule primary-key pruning),
   occasionally `apps/server rest.integration.test.ts`, and (seen 2026-08-18)
   `packages/db migrate.test.ts` plus
   `packages/scheduler phase4.integration.test.ts` (heartbeat/lease timing).

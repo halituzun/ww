@@ -83,6 +83,12 @@ export function narrateEvent(event: NarratableEvent): string {
       return `dosya kilidi bırakıldı: ${read(payload, 'path') ?? 'bilinmiyor'}`;
     case 'brief_sealed':
       return 'görev brief’i mühürlendi';
+    case 'brief_rebased': {
+      // Rebase, mühürlü brief'in YENİ bir temele taşınmasıdır; "neden görev
+      // baştan başladı?" sorusunun cevabı burada.
+      const reason = read(payload, 'reason') ?? read(payload, 'startReason');
+      return `görev brief’i yeni temele taşındı${reason === undefined ? '' : `: ${reason}`}`;
+    }
     case 'test_run': {
       const passed = asObject(payload)?.['passed'];
       return `kapı çalıştı: ${passed === true ? 'geçti' : 'geçemedi'}`;

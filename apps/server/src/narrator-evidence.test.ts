@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { narrateEvent } from './narrator-evidence.js';
+import { EVENT_TYPES } from '@ww/shared';
 
 const event = (type: string, payload: Record<string, unknown>) =>
   ({ event_type: type, payload } as never);
@@ -208,5 +209,19 @@ describe('narrateEvent', () => {
       expect(narrateEvent(event('decision', { reason: 'plan onaylandı' })))
         .toContain('plan onaylandı');
     });
+  });
+});
+
+// KAPSAM KORUMASI: şemaya yeni bir olay türü eklenip anlatısı yazılmazsa,
+// anlatıcı o satırda HAM TÜR ADI basar ve kimse fark etmez — 15 türün 7'si
+// aylarca böyle kaldı. Bu test, eksikliği ekleyen turda yakalar.
+describe('anlatı kapsamı', () => {
+  it('semadaki HER olay turu cumleye cevrilir', () => {
+    const missing = EVENT_TYPES.filter((type) => {
+      const text = narrateEvent({ event_type: type, payload: {} } as never);
+      // Ham tür adının kendisi dönüyorsa çeviri YOKTUR.
+      return text === type;
+    });
+    expect(missing).toEqual([]);
   });
 });
