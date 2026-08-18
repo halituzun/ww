@@ -1,3 +1,4 @@
+import { healthStatusLabel } from '../services/labels.js';
 import { useProviders } from '../viewmodels/useProviders.js';
 import { RoleModelTable } from './RoleModelTable.js';
 
@@ -28,7 +29,7 @@ export function ProvidersPage() {
               <strong>{provider.display_name}</strong>
               <code>{provider.provider_id}</code>
               <span className={`provider-badge provider-badge--${provider.health_status ?? 'unknown'}`}>
-                {provider.health_status ?? 'bilinmiyor'}
+                {healthStatusLabel(provider.health_status ?? 'unknown')}
               </span>
               {provider.is_default ? <span className="pill">varsayılan</span> : null}
               {provider.enabled ? null : <span className="pill pill--paused">pasif</span>}

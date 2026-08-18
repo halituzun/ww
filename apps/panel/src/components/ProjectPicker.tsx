@@ -3,6 +3,7 @@
 // NEDEN AYRI: App.tsx'te 1337 karakterlik tek satırdı; içinde üç form alanı,
 // bir buton, bir durum mesajı ve proje listesi vardı. Okunamaz bir satır,
 // uzun bir dosyadan iyi değildir.
+import { projectStatusLabel } from '../services/labels.js';
 import type { Project } from '../services/projects.js';
 
 export interface ProjectDraft {
@@ -72,7 +73,7 @@ export function ProjectPicker({
                 <strong>{project.name}</strong>
                 <small>{project.type} · {project.project_id}</small>
               </div>
-              <span className={`pill pill--${project.status}`}>{project.status}</span>
+              <span className={`pill pill--${project.status}`}>{projectStatusLabel(project.status)}</span>
             </li>
           ))}
         </ul>

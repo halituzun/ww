@@ -1,3 +1,4 @@
+import { HEALTH_STATUSES } from '@ww/shared';
 // Sağlayıcı sağlık durum makinesi — docs/04-model-katmani.md → Sağlık Kontrolü.
 //
 // Kurallar:
@@ -7,7 +8,9 @@
 // Belgede tanımlanmayan ara durum: eşiğin altındaki art arda hatalar `down`
 // ilan etmek için yeterli değildir ama sağlıklı da sayılmaz; `degraded` denir.
 
-export type HealthStatus = 'ok' | 'degraded' | 'down' | 'unknown';
+// Tip TEK KAYNAKTAN türer: ayrı bir birlik yazmak, dizi büyüdüğünde sessizce
+// ayrışırdı (panel kapsam testi diziye bakıyor).
+export type HealthStatus = (typeof HEALTH_STATUSES)[number];
 
 export const DOWN_AFTER_FAILURES = 3;
 export const DEGRADED_ERROR_RATE = 0.5;

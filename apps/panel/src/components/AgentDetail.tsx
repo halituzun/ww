@@ -1,5 +1,6 @@
 // Agent geçmişi yan paneli — SALT GÖRÜNÜM (docs/08 → "düğüme tık → yan
 // panelde agent geçmişi: görevleri, mesajları, harcadığı token").
+import { agentRoleLabel, agentStatusLabel } from '../services/labels.js';
 import { taskStatusLabel } from '../services/task-status.js';
 import {
   useAgentDetailViewModel, type AgentDetailViewModelPorts,
@@ -27,7 +28,7 @@ export function AgentDetail({ projectId, agentId, ports }: {
     <section className="agent-detail" aria-label="Agent geçmişi">
       <div className="section-heading">
         <h4>{detail.name}</h4>
-        <small>{detail.role} · {detail.status} · {detail.modelRef}</small>
+        <small>{agentRoleLabel(detail.role)} · {agentStatusLabel(detail.status)} · {detail.modelRef}</small>
       </div>
 
       <dl className="fihrist__meta">

@@ -58,6 +58,13 @@ export const POLICY_RULE_IDS = [
 
 export const PROJECT_TYPES = ['web', 'mobile', 'api', 'fullstack'] as const;
 
+/**
+ * docs/04 sağlık durumları. ÇALIŞMA ZAMANI dizisi olarak burada durur çünkü
+ * panel de sunucu da kapsamı ona karşı test ediyor; yalnız tip birliği
+ * olsaydı her taraf kendi kopyasını tutar ve kopyalar ayrışırdı.
+ */
+export const HEALTH_STATUSES = ['ok', 'degraded', 'down', 'unknown'] as const;
+
 export const PROJECT_STATUSES = [
   'draft', 'gathering', 'planning', 'running', 'paused', 'completed', 'archived',
 ] as const;
