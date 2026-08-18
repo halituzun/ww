@@ -78,6 +78,7 @@ Rate limit aşımında router bekletir (kuyruklu token-bucket); 429 dönerse
 
 | Fren | Tetik | Davranış |
 |---|---|---|
+| **Atanamaz görev freni** | `queued` ama `plan_id` NIL: görev atamada reddedilir | Kurtarma onu kuyruğa GERİ KOYMAZ ve `blockedTaskIds` olarak bildirir. Geri koymak sonsuz döngüdür: pompa reddeder → teslim sınırı dolar → mesaj akıştan silinir → kurtarma geri koyar. `attempt` bu döngüde 0'da kaldığı için `max_attempts` freni hiç devreye girmez (ölçüldü 2026-08-18: aynı kimlikler 51 kez "onarıldı") |
 | **Ping-pong freni** | worker↔verifier ret döngüsü `attempt ≥ max_attempts` (3) | Görev `escalated`; Faz 1: PM → kullanıcı, Faz 4: group_lead → professor → PM → kullanıcı ([03](03-agent-sistemi.md#tırmandırma-zinciri)) |
 | **Görev token tavanı** | `tokens_spent ≥ token_budget` | Görev duraklar → tırmandırma; PM bütçe artırabilir veya görevi böler |
 | **Proje kontör tavanı** | `mv_usage_daily` toplamı ≥ `budget_usd_limit` | Proje `paused`; panel bildirimi; kullanıcı kararı beklenir |

@@ -36,6 +36,12 @@ export interface RecoveryResult {
   readonly requeuedTaskIds: readonly EntityId[];
   readonly idledAgentIds: readonly EntityId[];
   readonly streamRepairedTaskIds: readonly EntityId[];
+  /**
+   * `queued` ama ATANAMAZ olduğu için kuyruğa KONMAYAN görevler (plansız).
+   * Kuyruğa koymak sonsuz döngü açardı; bildirmemek ise "sessizce hiç
+   * çalışmayan görev" kusurunu sürdürürdü.
+   */
+  readonly blockedTaskIds: readonly EntityId[];
 }
 
 const DEFAULT_STATUSES: readonly TaskRow['status'][] = ['assigned', 'working', 'verifying', 'testing'];
@@ -150,10 +156,23 @@ export class RecoveryService {
       await this.#reconcileAbandonedEffects(task.task_id, now);
     }
     const inStream = await listStreamTaskIds(this.#redis, `ww:queue:${projectId}`);
-    for (const taskId of planQueueRefill(queuedTasks.map((task) => task.task_id), inStream)) {
+    const planOf = new Map(queuedTasks.map((task) => [task.task_id, task.plan_id]));
+    const refill = planQueueRefill(
+      queuedTasks.map((task) => task.task_id),
+      inStream,
+      { planIdOf: (taskId) => planOf.get(taskId) ?? '' },
+    );
+    for (const taskId of refill) {
       await enqueueTask(this.#redis, `ww:queue:${projectId}`, taskId);
       streamRepairedTaskIds.push(taskId as EntityId);
     }
+    // ENGELLENEN GÖREV SESSİZ KALMAZ. Kuyruğa koymayı bırakmak döngüyü keser
+    // ama görev hâlâ kalıcı olarak koşamaz durumdadır; bunu bildirmezsek
+    // "sessizce hiç çalışmayan görev" kusurunu daha sessiz bir biçimde
+    // sürdürmüş oluruz.
+    const blockedTaskIds = queuedTasks
+      .filter((task) => !inStream.includes(task.task_id) && !refill.includes(task.task_id))
+      .map((task) => task.task_id as EntityId);
 
     // HİÇBİR ŞEY OLMADIYSA OLAY YAZMA. Ölçüldü (canlı ClickHouse, 2026-08-18):
     // 2853 `recovery_completed` olayının 2805'i (%98) hiçbir şey kurtarmamıştı
@@ -164,8 +183,11 @@ export class RecoveryService {
     // Sağlık kontrolünde aynı ilke zaten uygulanıyor: yayın SADECE değişimde.
     if (requeuedTaskIds.length === 0
       && idledAgentIds.length === 0
-      && streamRepairedTaskIds.length === 0) {
-      return Object.freeze({ projectId, requeuedTaskIds, idledAgentIds, streamRepairedTaskIds });
+      && streamRepairedTaskIds.length === 0
+      && blockedTaskIds.length === 0) {
+      return Object.freeze({
+        projectId, requeuedTaskIds, idledAgentIds, streamRepairedTaskIds, blockedTaskIds,
+      });
     }
 
     const eventId = (`${canonicalSha256V1({ projectId, now, requeuedTaskIds, idledAgentIds }).slice(0, 8)}-${canonicalSha256V1({ projectId, now }).slice(8, 12)}-5${canonicalSha256V1({ projectId, now }).slice(13, 16)}-8${canonicalSha256V1({ projectId, now }).slice(17, 20)}-${canonicalSha256V1({ projectId, now }).slice(20, 32)}`) as EntityId;
@@ -177,11 +199,13 @@ export class RecoveryService {
       agent_id: NIL_UUID,
       event_type: 'recovery_completed',
       tool_name: 'recovery.service',
-      payload: { projectId, requeuedTaskIds, idledAgentIds, streamRepairedTaskIds },
+      payload: { projectId, requeuedTaskIds, idledAgentIds, streamRepairedTaskIds, blockedTaskIds },
       duration_ms: 0,
       created_at: now,
     });
-    return Object.freeze({ projectId, requeuedTaskIds, idledAgentIds, streamRepairedTaskIds });
+    return Object.freeze({
+      projectId, requeuedTaskIds, idledAgentIds, streamRepairedTaskIds, blockedTaskIds,
+    });
   }
 
   async recoverAll(limit = 100): Promise<readonly RecoveryResult[]> {

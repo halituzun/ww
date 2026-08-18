@@ -1,3 +1,4 @@
+import { NIL_UUID } from '@ww/shared';
 import { describe, expect, it } from 'vitest';
 import { planQueueRefill } from './queue-refill.js';
 
@@ -26,5 +27,30 @@ describe('planQueueRefill', () => {
 
   it('stream tamamen boşsa hepsini planlar', () => {
     expect(planQueueRefill(['a', 'b'], [])).toEqual(['a', 'b']);
+  });
+
+  // ÖLÇÜLDÜ (canlı ClickHouse, 2026-08-18): aynı görev kimlikleri kurtarma
+  // taramasında 51 KEZ "onarıldı". Sebebi kuyruk değil, görevin kendisiydi:
+  // `plan_id` NIL olan görev ATANAMAZ ("task plan kimligi tasimiyor"). Pompa
+  // onu her seferinde reddediyor, teslim sınırı dolunca akıştan siliniyor,
+  // kurtarma geri koyuyor — sonsuza dek.
+  //
+  // `attempt` bu döngüde 0'da kalır (ret ATAMADAN ÖNCE olur), bu yüzden
+  // `max_attempts` freni hiç devreye girmez. Fren yoksa döngüyü kesen tek şey
+  // buradaki yapısal kontroldür.
+  describe('atanamaz görevler', () => {
+    it('plansiz gorevi kuyruga geri KOYMAZ', () => {
+      const plan = new Map([['t1', NIL_UUID], ['t2', 'aaaaaaaa-0000-4000-8000-000000000001']]);
+      expect(planQueueRefill(['t1', 't2'], [], { planIdOf: (id) => plan.get(id) ?? '' }))
+        .toEqual(['t2']);
+    });
+
+    it('bos plan kimligini de atanamaz sayar', () => {
+      expect(planQueueRefill(['t1'], [], { planIdOf: () => '' })).toEqual([]);
+    });
+
+    it('plan bilgisi verilmezse eski davranis korunur', () => {
+      expect(planQueueRefill(['t1', 't2'], [])).toEqual(['t1', 't2']);
+    });
   });
 });

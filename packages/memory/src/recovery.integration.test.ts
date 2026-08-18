@@ -110,4 +110,34 @@ describe.skipIf(probe === undefined || probeRedis === undefined)('RecoveryServic
     }).then((r) => r.json<{ n: string }>());
     expect(Number(rows[0]?.n ?? 0)).toBe(0);
   });
+
+  // ÖLÇÜLDÜ: aynı görev kimlikleri 51 kez "onarıldı". Plansız görev ATANAMAZ;
+  // kuyruğa konunca pompa reddeder, teslim sınırı dolunca akıştan silinir,
+  // kurtarma geri koyar — sonsuza dek. `attempt` 0'da kaldığı için
+  // `max_attempts` freni de hiç devreye girmez.
+  it('plansiz gorevi kuyruga geri koymaz ama BILDIRIR', async () => {
+    const dongudekiProje = randomUUID() as EntityId;
+    const plansizGorev = randomUUID() as EntityId;
+    await ch.insert({
+      table: 'tasks',
+      values: [{
+        task_id: plansizGorev, project_id: dongudekiProje, plan_id: NIL_UUID,
+        parent_task_id: NIL_UUID, title: 'plansız', description: '',
+        acceptance_criteria: [], status: 'queued', priority: 0,
+        issuer_agent_id: randomUUID(), worker_agent_id: NIL_UUID, verifier_agent_id: NIL_UUID,
+        group: 'coding', depends_on: [], target_files: [], attempt: 0, max_attempts: 3,
+        delegation_depth: 0, token_budget: 0, tokens_spent: '0', commit_hash: '',
+        result_summary: '', reject_reason: '', task_brief_id: NIL_UUID,
+        assignment_attempt_id: NIL_UUID, created_at: now, updated_at: now, version: '1',
+      }],
+      format: 'JSONEachRow',
+    });
+
+    const service = new RecoveryService(ch, redis, { now: () => now });
+    const result = await service.recoverProject(dongudekiProje);
+
+    expect(result.streamRepairedTaskIds).toEqual([]);
+    // Sessiz kalmaz: engellenen görev raporlanır.
+    expect(result.blockedTaskIds).toEqual([plansizGorev]);
+  });
 });
