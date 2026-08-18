@@ -6,3 +6,4 @@ export * from './communication.js';
 export * from './task-contracts.js';
 export * from './policy.js';
 export * from './transitions.js';
+export * from './event-cursor.js';

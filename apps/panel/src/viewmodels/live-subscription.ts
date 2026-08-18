@@ -1,4 +1,4 @@
-import { parseCursor } from './cursor-order.js';
+import { compareCursors } from './cursor-order.js';
 // Canlı olay aboneliğinin yaşam döngüsü (MVVM: ViewModel katmanı).
 //
 // NEDEN AYRI DOSYA: bu mantık View'ın (App.tsx) içinde bir useEffect olarak
@@ -38,7 +38,8 @@ export function createLiveEventSubscription(input: LiveSubscriptionInput): () =>
   let attempt = 0;
   // İlk olaylardan BESLENİR: sıfırdan başlamak tüm geçmişi yeniden akıtır
   // ve zaman çizelgesini çift kayıtla doldurur.
-  let highestCursor = parseCursor(resumeCursor(input.initialEvents));
+  // İlk olaylardan BESLENİR: sıfırdan başlamak tüm geçmişi yeniden akıtır.
+  let cursor = resumeCursor(input.initialEvents);
 
   const retry = (): void => {
     if (!active) return;
@@ -69,7 +70,7 @@ export function createLiveEventSubscription(input: LiveSubscriptionInput): () =>
         event: 'subscribe',
         // BigInt JSON'a doğrudan konamaz; imleç zaten METİN olarak taşınır
         // (docs/08: opak imleç).
-        data: { projectId: input.projectId, afterSeq: highestCursor.toString() },
+        data: { projectId: input.projectId, afterCursor: cursor },
       }));
     };
 
@@ -82,10 +83,9 @@ export function createLiveEventSubscription(input: LiveSubscriptionInput): () =>
         // Tek bozuk çerçeve tüm beslemeyi düşürmemeli.
         return;
       }
-      try {
-        const value = parseCursor(next.cursor);
-        if (value > highestCursor) highestCursor = value;
-      } catch { /* bozuk imleç akışı durdurmaz */ }
+      if (typeof next.cursor === 'string' && compareCursors(next.cursor, cursor) > 0) {
+        cursor = next.cursor;
+      }
       input.onEvent(next);
     };
 

@@ -1,6 +1,7 @@
 import type { ClickHouseClient } from '@clickhouse/client';
 import {
   EVENT_TYPES,
+  decodeEventCursor,
   canonicalSha256V1,
   type EntityId,
   type EventType,
@@ -93,7 +94,11 @@ export async function getEvent(ch: ClickHouseClient, eventId: string): Promise<E
 export async function listEvents(
   ch: ClickHouseClient,
   projectId: string,
-  options: { readonly limit?: number; readonly afterSeq?: bigint } = {},
+  options: {
+    readonly limit?: number;
+    /** docs/08 opak imleç: (created_at, event_id). `afterSeq` GÜVENİLMEZDİ. */
+    readonly afterCursor?: string;
+  } = {},
 ): Promise<EventRow[]> {
   const project = concreteEntityId(projectId, 'projectId');
   const limit = storedUnsignedInteger(options.limit ?? 100, 'events.limit', 1_000);
@@ -101,22 +106,36 @@ export async function listEvents(
   // İmleç ZORUNLU: imleçsiz sorgu en ESKİ `limit` olayı döndürür. Canlı besleme
   // bunları imleçle süzdüğü için, proje `limit` olayı geçtiğinde akış kalıcı
   // olarak susuyordu (panel bağlı görünüp donuyordu).
-  const afterSeq = options.afterSeq;
-  const seqFilter = afterSeq === undefined ? '' : ' AND seq > {afterSeq:UInt64}';
+  // SIRALAMA ile SÜZME aynı ölçüte dayanmalı. Eskiden zamana göre sıralanıp
+  // `seq`'e göre süzülüyordu; `seq` ise her yazıcıda farklı ölçekte üretildiği
+  // için (kilitler 0-3, çoğu olay epoch-ms, kurtarma/commit hash ~1e18) tek bir
+  // büyük değer imleci fırlatıp sonraki her olayı kalıcı olarak atlatıyordu.
+  const after = options.afterCursor === undefined
+    ? undefined
+    : decodeEventCursor(options.afterCursor);
+  const cursorFilter = after === undefined
+    ? ''
+    // İmleçteki zaman ISO ('...T...Z') biçiminde taşınır; kolon DateTime64'tür.
+    // Doğrudan karşılaştırma tip hatası verir, bu yüzden açıkça çevrilir.
+    : ' AND (created_at, event_id) > '
+      + '(parseDateTime64BestEffort({afterCreatedAt:String}, 3, \'UTC\'), {afterEventId:UUID})';
   const params: Record<string, string | number> = { projectId: project, limit };
-  if (afterSeq !== undefined) params['afterSeq'] = afterSeq.toString();
+  if (after !== undefined) {
+    params['afterCreatedAt'] = after.createdAt;
+    params['afterEventId'] = after.eventId;
+  }
 
   const result = await ch.query({
     query: `SELECT ${EVENT_COLUMNS} FROM events
-      WHERE project_id = {projectId:UUID}${seqFilter}
+      WHERE project_id = {projectId:UUID}${cursorFilter}
         AND event_id IN (
           SELECT event_id FROM events
-          WHERE project_id = {projectId:UUID}${seqFilter}
+          WHERE project_id = {projectId:UUID}${cursorFilter}
           GROUP BY event_id
-          ORDER BY min(created_at) ASC, min(seq) ASC, event_id ASC
+          ORDER BY min(created_at) ASC, event_id ASC
           LIMIT {limit:UInt32}
         )
-      ORDER BY created_at ASC, seq ASC, event_id ASC`,
+      ORDER BY created_at ASC, event_id ASC`,
     query_params: params,
     format: 'JSONEachRow',
   });

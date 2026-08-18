@@ -86,4 +86,28 @@ describe.skipIf(probe === undefined || probeRedis === undefined)('RecoveryServic
     expect(second.requeuedTaskIds).toEqual([]);
     expect(second.idledAgentIds).toEqual([]);
   });
+
+  // ÖLÇÜLDÜ (canlı ClickHouse, 2026-08-18): 2853 `recovery_completed` olayının
+  // 2805'i (%98) HİÇBİR ŞEY kurtarmamıştı ve 1972'si tamamen boştu. Bu, tüm
+  // olay günlüğünün %65'i demek. Panel zaman çizelgesi 100 olay tuttuğu için
+  // gerçek iş görünmez oluyordu.
+  //
+  // Sağlık kontrolünde aynı ilke zaten uygulanıyor: "Yayın SADECE değişimde;
+  // her dakika 'hâlâ ok' bildirmek paneli boğar."
+  it('hicbir sey kurtarmayan tarama olay YAZMAZ', async () => {
+    const bosProje = randomUUID();
+    const service = new RecoveryService(ch, redis, { now: () => now });
+
+    const result = await service.recoverProject(bosProje);
+    expect(result.requeuedTaskIds).toEqual([]);
+    expect(result.idledAgentIds).toEqual([]);
+    expect(result.streamRepairedTaskIds).toEqual([]);
+
+    const rows = await ch.query({
+      query: `SELECT count() AS n FROM events
+        WHERE project_id = {projectId:UUID} AND event_type = 'recovery_completed'`,
+      query_params: { projectId: bosProje }, format: 'JSONEachRow',
+    }).then((r) => r.json<{ n: string }>());
+    expect(Number(rows[0]?.n ?? 0)).toBe(0);
+  });
 });

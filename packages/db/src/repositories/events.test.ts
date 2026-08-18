@@ -1,3 +1,4 @@
+import { encodeEventCursor } from '@ww/shared';
 import { randomUUID } from 'node:crypto';
 import { NIL_UUID } from '@ww/shared';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
@@ -95,22 +96,62 @@ describe.skipIf(!up)('listEvents imleç desteği', () => {
   };
 
   // REGRESYON: listEvents en ESKİ N olayı döndürüyordu. Gateway bunları
-  // seq <= afterSeq ile süzdüğü için, bir proje N olayı geçtiğinde canlı
-  // besleme KALICI olarak susuyordu: panel bağlı görünüp donuyordu.
-  it('afterSeq verildiğinde yalnız sonraki olayları döndürür', async () => {
+  // imleçle süzdüğü için, bir proje N olayı geçtiğinde canlı besleme KALICI
+  // olarak susuyordu: panel bağlı görünüp donuyordu.
+  it('imleç verildiğinde yalnız sonraki olayları döndürür', async () => {
     const projectId = randomUUID();
     await seed(projectId, 12);
-    const after = await listEvents(cursorCh, projectId, { afterSeq: 10n, limit: 5 });
-    expect(after.map((row) => Number(row.seq))).toEqual([11, 12]);
+    const all = await listEvents(cursorCh, projectId, { limit: 20 });
+    const cursor = encodeEventCursor(all[9]!.created_at, all[9]!.event_id);
+    const after = await listEvents(cursorCh, projectId, { afterCursor: cursor, limit: 5 });
+    expect(after).toHaveLength(2);
+    expect(after.map((row) => row.event_id))
+      .toEqual([all[10]!.event_id, all[11]!.event_id]);
   });
 
   it('imleç sınırdan büyük olsa bile yeni olayları bulur', async () => {
     const projectId = randomUUID();
     await seed(projectId, 8);
-    // Limit 3 iken imleç 5: eski davranışta ilk 3 gelir ve hepsi elenirdi.
-    const page = await listEvents(cursorCh, projectId, { afterSeq: 5n, limit: 3 });
+    const all = await listEvents(cursorCh, projectId, { limit: 20 });
+    // Limit 3 iken imleç 5. sırada: eski davranışta ilk 3 gelir ve hepsi elenirdi.
+    const cursor = encodeEventCursor(all[4]!.created_at, all[4]!.event_id);
+    const page = await listEvents(cursorCh, projectId, { afterCursor: cursor, limit: 3 });
     expect(page.length).toBeGreaterThan(0);
-    expect(Math.min(...page.map((row) => Number(row.seq)))).toBeGreaterThan(5);
+    for (const row of page) {
+      expect(encodeEventCursor(row.created_at, row.event_id) > cursor).toBe(true);
+    }
+  });
+
+  // ASIL KUSUR: sıralama ZAMANA, süzme `seq`'e göreydi ve `seq` her yazıcıda
+  // farklı ölçekte üretiliyordu (kilitler 0-3, çoğu olay epoch-ms, kurtarma ve
+  // commit hash ~1e18). Tek bir büyük seq, imleci fırlatıp sonraki HER olayı
+  // kalıcı olarak atlatıyordu.
+  it('seq degerleri tutarsiz olsa bile hicbir olayi atlamaz', async () => {
+    const projectId = randomUUID();
+    const base = Date.now();
+    await cursorCh.insert({
+      table: 'events',
+      values: [
+        // Önce dev bir seq (kurtarma/commit yazıcılarının ürettiği gibi)
+        { seq: '1152376219910902321', offset: 0 },
+        // Sonra küçük seq'li olaylar: eski davranışta bunlar ASLA gelmezdi.
+        { seq: '3', offset: 1 },
+        { seq: '0', offset: 2 },
+      ].map((row) => ({
+        event_id: randomUUID(), seq: row.seq, project_id: projectId,
+        task_id: NIL_UUID, agent_id: NIL_UUID, event_type: 'status_change',
+        tool_name: '', payload: '{}', duration_ms: 0,
+        created_at: new Date(base + row.offset * 1000).toISOString(),
+      })),
+      format: 'JSONEachRow',
+    });
+
+    const all = await listEvents(cursorCh, projectId, { limit: 10 });
+    expect(all).toHaveLength(3);
+    const cursor = encodeEventCursor(all[0]!.created_at, all[0]!.event_id);
+    // Dev seq'li olaydan SONRA gelen küçük seq'li iki olay da teslim edilmeli.
+    expect(await listEvents(cursorCh, projectId, { afterCursor: cursor, limit: 10 }))
+      .toHaveLength(2);
   });
 
   it('imleç verilmezse eski davranış korunur', async () => {

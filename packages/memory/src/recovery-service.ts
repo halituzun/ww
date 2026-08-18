@@ -155,6 +155,19 @@ export class RecoveryService {
       streamRepairedTaskIds.push(taskId as EntityId);
     }
 
+    // HİÇBİR ŞEY OLMADIYSA OLAY YAZMA. Ölçüldü (canlı ClickHouse, 2026-08-18):
+    // 2853 `recovery_completed` olayının 2805'i (%98) hiçbir şey kurtarmamıştı
+    // ve bunlar tüm olay günlüğünün %65'iydi. Panel zaman çizelgesi 100 olay
+    // tuttuğu için GERÇEK İŞ görünmez oluyordu; denetim izi de bu gürültüyle
+    // okunamaz hale geliyordu.
+    //
+    // Sağlık kontrolünde aynı ilke zaten uygulanıyor: yayın SADECE değişimde.
+    if (requeuedTaskIds.length === 0
+      && idledAgentIds.length === 0
+      && streamRepairedTaskIds.length === 0) {
+      return Object.freeze({ projectId, requeuedTaskIds, idledAgentIds, streamRepairedTaskIds });
+    }
+
     const eventId = (`${canonicalSha256V1({ projectId, now, requeuedTaskIds, idledAgentIds }).slice(0, 8)}-${canonicalSha256V1({ projectId, now }).slice(8, 12)}-5${canonicalSha256V1({ projectId, now }).slice(13, 16)}-8${canonicalSha256V1({ projectId, now }).slice(17, 20)}-${canonicalSha256V1({ projectId, now }).slice(20, 32)}`) as EntityId;
     await appendEvent(this.#ch, {
       event_id: eventId,

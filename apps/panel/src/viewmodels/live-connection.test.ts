@@ -7,7 +7,7 @@ import {
 } from './live-connection.js';
 import type { TimelineEvent } from './workspace-logic.js';
 
-const event = (seq: number): TimelineEvent => ({ event: 'task.updated', cursor: String(seq), ts: '', data: null });
+const event = (seq: number): TimelineEvent => ({ event: 'task.updated', cursor: `2026-08-18 09:00:0${seq}.000|id`, ts: '', data: null });
 
 describe('nextReconnectDelay', () => {
   it('ilk denemede kısa bekler', () => {
@@ -34,16 +34,17 @@ describe('nextReconnectDelay', () => {
 describe('resumeCursor', () => {
   // Yeniden bağlanmada 0'dan başlamak tüm geçmişi tekrar akıtır; görülen en
   // yüksek seq'ten devam etmek gerekir.
-  it('görülen en yüksek seq ile devam eder', () => {
-    expect(resumeCursor([event(3), event(7), event(5)])).toBe('7');
+  it('görülen en yüksek imleç ile devam eder', () => {
+    expect(resumeCursor([event(3), event(7), event(5)])).toBe('2026-08-18 09:00:07.000|id');
   });
 
   it('hiç olay yoksa baştan başlar', () => {
-    expect(resumeCursor([])).toBe('0');
+    // Boş imleç 'baştan başla' demektir.
+    expect(resumeCursor([])).toBe('');
   });
 
-  it('geçersiz seq değerlerini yok sayar', () => {
-    expect(resumeCursor([{ ...event(0), cursor: 'bozuk' }, event(4)])).toBe('4');
+  it('bos imlecleri yok sayar', () => {
+    expect(resumeCursor([{ ...event(0), cursor: '' }, event(4)])).toBe('2026-08-18 09:00:04.000|id');
   });
 });
 

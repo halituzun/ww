@@ -144,7 +144,13 @@ Faz 0 `events.seq` alanı public istemci sözleşmesi değildir:
 interface WsEnvelope<T = unknown> {
   event: WsEventName;
   projectId: string;
-  cursor: string;       // opaque, proje kapsamlı Faz 3 replay cursor'u
+  cursor: string;       // opaque: (created_at, event_id). İstemci AYRIŞTIRMAZ,
+                        // yalnız düz metin olarak karşılaştırır — sözlük sırası
+                        // zaman sırasıdır. `events.seq` KULLANILMAZ: her yazıcı
+                        // onu farklı ölçekte üretiyor (kilitler 0-3, çoğu olay
+                        // epoch-ms, kurtarma/commit hash ~1e18) ve tek bir büyük
+                        // değer imleci fırlatıp sonraki her olayı kalıcı olarak
+                        // atlatıyordu (ölçüldü ve düzeltildi 2026-08-18).
   ts: string;           // ISO
   data: T;
 }

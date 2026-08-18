@@ -1,15 +1,17 @@
 import { Inject, OnModuleDestroy } from '@nestjs/common';
 import { SubscribeMessage, WebSocketGateway, WebSocketServer } from '@nestjs/websockets';
-import { EntityIdSchema, type WsEnvelope } from '@ww/shared';
+import {
+  EMPTY_EVENT_CURSOR, EntityIdSchema, decodeEventCursor, encodeEventCursor, type WsEnvelope,
+} from '@ww/shared';
 
 /** Görevle ilgisi olmayan olaylar NIL taşır; panele boş dize gider. */
 const NIL_TASK = '00000000-0000-0000-0000-000000000000';
 import { listEvents, type ClickHouseClient } from '@ww/db';
 import type { Server, WebSocket } from 'ws';
 import { SERVER_DATABASE, type ServerDatabase } from './orchestration.module.js';
-import { toCursor } from './ws-cursor.js';
 
-interface Subscription { readonly projectId: string; readonly afterSeq: bigint; }
+
+interface Subscription { readonly projectId: string; readonly afterCursor: string; }
 interface ClientState { subscription?: Subscription; timer?: ReturnType<typeof setInterval>; }
 
 /** Project-scoped, replayable event gateway. Redis remains a wakeup hint; the
@@ -36,12 +38,13 @@ export class EventsGateway implements OnModuleDestroy {
   async subscribe(client: WebSocket, payload: unknown): Promise<void> {
     const value = payload === null || typeof payload !== 'object' ? {} : payload as Record<string, unknown>;
     const projectId = EntityIdSchema.parse(value['projectId']);
-    const rawAfter = value['afterSeq'] === undefined ? '0' : String(value['afterSeq']);
-    if (!/^\d+$/.test(rawAfter)) throw new Error('afterSeq gecersiz');
+    // İstemci imleci OPAKTIR; sunucu onu yalnız doğrular ve geri verir.
+    const rawAfter = value['afterCursor'] === undefined ? EMPTY_EVENT_CURSOR : String(value['afterCursor']);
+    decodeEventCursor(rawAfter);
     const current = this.#clients.get(client);
     if (current === undefined) return;
     if (current.timer !== undefined) clearInterval(current.timer);
-    const state: ClientState = { subscription: { projectId, afterSeq: BigInt(rawAfter) } };
+    const state: ClientState = { subscription: { projectId, afterCursor: rawAfter } };
     this.#clients.set(client, state);
     await this.publish(client, state);
     state.timer = setInterval(() => { void this.publish(client, state); }, 1_000);
@@ -62,16 +65,16 @@ export class EventsGateway implements OnModuleDestroy {
     if (subscription === undefined || client.readyState !== client.OPEN) return;
     // İmleç sorguya verilir. Aksi halde en ESKİ 200 olay gelir ve proje 200
     // olayı geçtiğinde akış kalıcı olarak susardı (panel bağlı görünüp donardı).
-    const after = subscription.afterSeq;
+    const after = subscription.afterCursor;
     const events = await listEvents(this.#ch, subscription.projectId, {
-      limit: 200, afterSeq: after,
+      limit: 200, afterCursor: after,
     });
     for (const event of events) {
-      const seq = BigInt(event.seq);
-      if (seq <= after) continue;
-      const envelope: WsEnvelope = { event: event.event_type, projectId: subscription.projectId, taskId: event.task_id === NIL_TASK ? '' : event.task_id, cursor: toCursor(seq), ts: event.created_at, data: event.payload };
+      const cursor = encodeEventCursor(event.created_at, event.event_id);
+      if (cursor <= after) continue;
+      const envelope: WsEnvelope = { event: event.event_type, projectId: subscription.projectId, taskId: event.task_id === NIL_TASK ? '' : event.task_id, cursor, ts: event.created_at, data: event.payload };
       client.send(JSON.stringify(envelope));
-      state.subscription = { ...subscription, afterSeq: seq };
+      state.subscription = { ...subscription, afterCursor: cursor };
     }
   }
 }
