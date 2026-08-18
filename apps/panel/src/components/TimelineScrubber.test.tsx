@@ -45,3 +45,21 @@ describe('TimelineScrubber', () => {
     expect(onCursor).toHaveBeenCalledWith(3);
   });
 });
+
+describe('TimelineScrubber — pencere sınırı', () => {
+  const many = Array.from({ length: 100 }, (_, index) => ({
+    event: 'status_change', seq: index + 1, ts: '2026-08-18T00:00:00.000Z', data: {},
+  }));
+
+  // Kullanıcı "1 / 100"da geçmişin BAŞINDA olduğunu sanmamalı: daha eskisi
+  // panel belleğinde yok.
+  it('pencere doluyken bunu bildirir', () => {
+    render(<TimelineScrubber events={many} cursor={100} onCursor={vi.fn()} at={many[99]} />);
+    expect(screen.getByText(/pencere: son 100/)).toBeDefined();
+  });
+
+  it('pencere dolmamisken uyarmaz', () => {
+    render(<TimelineScrubber events={events} cursor={3} onCursor={vi.fn()} at={events[2]} />);
+    expect(screen.queryByText(/pencere: son/)).toBeNull();
+  });
+});
