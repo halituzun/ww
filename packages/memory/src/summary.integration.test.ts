@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
-import { createCh, runMigrations, type ClickHouseClient } from '@ww/db';
+import { appendKnowledgeVersion, createCh, createTask, runMigrations, type ClickHouseClient } from '@ww/db';
+import { NIL_UUID } from '@ww/shared';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { MemoryService } from './memory-service.js';
 
@@ -70,5 +71,106 @@ describe.skipIf(!up)('MemoryService.appendSummary', () => {
       created_by_agent_id: agentId, scope: 'task',
     });
     expect(String(rows[0]!['content'])).toContain('renk yardımcısı');
+  });
+
+  // ASIL KUSUR: özetler yalnızca knowledge VE file_index hiç eşleşmediğinde
+  // bakılan bir SON ÇAREYDİ. Yazıcı bağlandığından beri bu, yazılan ama
+  // okunmayan bir katman demekti: eşleşen tek bir karar, tüm görev
+  // geçmişini görünmez yapıyordu.
+  it('eslesen bir karar varken bile ozeti dondurur', async () => {
+    const projectId = randomUUID();
+    const memory = new MemoryService(ch);
+    await appendKnowledgeVersion(ch, {
+      knowledge_id: randomUUID(),
+      project_id: projectId,
+      kind: 'decision',
+      title: 'Renk paleti kararı',
+      content: 'Ana renk mavi olacak.',
+      tags: ['renk'],
+      source_task_id: NIL_UUID,
+      source_message_id: NIL_UUID,
+      status: 'active',
+      superseded_by: NIL_UUID,
+      created_at: '2026-08-18T09:00:00.000Z',
+      row_hash: '',
+    } as never);
+    await memory.appendSummary({
+      projectId: projectId as never,
+      scope: 'task',
+      refId: randomUUID() as never,
+      content: 'Görev: renk yardımcısı eklendi\nSonuç: src/colors.ts yazıldı',
+      createdByAgentId: randomUUID() as never,
+      createdAt: '2026-08-18T10:00:00.000Z',
+    });
+
+    const chunks = await memory.query({ projectId: projectId as never, query: 'renk' });
+    expect(chunks.map((chunk) => chunk.sourceTable)).toContain('summaries');
+    expect(chunks.map((chunk) => chunk.sourceTable)).toContain('knowledge');
+  });
+
+  // docs/06 Context Builder 4. katman: "Taze gelişmeler — projenin son N görev
+  // özeti (kronolojik farkındalık)". Bu katman HİÇ YOKTU: bağlam paketi yalnız
+  // sorguyla eşleşeni alıyordu, yani sorgu vermeyen bir görev projede az önce
+  // ne olduğunu HİÇ göremiyordu.
+  it('baglam paketi sorgu olmadan da son ozetleri tasir', async () => {
+    const projectId = randomUUID();
+    const taskId = randomUUID();
+    const memory = new MemoryService(ch);
+    await createTask(ch, {
+      task_id: taskId, project_id: projectId, plan_id: randomUUID(),
+      parent_task_id: NIL_UUID, title: 'Tahta bileşeni',
+      description: 'satranç tahtası', acceptance_criteria: ['render eder'],
+      status: 'queued', priority: 0, issuer_agent_id: randomUUID(),
+      worker_agent_id: NIL_UUID, verifier_agent_id: NIL_UUID, group: 'coding',
+      depends_on: [], target_files: ['src/Board.tsx'], attempt: 0, max_attempts: 3,
+      delegation_depth: 0, token_budget: 0, tokens_spent: 0, commit_hash: '',
+      result_summary: '', reject_reason: '', task_brief_id: NIL_UUID,
+      assignment_attempt_id: NIL_UUID,
+      created_at: '2026-08-18T09:00:00.000Z', updated_at: '2026-08-18T09:00:00.000Z',
+    } as never);
+    await memory.appendSummary({
+      projectId: projectId as never, scope: 'task', refId: randomUUID() as never,
+      content: 'Görev: kuyruk pompası\nSonuç: alakasız ama TAZE bir gelişme',
+      createdByAgentId: randomUUID() as never, createdAt: '2026-08-18T09:30:00.000Z',
+    });
+
+    const pack = await memory.buildContextPack({
+      projectId: projectId as never, taskId: taskId as never,
+      cutoffAt: '2026-08-18T12:00:00.000Z', tokenBudget: 4_000,
+    });
+    expect(pack.chunks.map((chunk) => chunk.label)).toContainEqual(
+      expect.stringContaining('summary:task'),
+    );
+  });
+
+  // Kesme anı özetlerde de geçerlidir: yeniden koşan bir görev, KENDİSİNDEN
+  // SONRA oluşmuş bir gelişmeyi görürse koşu tekrar edilemez olur.
+  it('kesme anindan sonraki ozeti baglama koymaz', async () => {
+    const projectId = randomUUID();
+    const taskId = randomUUID();
+    const memory = new MemoryService(ch);
+    await createTask(ch, {
+      task_id: taskId, project_id: projectId, plan_id: randomUUID(),
+      parent_task_id: NIL_UUID, title: 'Tahta bileşeni', description: 'x',
+      acceptance_criteria: ['y'], status: 'queued', priority: 0,
+      issuer_agent_id: randomUUID(), worker_agent_id: NIL_UUID,
+      verifier_agent_id: NIL_UUID, group: 'coding', depends_on: [],
+      target_files: ['src/Board.tsx'], attempt: 0, max_attempts: 3,
+      delegation_depth: 0, token_budget: 0, tokens_spent: 0, commit_hash: '',
+      result_summary: '', reject_reason: '', task_brief_id: NIL_UUID,
+      assignment_attempt_id: NIL_UUID,
+      created_at: '2026-08-18T09:00:00.000Z', updated_at: '2026-08-18T09:00:00.000Z',
+    } as never);
+    await memory.appendSummary({
+      projectId: projectId as never, scope: 'task', refId: randomUUID() as never,
+      content: 'Görev: GELECEKTEN gelen özet', createdByAgentId: randomUUID() as never,
+      createdAt: '2026-08-18T14:00:00.000Z',
+    });
+
+    const pack = await memory.buildContextPack({
+      projectId: projectId as never, taskId: taskId as never,
+      cutoffAt: '2026-08-18T12:00:00.000Z', tokenBudget: 4_000,
+    });
+    expect(pack.chunks.map((chunk) => chunk.text).join('\n')).not.toContain('GELECEKTEN');
   });
 });

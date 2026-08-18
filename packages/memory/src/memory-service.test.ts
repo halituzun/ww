@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { selectMemoryChunks } from './memory-service.js';
+import { rankMemoryCandidates, selectMemoryChunks } from './memory-service.js';
 
 const chunk = (sourceId: string, text: string, score: number) => ({
   sourceTable: 'knowledge' as const,
@@ -24,5 +24,50 @@ describe('Phase 2 memory budget', () => {
   it('gecersiz ve asiri token butcesini fail-closed reddeder', () => {
     expect(() => selectMemoryChunks([], 0)).toThrow(/token budget/);
     expect(() => selectMemoryChunks([], 100_001)).toThrow(/token budget/);
+  });
+});
+
+// docs/06: arama SONUCU özet + karar + fihristten oluşur. Eski `query` özetleri
+// yalnızca knowledge VE file_index hiç eşleşmediğinde bakılan bir son çare
+// olarak sorguluyordu — yani piramidin orta katmanı, tek bir eşleşen karar
+// yüzünden tamamen görünmez oluyordu.
+describe('bellek adaylarını sıralama', () => {
+  const candidate = (table: 'knowledge' | 'summaries' | 'file_index', id: string, text: string) => ({
+    chunk: { sourceTable: table, sourceId: id as never, text, label: `[${table} #${id}]` },
+    haystack: text.toLocaleLowerCase('tr-TR'),
+  });
+
+  it('ozet adayi, bilgi adayi eslesse bile sonuca girer', () => {
+    const ranked = rankMemoryCandidates([
+      candidate('knowledge', '00000000-0000-0000-0000-000000000001', 'renk paleti karari'),
+      candidate('summaries', '00000000-0000-0000-0000-000000000002', 'renk paleti gorevi bitti'),
+    ], ['renk'], 12);
+    expect(ranked.map((chunk) => chunk.sourceTable)).toEqual(
+      expect.arrayContaining(['knowledge', 'summaries']),
+    );
+  });
+
+  it('eslesmeyen adayi eler ve limiti uygular', () => {
+    const ranked = rankMemoryCandidates([
+      candidate('knowledge', '00000000-0000-0000-0000-000000000001', 'renk renk paleti'),
+      candidate('summaries', '00000000-0000-0000-0000-000000000002', 'renk gorevi'),
+      candidate('file_index', '00000000-0000-0000-0000-000000000003', 'alakasiz dosya'),
+    ], ['renk'], 1);
+    expect(ranked).toHaveLength(1);
+    // Terim iki kez geçen aday daha yüksek skorludur.
+    expect(ranked[0]?.sourceTable).toBe('knowledge');
+  });
+
+  it('skor esitliginde deterministik siralar', () => {
+    const terms = ['renk'];
+    const first = rankMemoryCandidates([
+      candidate('summaries', '00000000-0000-0000-0000-000000000002', 'renk'),
+      candidate('knowledge', '00000000-0000-0000-0000-000000000001', 'renk'),
+    ], terms, 12);
+    const second = rankMemoryCandidates([
+      candidate('knowledge', '00000000-0000-0000-0000-000000000001', 'renk'),
+      candidate('summaries', '00000000-0000-0000-0000-000000000002', 'renk'),
+    ], terms, 12);
+    expect(first.map((chunk) => chunk.sourceId)).toEqual(second.map((chunk) => chunk.sourceId));
   });
 });

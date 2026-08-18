@@ -4,7 +4,7 @@ import {
   canonicalSha256V1,
   type EntityId,
 } from '@ww/shared';
-import { getTaskAsOf, listFileIndex, listLatestKnowledgeByStatus, upsertFileIndex, type FileIndexLayer, type KnowledgeRow } from '@ww/db';
+import { getTaskAsOf, listFileIndex, listLatestKnowledgeByStatus, listRecentSummaries, upsertFileIndex, type FileIndexLayer, type KnowledgeRow } from '@ww/db';
 
 export interface MemoryChunk {
   readonly sourceTable: 'knowledge' | 'summaries' | 'file_index' | 'messages';
@@ -72,6 +72,9 @@ export interface FileIndexInput {
 
 const MAX_TOKEN_BUDGET = 100_000;
 const MAX_QUERY_LIMIT = 100;
+/** docs/06 "son N görev özeti"; N burada sabittir, bütçe zaten kırpar. */
+const RECENT_SUMMARY_COUNT = 5;
+const RECENT_SUMMARY_SCORE = 0.5;
 
 function estimateTokens(text: string): number {
   return Math.max(1, Math.ceil(text.trim().split(/\s+/u).filter(Boolean).length * 1.3));
@@ -98,8 +101,53 @@ function validCutoff(value: string): string {
   return new Date(timestamp).toISOString();
 }
 
-function asText(value: unknown): string {
-  return typeof value === 'string' ? value : '';
+/** Terimin samanlıkta kaç kez geçtiği; boş terim sayılmaz. */
+function occurrences(haystack: string, term: string): number {
+  if (term === '') return 0;
+  let count = 0;
+  let index = haystack.indexOf(term);
+  while (index !== -1) {
+    count += 1;
+    index = haystack.indexOf(term, index + term.length);
+  }
+  return count;
+}
+
+/** Skorlanmamış aday: metni ve skorlamada kullanılacak küçük harfli samanlığı. */
+export interface MemoryCandidate {
+  readonly chunk: Omit<MemoryChunk, 'score'>;
+  readonly haystack: string;
+}
+
+/**
+ * docs/06 arama katmanı: TÜM kaynaklar (karar, fihrist, özet) aynı terazide
+ * tartılır ve tek listede sıralanır.
+ *
+ * Eskiden özetler yalnızca knowledge VE file_index hiç eşleşmediğinde
+ * bakılan bir son çareydi: eşleşen tek bir karar, piramidin orta katmanını
+ * tamamen görünmez yapıyordu. Özet yazıcısı bağlandığından beri bu, yazılan
+ * ama okunmayan bir katman demekti.
+ */
+export function rankMemoryCandidates(
+  candidates: readonly MemoryCandidate[],
+  terms: readonly string[],
+  limit: number,
+): readonly MemoryChunk[] {
+  return candidates
+    .map((candidate) => ({
+      ...candidate.chunk,
+      // Terim başına GEÇİŞ SAYISI: iki kez geçen aday, bir kez geçenden
+      // önce gelir. Eski hâli yalnızca "geçiyor mu" diye bakıyordu.
+      score: terms.reduce((total, term) => total + occurrences(candidate.haystack, term), 0),
+    }))
+    .filter((chunk) => chunk.score > 0)
+    // Eşit skorda kaynak tablo + kimlik ile deterministik sıra: aynı sorgu
+    // aynı bağlamı üretmezse, bir koşuyu tekrar etmek imkânsız olur.
+    .sort((left, right) => right.score - left.score
+      || left.sourceTable.localeCompare(right.sourceTable)
+      || left.sourceId.localeCompare(right.sourceId))
+    .slice(0, limit)
+    .map((chunk) => Object.freeze(chunk));
 }
 
 export function selectMemoryChunks(
@@ -143,48 +191,43 @@ export class MemoryService {
     const cutoff = input.cutoffAt === undefined ? undefined : validCutoff(input.cutoffAt);
     const knowledge = await listLatestKnowledgeByStatus(this.#ch, projectId, 'active');
     const files = await listFileIndex(this.#ch, projectId, Math.min(1_000, limit * 20));
+    // ÖZETLER ARTIK BİRİNCİ SINIF KAYNAK. Eskiden yalnızca knowledge ve
+    // file_index HİÇ eşleşmediğinde sorgulanıyordu; eşleşen tek bir karar
+    // piramidin orta katmanını tamamen görünmez yapıyordu.
+    const summaries = await listRecentSummaries(this.#ch, projectId, 200, cutoff);
     const terms = query.toLocaleLowerCase('tr-TR').split(/\s+/u).filter(Boolean);
-    const scored = knowledge
-      .filter((row) => cutoff === undefined || Date.parse(row.created_at) <= Date.parse(cutoff))
-      .map((row) => {
-        const haystack = `${row.title} ${row.content} ${row.tags.join(' ')}`.toLocaleLowerCase('tr-TR');
-        const score = terms.reduce((total, term) => total + (haystack.includes(term) ? 1 : 0), 0);
-        return { row, score };
-      })
-      .filter(({ score }) => score > 0)
-      .sort((left, right) => right.score - left.score || left.row.knowledge_id.localeCompare(right.row.knowledge_id))
-      .slice(0, limit)
-      .map(({ row, score }) => knowledgeChunk(row, score));
-    const fileScored = files
-      .map((row) => ({ row, score: terms.reduce((total, term) => total + (`${row.file_path} ${row.summary} ${row.exports.join(' ')}`.toLocaleLowerCase('tr-TR').includes(term) ? 1 : 0), 0) }))
-      .filter(({ score }) => score > 0)
-      .sort((a, b) => b.score - a.score || a.row.file_path.localeCompare(b.row.file_path))
-      .slice(0, limit)
-      .map(({ row, score }) => ({ sourceTable: 'file_index' as const, sourceId: id('file-index', { projectId, path: row.file_path }), text: `${row.file_path}\n${row.summary}`, label: `[file:${row.file_path}]`, score }));
-    if (fileScored.length > 0) return [...scored, ...fileScored].sort((a, b) => b.score - a.score).slice(0, limit);
-    if (scored.length > 0) return scored;
-
-    const result = await this.#ch.query({
-      query: `SELECT summary_id, content, created_at FROM summaries
-        WHERE project_id = {projectId:UUID} AND positionCaseInsensitive(content, {query:String}) > 0
-        ${cutoff === undefined ? '' : 'AND created_at <= {cutoff:DateTime64(3)}'}
-        ORDER BY created_at DESC, summary_id ASC LIMIT {limit:UInt32}`,
-      query_params: {
-        projectId,
-        query,
-        limit,
-        ...(cutoff === undefined ? {} : { cutoff: cutoff.replace('T', ' ').replace('Z', '') }),
-      },
-      format: 'JSONEachRow',
-    });
-    return (await result.json<unknown>()).flatMap((value): MemoryChunk[] => {
-      if (value === null || typeof value !== 'object' || Array.isArray(value)) return [];
-      const row = value as Record<string, unknown>;
-      const sourceId = typeof row['summary_id'] === 'string' ? row['summary_id'] : undefined;
-      const text = asText(row['content']);
-      if (sourceId === undefined || text.length === 0) return [];
-      return [{ sourceTable: 'summaries', sourceId: EntityIdSchema.parse(sourceId), text, label: `[summary #${sourceId}]`, score: 1 }];
-    });
+    const candidates: MemoryCandidate[] = [
+      ...knowledge
+        .filter((row) => cutoff === undefined || Date.parse(row.created_at) <= Date.parse(cutoff))
+        .map((row) => ({
+          chunk: {
+            sourceTable: 'knowledge' as const,
+            sourceId: row.knowledge_id as EntityId,
+            text: `${row.title}\n${row.content}`,
+            label: `[knowledge:${row.kind} #${row.knowledge_id}]`,
+          },
+          haystack: `${row.title} ${row.content} ${row.tags.join(' ')}`.toLocaleLowerCase('tr-TR'),
+        })),
+      ...files.map((row) => ({
+        chunk: {
+          sourceTable: 'file_index' as const,
+          sourceId: id('file-index', { projectId, path: row.file_path }),
+          text: `${row.file_path}\n${row.summary}`,
+          label: `[file:${row.file_path}]`,
+        },
+        haystack: `${row.file_path} ${row.summary} ${row.exports.join(' ')}`.toLocaleLowerCase('tr-TR'),
+      })),
+      ...summaries.map((row) => ({
+        chunk: {
+          sourceTable: 'summaries' as const,
+          sourceId: EntityIdSchema.parse(row.summary_id),
+          text: row.content,
+          label: `[summary:${row.scope} #${row.summary_id}]`,
+        },
+        haystack: row.content.toLocaleLowerCase('tr-TR'),
+      })),
+    ];
+    return rankMemoryCandidates(candidates, terms, limit);
   }
 
   async buildContextPack(input: ContextPackInput): Promise<ContextPack> {
@@ -197,10 +240,25 @@ export class MemoryService {
     const knowledge = (await listLatestKnowledgeByStatus(this.#ch, input.projectId, 'active'))
       .filter((row) => requiredKinds.has(row.kind) && Date.parse(row.created_at) <= Date.parse(cutoffAt))
       .map((row) => knowledgeChunk(row, row.kind === 'requirement' ? 3 : row.kind === 'standard' ? 2 : 1));
+    // docs/06 Context Builder 4. katman "Taze gelişmeler": projenin SON N
+    // görev özeti, kronolojik farkındalık için. Bu katman hiç yoktu — sorgu
+    // vermeyen bir görev, projede az önce ne olduğunu HİÇ göremiyordu.
+    //
+    // Skoru sorgu eşleşmelerinin (>=1) ALTINDA tutulur: taze olmak, ilgili
+    // olmaktan önce gelmemeli; bütçe dolduğunda ilk elenen bunlar olur.
+    const recent = (await listRecentSummaries(this.#ch, input.projectId, RECENT_SUMMARY_COUNT, cutoffAt))
+      .map((row) => Object.freeze({
+        sourceTable: 'summaries' as const,
+        sourceId: EntityIdSchema.parse(row.summary_id),
+        text: row.content,
+        label: `[summary:${row.scope} #${row.summary_id}]`,
+        score: RECENT_SUMMARY_SCORE,
+      }));
     const chunks = [
       { sourceTable: 'summaries' as const, sourceId: input.taskId, text: taskText, label: `[task #${input.taskId}]`, score: 4 },
       ...knowledge,
       ...(input.query === undefined ? [] : await this.query({ projectId: input.projectId, query: input.query, cutoffAt, limit: 12 })),
+      ...recent,
     ];
     const selected = selectMemoryChunks(chunks, input.tokenBudget);
     return Object.freeze({

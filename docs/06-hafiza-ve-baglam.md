@@ -88,6 +88,12 @@ bir orta katman, deterministik olandan her durumda kötüdür.)*
 - Ham `events` gömülmez (hacim/değer oranı kötü) — onlara SQL ile ulaşılır.
 - Arama: `cosineDistance` top-K (varsayılan K=12) + kaynak tablo filtresi;
   sonuçlar tarih ve `status='active'` (knowledge için) ile süzülür.
+
+*(2026-08-18: embedding boru hattı hâlâ yok — arama TERİM SAYIMIYLA yapılıyor
+(`rankMemoryCandidates`). Asıl düzeltilen kusur sıralama değil KAPSAMDI:
+özetler yalnızca knowledge VE file_index hiç eşleşmediğinde bakılan bir son
+çareydi, yani eşleşen tek bir karar piramidin orta katmanını tamamen görünmez
+yapıyordu. Artık üç kaynak da aynı terazide tartılıp tek listede sıralanıyor.)*
 - Embedding modeli değişimi: [04 — Embedding Sağlayıcısı](04-model-katmani.md#embedding-sağlayıcısı).
 
 ## Context Builder
@@ -110,6 +116,11 @@ Katmanlı doldurma (öncelik sırasıyla, bütçe dolunca kesilir):
 3. **Semantik komşular**: görev metniyle embedding araması —
    benzer geçmiş görev özetleri, ilgili kararlar ("bunu daha önce nasıl yaptık").
 4. **Taze gelişmeler**: projenin son N görev özeti (kronolojik farkındalık).
+   Uygulama: `listRecentSummaries` ile son 5 özet, kesme anına göre süzülür ve
+   sorgu eşleşmelerinin ALTINDA bir skorla eklenir — taze olmak, ilgili
+   olmaktan önce gelmez; bütçe dolunca ilk elenen bunlardır. *(2026-08-18'e
+   kadar bu katman HİÇ yoktu: sorgu vermeyen bir görev, projede az önce ne
+   olduğunu hiç göremiyordu.)*
 
 Kurallar:
 
