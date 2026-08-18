@@ -31,6 +31,7 @@ import { createLateBoundPort, type LateBoundPort } from './late-binding.js';
 import { ProviderHealthCache } from './provider-health-cache.js';
 import { StandardsAuditApplicationService } from './standards-audit.service.js';
 import { shouldRunStandardsAudit } from './audit-trigger.js';
+import { buildTaskSummary } from './task-summary.js';
 import type { LateBoundServices } from './late-bind-runtime.js';
 import { providerRequestsPerMinute } from './provider-rate.js';
 
@@ -99,6 +100,35 @@ export async function createOrchestrationComposition(
 
   const gateOps = createGateOperations({
     onCommitted: async ({ projectId, taskId, targetFiles, readFile }) => {
+      // docs/06 özet katmanı: "her görev bitiminde özetleyici görev özetini
+      // yazar". `summaries` canlı veritabanında TAMAMEN BOŞTU: yazıcı vardı,
+      // çağıranı yoktu. Context Builder onu her seferinde sorgulayıp boş
+      // dönüyordu — yani "asla unutmama" çekirdeği fiilen unutuyordu.
+      //
+      // Özet yazımı COMMIT'İ DÜŞÜRMEZ (kanca zaten korumalı), ama denetim
+      // tetiğini de engellememeli: ayrı try içinde.
+      try {
+        const task = await getLatestTask(input.ch, projectId, taskId);
+        if (task !== null) {
+          await memory.appendSummary({
+            projectId: projectId as EntityId,
+            scope: 'task',
+            refId: taskId,
+            content: buildTaskSummary({
+              title: task.title,
+              resultSummary: task.result_summary,
+              commitHash: task.commit_hash,
+              targetFiles: task.target_files,
+              attempts: task.attempt,
+            }),
+            createdByAgentId: task.worker_agent_id as EntityId,
+            createdAt: new Date().toISOString(),
+          });
+        }
+      } catch (reason) {
+        console.warn(`[ww] görev özeti yazılamadı: ${String(reason)}`);
+      }
+
       const done = await countDoneTasks(input.ch, projectId);
       if (!shouldRunStandardsAudit(done)) return;
 

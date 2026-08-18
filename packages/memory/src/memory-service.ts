@@ -213,7 +213,26 @@ export class MemoryService {
 
   async appendSummary(input: SummaryInput): Promise<EntityId> {
     const summaryId = id('summary-v1', input);
-    await this.#ch.insert({ table: 'summaries', values: [{ summary_id: summaryId, ...input }], format: 'JSONEachRow' });
+    // Kolonlar AÇIKÇA eşlenir. Eskiden `{ summary_id, ...input }` yazılıyordu
+    // ve `input` alanları camelCase (projectId/refId/...), tablo ise
+    // snake_case ister: satır yazılıyor ama kimlik kolonları BOŞ kalıyordu.
+    // Hangi göreve ait olduğu bilinmeyen özet, hafızada işe yaramaz.
+    //
+    // Bu fonksiyonun ne bir çağıranı ne de bir entegrasyon testi vardı; bu
+    // yüzden gerçek tabloya hiç yazılmadığı fark edilmemişti.
+    await this.#ch.insert({
+      table: 'summaries',
+      values: [{
+        summary_id: summaryId,
+        project_id: input.projectId,
+        scope: input.scope,
+        ref_id: input.refId,
+        content: input.content,
+        created_by_agent_id: input.createdByAgentId,
+        created_at: input.createdAt,
+      }],
+      format: 'JSONEachRow',
+    });
     return summaryId;
   }
 

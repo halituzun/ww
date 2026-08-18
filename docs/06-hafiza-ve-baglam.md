@@ -62,6 +62,14 @@ prompta bütçeyle koy (disiplinli)**. ClickHouse üç işte de doğal güçlüd
 ## Embedding Boru Hattı
 
 - Arka plan işleyicisi (`memory` paketi) yeni `summaries`, `knowledge`,
+
+*(2026-08-18: bu katman canlı veritabanında TAMAMEN BOŞTU — 8 tamamlanmış
+göreve rağmen 0 satır. `appendSummary` yazılmıştı ama hiçbir çağıranı yoktu
+ve kolonları yanlış eşliyordu (camelCase ↔ snake_case), yani bağlansa bile
+kimliksiz satır yazacaktı. Commit sonrası tetiğe bağlandı. BİLİNÇLİ SAPMA:
+özet şimdilik görev kaydından DETERMİNİSTİK üretilir; model çağrısı paralıdır
+ve her görev bitiminde bir çağrı daha eklemek maliyeti sessizce artırır. Boş
+bir orta katman, deterministik olandan her durumda kötüdür.)*
   `file_index` ve önemli `messages` (kind: proposal/synthesis/verdict/escalation)
   kayıtlarını kuyruğa alır, parçalara böler (≈800 token, %10 örtüşme),
   `embed()` ile gömer, `embeddings`'e yazar.
