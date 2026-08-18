@@ -30,7 +30,13 @@
 - Bir faz, **belgelenmiş kabul senaryosu geçmeden** "tamamlandı" işaretlenmez.
   Atlanan entegrasyon testi kapı sayılmaz.
 
-## Durum Özeti (2026-08-17 akşamı doğrulaması)
+## Durum Özeti (2026-08-18 doğrulaması)
+
+> **Faz 4-6'yı kapatan tek şey artık kod değildir.** Üçünün de kabul senaryosu
+> dış girdi bekliyor: DeepSeek bakiyesi bitti (`402`), ikinci/üçüncü sağlayıcı
+> anahtarı yok, Chrome eklentisi bağlı değil, Android SDK kurulu değil.
+> Bu girdiler geldiğinde koşulacak adımlar her fazın kendi bölümünde tabloyla
+> yazılıdır.
 
 | Faz | Durum | Dayanak |
 |---|---|---|

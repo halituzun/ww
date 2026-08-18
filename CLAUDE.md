@@ -8,42 +8,54 @@ Product-agent work must also read the normative communication contract in
 
 ## Current State
 
-Verified 2026-08-17 (evening) on branch `agent/agent-communication-contract`
-(155 commits ahead of `main`, in sync with its remote). Keep this section current:
+Verified 2026-08-18 on branch `agent/agent-communication-contract`
+(186 commits ahead of `main`, in sync with its remote). Keep this section current:
 when it goes stale, the next session starts from the wrong place.
 
-- **Faz 0, 1, 2 and 3 are complete ✅.** Faz 3's acceptance scenario was run
-  against the real DeepSeek API on 2026-08-17 (real key → real task → real cost
-  in the kontör panel → broken second key → health red → fallback engaged; the
-  evidence table is in `docs/11-yol-haritasi.md`). Faz 4-6 are code-complete with
-  green tests, but their acceptance scenarios are still open. The authoritative per-phase status
-  and evidence mapping live in the "Durum Özeti" table of `docs/11-yol-haritasi.md`.
-- **Real LLM calls now happen, and the full task loop closes.** `deepseek` is
-  registered with a real key, periodic health checks write real statuses, and
-  tasks now run uninterrupted from queue to commit: `c8a8f3e6` → `done`, commit
-  `b849854`, `src/colors.ts` on disk, `artifacts` and `file_index` both written.
+- **Faz 0-3 are complete ✅.** Faz 3's acceptance scenario ran against the real
+  DeepSeek API on 2026-08-17 (real key → real task → real cost in the kontör
+  panel → broken second key → health red → fallback engaged); the evidence table
+  is in `docs/11-yol-haritasi.md`. Faz 4-6 have most of their code-side work
+  done and evidence tables of their own, but their acceptance scenarios cannot
+  close without external inputs (below).
+- **HARD BLOCKER: the DeepSeek account ran out of balance** on 2026-08-18
+  (`402 Insufficient Balance`, ~$6.20 spent). No real task can run until it is
+  topped up. A task failing with 402 is NOT a code defect — check
+  `SELECT status, error_kind, count() FROM ww.api_usage WHERE created_at > now() - INTERVAL 20 MINUTE GROUP BY status, error_kind`
+  before hunting for one.
+- **What each remaining phase still needs — none of it is code:**
+  Faz 4 needs a 2nd and 3rd provider key (the council writes
+  "konsey 1 sağlayıcıya düştü … çapraz kontrol bu koşuda tam değildir" into
+  every plan until then); Faz 5 needs the surfaces watched in a browser (the
+  Chrome extension was not connected in this session); Faz 6 needs an Android
+  SDK + AVD (`emulator` is not installed here).
+- **The full task loop closes.** Tasks run uninterrupted from queue to commit:
+  `c8a8f3e6` → `done`, commit `b849854`, `src/colors.ts` on disk, `artifacts`
+  and `file_index` both written. The standards-audit loop also closes: a
+  violating file produced a finding, the corrective task rewrote it, and the
+  re-audit returned zero findings.
 - **Always pass `files` (target files) when creating a task.** The executor
   treats an empty target list as "no file may be written" and rejects
   `write_file`; a task without targets can produce nothing.
 - **Run the live loop this way**: `WW_PHASE8_RUNTIME_ENABLED=1
-  WW_RUNTIME_PROJECT_ID=<uuid> node apps/server/dist/main.js`. Without those the
-  task pump logs "görev pompası açılmadı" and nothing is consumed.
+  WW_RUNTIME_PROJECT_ID=<uuid> node apps/server/dist/main.js`, and the project
+  must be `status=running` (the engine only picks up running projects).
 - **Read the live run through the logs, not the task status alone.** The pump
   reports each rejection as `görev <id> işlenemedi: <reason>`; a task sitting in
   `queued`/`working` with no progress almost always has one of those lines behind
   it. `ANSWERED_TASK_RESUMED` confirms a user answer reached the engine.
-- Gate as of 2026-08-17: **1000+ tests across 10 packages**, plus 4 opt-in live
+- Gate as of 2026-08-18: **1575 tests across 10 packages**, plus 4 opt-in live
   Docker sandbox tests via `pnpm --filter @ww/executor test:live` (skipped by a
   plain `pnpm test`). Build, lint and `pnpm wiring:check` green.
-- Three tests are known to flake **only under full-gate load** and pass in
-  isolation: `packages/db effects.test.ts` (primary-key pruning),
-  `packages/db plans.test.ts` (12-way concurrent append race) and
-  `packages/agents communication.integration.test.ts`. Re-run the gate before
+- Tests that flake **only under full-gate load** and pass in isolation:
+  `packages/db effects.test.ts` (primary-key pruning), `packages/db plans.test.ts`
+  (12-way concurrent append race), `packages/agents communication.integration.test.ts`,
+  and occasionally `apps/server rest.integration.test.ts`. Re-run the gate before
   treating any of them as a real failure — and never push on a red gate.
 - `pnpm wiring:check` guards this repo's most expensive recurring defect:
-  code that is written and tested but never called by any production path. It
-  was found in five separate places in one night. `wiring-baseline.json` freezes
-  the known cases; the gate fails only on new ones.
+  code that is written and tested but never called by any production path.
+  `wiring-baseline.json` is down to **11 entries and every one now carries a
+  reason** — if you add an entry without a reason, you are hiding a defect.
 - "Faz" and "Phase" are different scales: the roadmap has **Faz 0-6** (product
   milestones), while `docs/superpowers/plans/2026-08-14-faz-1-*` has its own
   internal **Phase 0-9** (implementation steps). Code names like
