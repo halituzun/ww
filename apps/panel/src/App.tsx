@@ -4,6 +4,7 @@
 // `useWorkspaceViewModel` içindedir; burada iş mantığı bulunmaz.
 import { useHealth } from './viewmodels/useHealth.js';
 import { TabBar } from './components/TabBar.js';
+import { ProjectPicker } from './components/ProjectPicker.js';
 import { TaskListPanel } from './components/TaskListPanel.js';
 import { TimelinePanel } from './components/TimelinePanel.js';
 import { CanvasPanel } from './components/CanvasPanel.js';
@@ -85,7 +86,7 @@ export default function App() {
         <p className="hint">API sağlayıcıları ve anahtarlar <button type="button" className="linklike" onClick={() => setPage('providers')}>API'ler sayfasında</button> yönetilir.</p>
         <TabBar tab={tab} onTab={setTab} counts={{ tasks: tasks.length, events: events.length }} />
         {tab === 'tasks' ? <TaskListPanel tasks={tasks} statusCounts={statusCounts} /> : tab === 'timeline' ? <TimelinePanel events={events} cursor={timelineCursor} onCursor={setTimelineCursor} visible={replay.visible} at={replay.at} /> : tab === 'canvas' ? <CanvasPanel projectId={projectId} events={events} cursor={timelineCursor} onCursor={setTimelineCursor} at={replay.at} tasks={tasks} statusByTask={timelineCursor >= events.length ? undefined : replay.statusByTask} selectedAgent={selectedAgent} onSelectAgent={setSelectedAgent} /> : tab === 'files' ? <FileBrowserPanel projectId={projectId} files={files} selectedFile={selectedFile} onSelectFile={setSelectedFile} narratorQuestion={narratorQuestion} onNarratorQuestion={setNarratorQuestion} onAskNarrator={() => void askNarrator()} narratorResult={narratorResult ?? undefined} /> : tab === 'api' ? <ApiConsole projectId={projectId} artifacts={apiArtifacts} /> : <PreviewPanel projectId={projectId} />}
-      </section> : <section className="workspace-card project-picker"><h2>Projeler</h2><p className="hint">Yeni proje oluştur veya mevcut bir projeyi seç.</p><div className="project-create"><input aria-label="Proje adı" placeholder="Örn. Takım görev uygulaması" value={projectDraft.name} onChange={(event) => setProjectDraft((current) => ({ ...current, name: event.target.value }))} /><select aria-label="Proje türü" value={projectDraft.type} onChange={(event) => setProjectDraft((current) => ({ ...current, type: event.target.value }))}><option value="web">Web</option><option value="api">API</option><option value="mobile">Mobil</option></select><input aria-label="Proje bütçesi" type="number" min="0" value={projectDraft.budget} onChange={(event) => setProjectDraft((current) => ({ ...current, budget: event.target.value }))} /><button type="button" onClick={() => void createProject()}>Proje oluştur</button></div>{projectStatusMessage ? <small className="hint">{projectStatusMessage}</small> : null}<ul className="task-list">{projects.map((project) => <li key={project.project_id} onClick={() => setProjectId(project.project_id)}><div><strong>{project.name}</strong><small>{project.type} · {project.project_id}</small></div><span className={`pill pill--${project.status}`}>{project.status}</span></li>)}</ul></section>}
+      </section> : <ProjectPicker projects={projects} draft={projectDraft} onDraft={(patch) => setProjectDraft((current) => ({ ...current, ...patch }))} onCreate={() => void createProject()} statusMessage={projectStatusMessage} onSelect={setProjectId} />}
     </main>
   );
 }
