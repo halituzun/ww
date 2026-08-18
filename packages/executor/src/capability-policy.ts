@@ -16,9 +16,20 @@ function capability(input: ToolCapabilityV1): ToolCapabilityV1 {
 
 export const EXECUTOR_TOOL_CAPABILITIES: Readonly<Record<ToolName, ToolCapabilityV1>> = Object.freeze({
   read_file: capability({
+    // GÖRME aracıdır — tıpkı `list_dir` ve `search_code` gibi: mühürlü hedef
+    // listesi YAZMAYI sınırlar, görmeyi değil. docs/05 `read_file`'ı "herkes"e
+    // açık tanımlar; kilit ve hedef şartı yalnız yazma araçlarınındır.
+    //
+    // `requiresDeclaredTarget: true` iken worker YALNIZCA yazacağı dosyaları
+    // okuyabiliyordu: mevcut kodu anlamak, testleri görmek, düzelteceği
+    // dosyanın komşusuna bakmak imkânsızdı. Canlı veride 15
+    // CAPABILITY_DENIED olayının 11'i tam buydu.
+    //
+    // Güvenlik sınırı KORUNUR: okuma zaten workspace'e hapsedilmiştir
+    // (WorkspacePaths yol doğrulaması) ve yazma hedef listesine bağlı kalır.
     toolName: 'read_file', rule: { ruleId: 'TOOL-002', ruleVersion: 1 },
     allowedRoles: ['worker', 'verifier'], allowedTaskStatuses: ACTIVE_TOOL_STATUSES,
-    requiresDeclaredTarget: true, requiresFileLock: false, replaySafety: 'replay_safe',
+    requiresDeclaredTarget: false, requiresFileLock: false, replaySafety: 'replay_safe',
   }),
   list_dir: capability({
     // GÖRME aracıdır: mühürlü hedef listesi YAZMAYI sınırlar, görmeyi değil.

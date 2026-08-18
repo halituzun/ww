@@ -231,13 +231,25 @@ describe('ToolExecutor', () => {
     expect(test.events[1]?.payload).toMatchObject({ ok: false, errorCode: 'LOCK_REQUIRED' });
   });
 
+  // Testin niyeti: yetki kontrolü ERİŞİM PORTUNDAN ÖNCE koşar. Eskiden bu
+  // `read_file` ile yazılmıştı; artık okuma hedef listesine bağlı değil
+  // (görme aracıdır), o yüzden sınır YAZMA aracıyla sınanır.
   it('beyan edilmeyen hedefi access portundan önce reddeder', async () => {
+    const ctx = await context(['write_file']);
+    const test = harness();
+    await expect(test.executor.execute(ctx, {
+      callId: id(), occurredAt, name: 'write_file', args: { path: 'other.ts', content: 'x' },
+    })).rejects.toMatchObject({ code: 'CAPABILITY_DENIED' });
+    expect(test.access.assertAuthorized).not.toHaveBeenCalled();
+  });
+
+  // Okuma hedef listesiyle SINIRLANMAZ: worker mevcut kodu görebilmeli.
+  it('beyan edilmeyen dosyayi OKUYABILIR', async () => {
     const ctx = await context(['read_file']);
     const test = harness();
     await expect(test.executor.execute(ctx, {
       callId: id(), occurredAt, name: 'read_file', args: { path: 'other.ts' },
-    })).rejects.toMatchObject({ code: 'CAPABILITY_DENIED' });
-    expect(test.access.assertAuthorized).not.toHaveBeenCalled();
+    })).rejects.not.toMatchObject({ code: 'CAPABILITY_DENIED' });
   });
 
   it('git komutunu run_command üzerinden dolaştırmayı reddeder', async () => {

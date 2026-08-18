@@ -70,4 +70,29 @@ describe('enjeksiyon yetki kazanamaz', () => {
   it('brief disi arac reddedilir', () => {
     expect(() => authorizeTool(context(), 'run_command')).toThrow();
   });
+
+  // CANLI KANIT (2026-08-18): 15 `CAPABILITY_DENIED` olayının 11'i
+  // `read_file` içindi. Sebep `requiresDeclaredTarget: true` — worker
+  // YALNIZCA yazacağı dosyaları okuyabiliyordu. Mevcut kodu anlamak,
+  // testleri görmek, düzelteceği dosyanın komşusuna bakmak imkânsızdı.
+  //
+  // Doğru ilke kodun KENDİ İÇİNDE yazılı (list_dir yorumu): "GÖRME aracıdır:
+  // mühürlü hedef listesi YAZMAYI sınırlar, görmeyi değil." docs/05 de
+  // `read_file`'ı "herkes"e açık tanımlıyor; kilit/hedef yalnız yazma
+  // araçlarının şartı.
+  describe('okuma ve yazma sınırı', () => {
+    it('hedef listesi disindaki dosya OKUNABILIR', () => {
+      expect(authorizeTool(context(), 'read_file', 'src/baska.ts')).toBeDefined();
+    });
+
+    it('hedef listesi disindaki dosya YAZILAMAZ', () => {
+      expect(() => authorizeTool(context(), 'write_file', 'src/baska.ts'))
+        .toThrow(/hedeflerinde değil/);
+    });
+
+    it('hedef listesindeki dosya hem okunur hem yazilir', () => {
+      expect(authorizeTool(context(), 'read_file', 'src/a.ts')).toBeDefined();
+      expect(authorizeTool(context(), 'write_file', 'src/a.ts')).toBeDefined();
+    });
+  });
 });

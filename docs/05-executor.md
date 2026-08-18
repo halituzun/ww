@@ -32,7 +32,7 @@ sağlayıcı biçimine çevirir. Roller yalnızca kendine tanınan araçları g�
 
 | Araç | Parametreler (özet) | Kim kullanır | Not |
 |---|---|---|---|
-| `read_file` | path, offset?, limit? | herkes | Workspace-göreli yol |
+| `read_file` | path, offset?, limit? | herkes | Workspace-göreli yol. GÖRME aracıdır: mühürlü hedef listesi YAZMAYI sınırlar, görmeyi değil (2026-08-18'e kadar hedefe bağlıydı ve worker yalnız yazacağı dosyayı okuyabiliyordu; canlı veride 15 CAPABILITY_DENIED'ın 11'i buydu) |
 | `write_file` | path, content | worker | Dosya kilidi gerektirir |
 | `edit_file` | path, old, new | worker | Birebir eşleşme; kilit gerekir |
 | `move_file` / `delete_file` | from,to / path | worker | Silme çöp klasörüne taşır (`.ww-trash/`) |
