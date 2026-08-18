@@ -29,7 +29,6 @@
   },
   "packages/db/src/redis.ts:transferFileLocks",
   "packages/db/src/repositories/causal-entries.ts:getTaskCausalCursor",
-  "packages/db/src/repositories/messages.ts:listProtocolV1AnswerRepliesToMessage",
   "packages/db/src/repositories/prompts.ts:getActivePromptAsOf",
   {
     "symbol": "packages/db/src/testutil.ts:clickhouseUp",

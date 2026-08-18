@@ -4,6 +4,7 @@ import { EntityIdSchema } from '@ww/shared';
 import { parseLocalSession, type LocalSessionRequest } from './auth/local-session.js';
 import { listLatestAgents, listPendingInboxMessages, listRecentMessages } from '@ww/db';
 import { CommandTaskError } from './command-task.js';
+import { listProtocolV1AnswerRepliesToMessage } from '@ww/db';
 import { MESSAGE_APPLICATION, MessageInputError, SERVER_DATABASE, type MessageApplication, type ServerDatabase } from './orchestration.module.js';
 
 const MessageInput = z.strictObject({ kind: z.enum(['user_command', 'answer']), text: z.string().trim().min(1), taskId: EntityIdSchema.optional(), replyToMessageId: EntityIdSchema.optional() }).superRefine((value, context) => {
@@ -89,6 +90,34 @@ export class MessagesController {
           createdAt: envelope['createdAt'],
         };
       }),
+    };
+  }
+
+  /**
+   * Bir sorunun CEVAPLARI (docs/03 → soru-cevap zinciri).
+   *
+   * NEDEN VAR: panel bekleyen soruları gösteriyordu ama bir sorunun cevabını
+   * okumanın hiçbir yolu yoktu — kullanıcı kendi yazdığı cevabı bile
+   * göremiyor, soru "cevaplandı mı" belirsiz kalıyordu.
+   */
+  @Get(':messageId/answers')
+  async answers(
+    @Req() request: LocalSessionRequest,
+    @Param('projectId') projectId: string,
+    @Param('messageId') messageId: string,
+  ) {
+    parseLocalSession(request);
+    const id = EntityIdSchema.parse(projectId);
+    const records = await listProtocolV1AnswerRepliesToMessage(this.#ch(), id, messageId);
+    return {
+      replyToMessageId: messageId,
+      count: records.length,
+      answers: records.map((record) => ({
+        messageId: record.envelope.messageId,
+        senderPrincipalId: record.envelope.senderPrincipalId,
+        createdAt: record.envelope.createdAt,
+        text: (record.envelope.payload as { text?: string }).text ?? '',
+      })),
     };
   }
 

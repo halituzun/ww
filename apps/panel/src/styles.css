@@ -346,3 +346,12 @@ dd {
 .agent-detail { margin-top: 12px; padding: 12px; border: 1px solid var(--line, #2a2f3a); border-radius: 8px; }
 .agent-detail__tasks { list-style: none; padding: 0; display: grid; gap: 8px; }
 .agent-detail__tasks li { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+
+/* Bekleyen sorular kutusu (docs/08). */
+.questions { margin-top: 12px; padding: 12px; border: 1px solid var(--line, #2a2f3a); border-radius: 8px; }
+.questions__list { list-style: none; padding: 0; display: grid; gap: 12px; }
+.questions__head { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; font-size: 12px; }
+.questions__text { margin: 6px 0; white-space: pre-wrap; }
+.questions__answer { display: flex; gap: 8px; }
+.questions__answer input { flex: 1; }
+.questions__error { color: var(--danger, #d95926); }
