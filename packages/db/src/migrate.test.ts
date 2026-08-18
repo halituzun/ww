@@ -188,6 +188,7 @@ describe.skipIf(!up)('runMigrations', () => {
       '0004_scheduler_fences.sql',
       '0005_receipt_quarantine.sql',
       '0006_task_acceptance_criteria.sql',
+      '0007_provider_error_signal.sql',
     ]);
     expect(secondApplied).toHaveLength(0);
   });

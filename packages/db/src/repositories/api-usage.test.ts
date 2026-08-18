@@ -219,4 +219,66 @@ describe.skipIf(!up)('api usage repository', () => {
       .map((match) => ({ selected: Number(match[1]), total: Number(match[2]) }));
     expect(granules.some(({ selected, total }) => total >= 6 && selected < total)).toBe(true);
   }, 30_000);
+
+  // docs/04 pasif sinyal: "mv_provider_errors — son 5 dk hata oranı > %50 →
+  // degraded". İki kusur ölçüldü ve bu test ikisini de sabitliyor.
+  describe('mv_provider_errors sinyali', () => {
+    const insertUsage = async (rows: readonly Record<string, unknown>[]) => {
+      await ch.insert({
+        table: 'api_usage',
+        values: rows.map((row) => ({
+          usage_id: randomUUID(), project_id: randomUUID(), agent_id: randomUUID(),
+          task_id: randomUUID(), model: 'm', prompt_tokens: 1, completion_tokens: 1,
+          cost_usd: 0.001, latency_ms: 5, error_kind: '',
+          created_at: new Date().toISOString(), ...row,
+        })),
+        format: 'JSONEachRow',
+      });
+    };
+    const rate = async (providerId: string) => {
+      const rows = await ch.query({
+        query: `SELECT sum(errors) AS errors, sum(total) AS total FROM mv_provider_errors
+          WHERE provider_id = {providerId:String}`,
+        query_params: { providerId }, format: 'JSONEachRow',
+      }).then((r) => r.json<{ errors: string; total: string }>());
+      return { errors: Number(rows[0]?.errors ?? 0), total: Number(rows[0]?.total ?? 0) };
+    };
+
+    // `fallback_used` BAŞARILI bir çağrıdır: yedek sağlayıcı isteği
+    // karşılamıştır (canlı veride token ve maliyet taşıyor). Onu hata saymak,
+    // fallback'i tam da işe yaradığı anda "bozuk" göstermekti.
+    it('fallback_usedi hata saymaz', async () => {
+      const providerId = `p_${randomUUID().slice(0, 8)}`;
+      await insertUsage([
+        { provider_id: providerId, purpose: 'completion', status: 'fallback_used' },
+        { provider_id: providerId, purpose: 'completion', status: 'ok' },
+      ]);
+      expect(await rate(providerId)).toEqual({ errors: 0, total: 2 });
+    });
+
+    // docs/04 iki BAĞIMSIZ sinyal tanımlar: aktif ping ve pasif hata oranı.
+    // Ping'leri pasif sinyale katmak ikisini tek sinyale indirger — gerçek
+    // trafiği olmayan sağlayıcı yalnız ping'leri yüzünden %100 hata
+    // gösteriyordu.
+    it('saglik pinglerini pasif sinyale katmaz', async () => {
+      const providerId = `p_${randomUUID().slice(0, 8)}`;
+      await insertUsage([
+        { provider_id: providerId, purpose: 'health_check', status: 'error' },
+        { provider_id: providerId, purpose: 'health_check', status: 'ok' },
+        { provider_id: providerId, purpose: 'completion', status: 'ok' },
+      ]);
+      expect(await rate(providerId)).toEqual({ errors: 0, total: 1 });
+    });
+
+    it('gercek hatalari sayar', async () => {
+      const providerId = `p_${randomUUID().slice(0, 8)}`;
+      await insertUsage([
+        { provider_id: providerId, purpose: 'completion', status: 'error' },
+        { provider_id: providerId, purpose: 'completion', status: 'timeout' },
+        { provider_id: providerId, purpose: 'completion', status: 'rate_limited' },
+        { provider_id: providerId, purpose: 'completion', status: 'ok' },
+      ]);
+      expect(await rate(providerId)).toEqual({ errors: 3, total: 4 });
+    });
+  });
 });

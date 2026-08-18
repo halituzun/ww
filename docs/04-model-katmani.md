@@ -99,6 +99,9 @@ Normalizasyon kuralları:
   hepsi hata; bunlar `api_usage`'ın %45'iydi, hata oranını şişiriyordu ve
   panelde kalıcı sahte kırmızı üretiyordu.)
 - Pasif sinyal: `mv_provider_errors` — son 5 dk hata oranı > %50 → `degraded`,
+  (görünüm GERÇEK trafiği sayar: `health_check` hariçtir, çünkü aktif ping
+  ayrı ve bağımsız bir sinyaldir; `fallback_used` de hata DEĞİLDİR — yedek
+  isteği başarıyla karşılamıştır. İkisi de 2026-08-18'de düzeltildi),
   art arda 3 ping hatası → `down`; ilk başarılı ping → `ok`.
 - Durum `api_providers.health_status`'a yazılır + pub/sub ile panele düşer
   (API yönetim ekranında yeşil/sarı/kırmızı).
