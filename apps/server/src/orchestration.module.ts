@@ -13,6 +13,7 @@ import { randomUUID } from 'node:crypto';
 import { projectWorkspacePath } from './workspace-path.js';
 import {
   appendProjectVersion,
+  appendKnowledgeVersion,
   createAgent,
   createCh,
   createPlan,
@@ -45,6 +46,7 @@ import { writeProjectScaffold } from './project-scaffold-writer.js';
 import { resolveWorkspaceRoot } from './runtime-context.js';
 import { isResumableStatus, resumeAnsweredTask } from './resume-answered-task.js';
 import { buildBootstrapPlan } from './bootstrap-plan.js';
+import { seedStandardKnowledge } from './standard-knowledge.js';
 import { NO_TARGET_NOTE, buildCommandTask } from './command-task.js';
 import { isConcretePlanId, resolveTaskPlanId } from './task-plan-id.js';
 import {
@@ -124,6 +126,16 @@ export class ProjectApplicationService implements ProjectApplication {
       ),
       project.type,
       project.slug,
+    );
+
+    // docs/06 sabit çekirdeği kod standartlarını `knowledge`'dan alır. Bu
+    // satırlar YAZILMADIĞI sürece hiçbir worker prompt'u standartları
+    // içermez — ama denetçi yine de o standartlardan bulgu açar. Tohumlama
+    // agent bootstrap'ından BAĞIMSIZDIR: standartlar her projede geçerlidir.
+    await seedStandardKnowledge(
+      { appendKnowledgeVersion: (row) => appendKnowledgeVersion(this.database.ch, row as never) },
+      projectId as EntityId,
+      now,
     );
 
     if (input.bootstrapAgents) {

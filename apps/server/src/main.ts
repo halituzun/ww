@@ -4,9 +4,10 @@ import { WsAdapter } from '@nestjs/platform-ws';
 import { createCh, createRedis, runMigrations } from '@ww/db';
 import { RecoveryService } from '@ww/memory';
 import { CommandRunner, resetWorkingTree } from '@ww/executor';
-import { getLatestProject } from '@ww/db';
+import { appendKnowledgeVersion, getLatestProject } from '@ww/db';
 import { resolveWorkspaceRoot } from './runtime-context.js';
 import { resetRecoveredWorkspaces } from './workspace-recovery.js';
+import { seedStandardKnowledgeForProjects } from './standard-knowledge.js';
 import { panelOrigins } from './cors.js';
 import { serverPort } from './port.js';
 
@@ -40,6 +41,19 @@ async function bootstrap(): Promise<void> {
       },
       onError: (reason) => console.warn(`[ww] çalışma ağacı temizlenemedi: ${String(reason)}`),
     });
+
+    // docs/06 sabit çekirdeği kod standartlarını `knowledge`'dan alır ve
+    // canlı veride kind='standard' olan SIFIR satır vardı: hiçbir worker
+    // prompt'u standartları içermiyordu, ama denetçi yine de o
+    // standartlardan bulgu açıyordu. Tohumlama fikirsizce tekrarlanabilir
+    // (deterministik kimlik; içerik aynıysa yeni sürüm yazılmaz).
+    await seedStandardKnowledgeForProjects(
+      { appendKnowledgeVersion: (row) => appendKnowledgeVersion(recoveryCh, row as never) },
+      recovered.map((item) => item.projectId),
+      new Date().toISOString(),
+      (projectId, reason) =>
+        console.warn(`[ww] ${projectId} standartları yazılamadı: ${String(reason)}`),
+    );
   } finally {
     await recoveryRedis.quit();
     await recoveryCh.close();

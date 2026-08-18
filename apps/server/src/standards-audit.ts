@@ -9,13 +9,24 @@
 // ve durum ViewModel'e aittir. Denetim deterministiktir: modele sorulmaz,
 // çünkü standart ihlali fikir değil olgudur.
 
+/**
+ * Denetçinin üretebileceği TÜM kural kimlikleri.
+ *
+ * Çalışma zamanında da listelenebilir olmaları şart: worker'a "hangi kurala
+ * göre denetleneceğini" söyleyen bilgi katmanı bu listeden türetilir ve bir
+ * test her kuralın karşılığının orada bulunduğunu doğrular. Aksi halde
+ * denetçi, prompt'ta hiç söylenmemiş bir kuraldan ceza keser.
+ */
+export const STANDARD_RULE_IDS = ['STD-001', 'STD-002', 'STD-003', 'STD-004'] as const;
+export type StandardRuleId = typeof STANDARD_RULE_IDS[number];
+
 export interface StandardsViolation {
   /**
    * STD-001 görünüm katmanı (fetch / durum), STD-002 ViewModel'in DOM'a
    * dokunması, STD-003 servisin UI framework'ü import etmesi,
    * STD-004 erişilebilir adı olmayan form alanı (docs/09 `ui_audit`).
    */
-  readonly ruleId: 'STD-001' | 'STD-002' | 'STD-003' | 'STD-004';
+  readonly ruleId: StandardRuleId;
   readonly filePath: string;
   readonly summary: string;
   readonly evidenceRefs: readonly string[];

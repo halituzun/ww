@@ -1,5 +1,16 @@
 # 09 — Kod Standartları
 
+*(2026-08-18: bu standartlar CANLI VERİDE hiçbir projeye yazılmamıştı —
+`knowledge` tablosunda kind='standard' olan sıfır satır, 78 projeye rağmen.
+docs/06 Context Builder'ın sabit çekirdeği standartları oradan aldığı için
+hiçbir worker prompt'u standartları içermiyordu; buna karşın denetçi aynı
+standartlardan bulgu açıp düzeltme görevi veriyordu — worker'a hiç
+söylenmemiş bir kuraldan ceza. `standard-knowledge.ts` denetçinin kural
+kimliklerinden (`STANDARD_RULE_IDS`) türeyen metinleri proje açılışında ve
+sunucu açılışında koşan projelere tohumlar; bir test her kuralın karşılığının
+orada bulunduğunu doğrular, böylece denetçi yeni kural kazandığında prompt
+sessizce eskimez.)*
+
 > Üretilen projelerin MVVM şablonları, starter template'ler, adlandırma/kod
 > standartları ve denetçi agent kontrol listeleri.
 > İlgili: [Agent Sistemi](03-agent-sistemi.md) · [Executor](05-executor.md) ·
