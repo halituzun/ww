@@ -6,6 +6,7 @@ import { parseLocalSession, type LocalSessionRequest } from './auth/local-sessio
 import { buildAuditFinding, parseFindingInput } from './audit-finding.service.js';
 import { applyResolution, parseResolutionInput } from './audit-resolution.service.js';
 import { SERVER_DATABASE, type ServerDatabase } from './orchestration.module.js';
+import { auditTaskRecords, type RecordViolation } from './record-audit.js';
 
 const ProjectId = z.string().uuid();
 
@@ -32,12 +33,13 @@ export class AuditController {
   async report(@Param('projectId') projectId: string) {
     const id = ProjectId.parse(projectId);
 
-    const [byStatus, escalations] = await Promise.all([
+    const [byStatus, escalations, recordFindings] = await Promise.all([
       Promise.all(AUDIT_FINDING_STATUSES.map(async (status) => ({
         status,
         records: await listLatestAuditFindingsByStatus(this.#database.ch, id, status),
       }))),
       this.#readEscalations(id),
+      this.#auditRecords(id),
     ]);
 
     const findings = byStatus.flatMap(({ records }) =>
@@ -51,7 +53,58 @@ export class AuditController {
       // Fren kaynaklı tırmandırmalar ayrıca sayılır: güvenlik sınırının kaç kez
       // devreye girdiği, denetçi bulgularından ayrı bir sinyaldir.
       brakeTrips: escalations.filter((entry) => entry.brakeKind !== '').length,
+      // docs/09 `db_write_audit` (b): ww KAYITLARININ tamlığı. Bu denetim
+      // yazılıydı ama uygulaması yoktu; oysa yakaladığı şey deponun tekrar
+      // eden sessiz hatasıdır — iş "bitti" görünür, kayıt yoktur.
+      recordFindings,
     };
+  }
+
+  /**
+   * `db_write_audit` (b) meta-denetimi: done görevlerin commit'i, artifact
+   * kaydı ve dokundukları dosyaların fihristi var mı?
+   *
+   * Denetim OKUMADIR ve rapor uçunu düşürmemelidir: sorgu patlarsa denetim
+   * ekranının tamamı boş dönerdi — asıl bulguları da kaybederdik.
+   */
+  async #auditRecords(projectId: string): Promise<readonly RecordViolation[]> {
+    try {
+      const rows = await this.#database.ch.query({
+        query: `SELECT t.task_id AS taskId, t.title AS title, t.status AS status,
+              t.commit_hash AS commitHash, t.target_files AS targetFiles,
+              a.artifactCount AS artifactCount
+            FROM (SELECT task_id, argMax(title, version) AS title,
+                    argMax(status, version) AS status,
+                    argMax(commit_hash, version) AS commit_hash,
+                    argMax(target_files, version) AS target_files
+                  FROM tasks WHERE project_id = {projectId:UUID} GROUP BY task_id) t
+            LEFT JOIN (SELECT task_id, count() AS artifactCount FROM artifacts
+                       WHERE project_id = {projectId:UUID} GROUP BY task_id) a
+              ON a.task_id = t.task_id
+            WHERE t.status = 'done' LIMIT 500`,
+        query_params: { projectId }, format: 'JSONEachRow',
+      }).then((r) => r.json<Record<string, unknown>>());
+
+      const indexed = await this.#database.ch.query({
+        query: `SELECT DISTINCT file_path FROM file_index
+          WHERE project_id = {projectId:UUID} LIMIT 5000`,
+        query_params: { projectId }, format: 'JSONEachRow',
+      }).then((r) => r.json<Record<string, unknown>>());
+      const indexedFiles = indexed.map((row) => String(row['file_path'] ?? ''));
+
+      return auditTaskRecords(rows.map((row) => ({
+        taskId: String(row['taskId'] ?? ''),
+        title: String(row['title'] ?? ''),
+        status: String(row['status'] ?? ''),
+        commitHash: String(row['commitHash'] ?? ''),
+        artifactCount: Number(row['artifactCount'] ?? 0),
+        targetFiles: Array.isArray(row['targetFiles']) ? row['targetFiles'].map(String) : [],
+        indexedFiles,
+      })));
+    } catch (reason) {
+      console.warn(`[ww] kayıt denetimi koşulamadı: ${String(reason)}`);
+      return [];
+    }
   }
 
   /**

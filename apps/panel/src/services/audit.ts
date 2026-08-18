@@ -25,12 +25,21 @@ export interface EscalationEntry {
   createdAt: string;
 }
 
+/** docs/09 `db_write_audit` (b): ww kayıtlarının tamlığı. */
+export interface RecordFinding {
+  ruleId: string;
+  taskId: string;
+  summary: string;
+  severity: string;
+}
+
 export interface AuditReport {
   projectId: string;
   findings: AuditFinding[];
   counts: Record<AuditFindingStatus, number>;
   escalations: EscalationEntry[];
   brakeTrips: number;
+  recordFindings: RecordFinding[];
 }
 
 export const EMPTY_AUDIT_REPORT: AuditReport = {
@@ -39,6 +48,7 @@ export const EMPTY_AUDIT_REPORT: AuditReport = {
   counts: { open: 0, correction_pending: 0, resolved: 0, dismissed: 0 },
   escalations: [],
   brakeTrips: 0,
+  recordFindings: [],
 };
 
 export const fetchAuditReport = (
@@ -86,4 +96,14 @@ export async function resolveFinding(
     { ...options, method: 'PATCH', body: input },
     'Bulgu güncellenemedi',
   );
+}
+
+/** Kayıt eksiği kuralını kullanıcıya anlaşılır Türkçeye çevirir. */
+export function recordRuleLabel(ruleId: string): string {
+  switch (ruleId) {
+    case 'REC-001': return 'Commit yok';
+    case 'REC-002': return 'Artifact kaydı yok';
+    case 'REC-003': return 'Fihriste girmemiş';
+    default: return ruleId;
+  }
 }

@@ -1,4 +1,4 @@
-import { brakeLabel, severityTone } from '../services/audit.js';
+import { brakeLabel, recordRuleLabel, severityTone } from '../services/audit.js';
 import { useAuditViewModel } from '../viewmodels/useAuditViewModel.js';
 
 const STATUS_LABEL: Record<string, string> = {
@@ -32,6 +32,27 @@ export function AuditPanel({ projectId }: { projectId: string }) {
           <strong>{report.escalations.length}</strong><span>Tırmandırma</span>
         </div>
       </div>
+
+      {report.recordFindings.length > 0 ? (
+        <div className="budget-block">
+          {/* docs/09 db_write_audit (b): "iş bitti ama kaydı yok" durumu.
+              Uca eklenip burada gösterilmeseydi bulgu görünmez kalırdı. */}
+          <h4>Kayıt eksikleri</h4>
+          <ul className="audit-findings">
+            {report.recordFindings.map((finding) => (
+              <li
+                key={`${finding.ruleId}:${finding.taskId}`}
+                className={`audit-finding audit-finding--${severityTone(finding.severity)}`}
+              >
+                <div className="audit-finding__head">
+                  <span className="pill">{recordRuleLabel(finding.ruleId)}</span>
+                  <strong>{finding.summary}</strong>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
 
       {report.findings.length > 0 ? (
         <div className="budget-block">

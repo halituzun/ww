@@ -135,7 +135,10 @@ ekranına düşer, her bulgu düzeltme görevine bağlanır ([08 — Denetim](08
 - [ ] Sorgular repository katmanında mı? İndeks ihtiyaçları düşünülmüş mü?
 - [ ] Kullanıcı girdisi parametreli sorguyla mı geçiyor (injection)?
 
-**b) ww kayıtlarının tamlığı (meta-denetim):**
+**b) ww kayıtlarının tamlığı (meta-denetim):** *(uygulandı 2026-08-18 —
+`record-audit.ts`; denetim ekranında "Kayıt eksikleri" bölümü. İlk canlı
+koşuda gerçek bir bulgu verdi: done + commit'li bir görevin hiç `artifacts`
+kaydı yoktu.)*
 - [ ] Tamamlanan görevlerin `artifacts` kayıtları açılmış mı?
 - [ ] Dokunulan her dosyanın `file_index` kaydı güncel mi (özet ↔ içerik tutarlı)?
 - [ ] Önemli kararlar `knowledge`'a yazılmış mı (mesajlarda kalıp kaybolmuş karar var mı)?
