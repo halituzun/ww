@@ -19,6 +19,14 @@ export interface RuntimeContextInput {
   models: { workerModelRef: string; verifierModelRef: string };
   /** docs/06 Context Builder çıktısı. */
   loadContextPack: (input: Readonly<{ brief: TaskBriefV1 }>) => Promise<string>;
+  /**
+   * Mühürlü girdiyi KALICI yazar. Verilmezse mühür yalnızca bellekte kalır ve
+   * `api_usage.prompt_input_snapshot_id` var olmayan bir kayda işaret eder —
+   * canlı veritabanında tam olarak bu durumdaydı: 216 çağrı bir anlık
+   * görüntüye atıf yapıyordu, tablo boştu. "Bu çıktıyı hangi prompt üretti"
+   * sorusunun cevabı yoktu.
+   */
+  persistSnapshot?: (snapshot: PromptInputSnapshotV1) => Promise<unknown>;
 }
 
 export function createRuntimeContextService(input: RuntimeContextInput) {
@@ -60,6 +68,10 @@ export function createRuntimeContextService(input: RuntimeContextInput) {
         promptHash: canonicalSha256V1(promptMessages),
         sealedAt: new Date().toISOString(),
       } as unknown as PromptInputSnapshotV1;
+
+      // Mühür sözleşmedir: yazılamazsa çağrı da yapılmamalıdır, yoksa
+      // provenance iddiası yalan olur.
+      if (input.persistSnapshot !== undefined) await input.persistSnapshot(snapshot);
 
       return {
         snapshot,
