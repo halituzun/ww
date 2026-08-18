@@ -150,6 +150,12 @@ görevden iyidir.)
 
 ## Klonlama
 
+- Kural ROLE BAKMAZ: worker da verifier da klonlanır. *(2026-08-18'e kadar
+  uygulama yalnız WORKER'a bağlıydı; tek verifier'lı bir projede ikinci görev
+  sonsuza dek "idle verifier bulunamadi" ile erteleniyordu. Klon kaynağıyla
+  aynı modeli taşır, yani çapraz kontrol bağımsızlığı zayıflayabilir — burası
+  zaten "mümkünse farklı modelden" diyor ve hiç doğrulanmayan iş, aynı
+  sağlayıcıyla doğrulanandan kötüdür.)*
 - Zamanlayıcı atama yaparken rolü/grubu uyan tüm agent'lar `busy` ise:
   yeni agent kaydı açılır — aynı `role`, `group`, `prompt_name/version`, `model_ref`;
   `clone_of` kaynağı gösterir; ad `Worker-Coding-3` gibi sıra alır.
