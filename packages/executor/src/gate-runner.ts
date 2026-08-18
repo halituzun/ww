@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import type { EntityId, JsonValue } from '@ww/shared';
+import type { EntityId } from '@ww/shared';
 import { ExecutorError } from './errors.js';
 import type { GateCommitAuditPort } from './ports.js';
 import {
@@ -248,24 +248,3 @@ export class GateRunner {
   }
 }
 
-export function gateEvidenceJson(value: GateEvidence): JsonValue {
-  return {
-    passed: value.passed,
-    configPath: value.configPath,
-    steps: value.steps.map((step) => ({
-      name: step.name,
-      index: step.index,
-      passed: step.passed,
-      command: step.command,
-      argumentCount: step.argumentCount,
-      exitCode: step.exitCode,
-      timedOut: step.timedOut,
-      truncated: step.truncated,
-      stdoutBytes: step.stdoutBytes,
-      stderrBytes: step.stderrBytes,
-      stdoutHash: step.stdoutHash,
-      stderrHash: step.stderrHash,
-      durationMs: step.durationMs,
-    })),
-  };
-}

@@ -1,5 +1,4 @@
 import { z } from 'zod';
-import { PROMPT_MESSAGE_ROLES } from './constants.js';
 import {
   JsonValueSchema,
   canonicalSha256V1,
@@ -286,7 +285,6 @@ export const PromptToolCallV1Schema = z.strictObject({
 
 export type PromptToolCallV1 = z.infer<typeof PromptToolCallV1Schema>;
 
-export const PromptMessageRoleSchema = z.enum(PROMPT_MESSAGE_ROLES);
 
 export const PromptMessageV1Schema = z.discriminatedUnion('role', [
   z.strictObject({ role: z.literal('system'), content: z.string() }),

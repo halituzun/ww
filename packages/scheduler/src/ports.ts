@@ -1,7 +1,6 @@
 import {
   EntityIdSchema,
   SYSTEM_SENTINEL,
-  TaskBriefV1Schema,
   canonicalSha256V1,
   type AssignmentAttemptV1,
   type AuthenticatedPrincipalV1,
@@ -176,10 +175,6 @@ export function deterministicSchedulerEntityId(namespace: string, value: unknown
   return EntityIdSchema.parse(
     `${hex.slice(0, 8)}-${hex.slice(8, 12)}-5${hex.slice(13, 16)}-${variant}${hex.slice(17, 20)}-${hex.slice(20, 32)}`,
   );
-}
-
-export function assertTaskBrief(value: TaskBriefV1): TaskBriefV1 {
-  return TaskBriefV1Schema.parse(value);
 }
 
 export function systemPrincipal(serviceName: string, authenticatedAt: string): AuthenticatedPrincipalV1 {

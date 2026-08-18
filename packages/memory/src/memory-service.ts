@@ -3,7 +3,6 @@ import {
   EntityIdSchema,
   canonicalSha256V1,
   type EntityId,
-  type JsonObject,
 } from '@ww/shared';
 import { getTaskAsOf, listFileIndex, listLatestKnowledgeByStatus, upsertFileIndex, type FileIndexLayer, type KnowledgeRow } from '@ww/db';
 
@@ -242,11 +241,3 @@ export class MemoryService {
   }
 }
 
-export function contextPackToJson(pack: ContextPack): JsonObject {
-  return {
-    contextPackId: pack.contextPackId,
-    cutoffAt: pack.cutoffAt,
-    estimatedTokens: pack.estimatedTokens,
-    chunks: pack.chunks.map((chunk) => ({ ...chunk })),
-  };
-}
