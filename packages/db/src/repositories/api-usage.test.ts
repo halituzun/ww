@@ -4,7 +4,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { createCh } from '../client.js';
 import { runMigrations } from '../migrate.js';
 import { clickhouseUp } from '../testutil.js';
-import { getActualModelRefForInvocation } from './api-usage.js';
+import { getActualModelRefForInvocation, sumTaskTokensSpent } from './api-usage.js';
 import { RepositoryConflictError } from './types.js';
 
 const up = await clickhouseUp();
@@ -222,6 +222,34 @@ describe.skipIf(!up)('api usage repository', () => {
 
   // docs/04 pasif sinyal: "mv_provider_errors — son 5 dk hata oranı > %50 →
   // degraded". İki kusur ölçüldü ve bu test ikisini de sabitliyor.
+  // docs/07 "görev token tavanı" freninin GERÇEK girdisi. Fren daha önce
+  // `tasks.tokens_spent` kolonunu okuyordu ve o kolona üretimde 0'dan başka
+  // bir şey yazılmıyor — yani fren yazılı, testli ve kalıcı olarak ölüydü.
+  describe('sumTaskTokensSpent', () => {
+    it('gorevin prompt + completion tokenlarini toplar', async () => {
+      const taskId = randomUUID();
+      const projectId = randomUUID();
+      const at = new Date().toISOString();
+      await ch.insert({
+        table: 'api_usage',
+        values: [
+          { usage_id: randomUUID(), project_id: projectId, task_id: taskId, provider_id: 'deepseek', model: 'm', purpose: 'completion', prompt_tokens: 100, completion_tokens: 50, cost_usd: 0.1, latency_ms: 1, status: 'ok', error_kind: '', created_at: at },
+          // Başarısız çağrı da sayılır: token yakıldıysa yakılmıştır.
+          { usage_id: randomUUID(), project_id: projectId, task_id: taskId, provider_id: 'deepseek', model: 'm', purpose: 'completion', prompt_tokens: 20, completion_tokens: 0, cost_usd: 0, latency_ms: 1, status: 'error', error_kind: 'rate_limit', created_at: at },
+          // BAŞKA görevin çağrısı sayılmaz.
+          { usage_id: randomUUID(), project_id: projectId, task_id: randomUUID(), provider_id: 'deepseek', model: 'm', purpose: 'completion', prompt_tokens: 999, completion_tokens: 999, cost_usd: 0, latency_ms: 1, status: 'ok', error_kind: '', created_at: at },
+        ],
+        format: 'JSONEachRow',
+      });
+      expect(await sumTaskTokensSpent(ch, taskId)).toBe(170);
+    });
+
+    // Hiç çağrısı olmayan görevde fren ATMAMALI: 0 döner, sistem durmaz.
+    it('cagrisi olmayan gorev icin 0 doner', async () => {
+      expect(await sumTaskTokensSpent(ch, randomUUID())).toBe(0);
+    });
+  });
+
   describe('mv_provider_errors sinyali', () => {
     const insertUsage = async (rows: readonly Record<string, unknown>[]) => {
       await ch.insert({

@@ -6,13 +6,30 @@ const parentId = '11111111-1111-4111-8111-111111111111';
 const projectId = '22222222-2222-4222-8222-222222222222';
 const issuerId = '33333333-3333-4333-8333-333333333333';
 
-function fakeDb(rows: readonly Record<string, unknown>[]) {
-  return { query: async () => ({ json: async () => rows }) } as never;
+// Sahte veritabanı SORGUYA GÖRE cevap verir. Eskiden HER sorguya aynı satırı
+// döndürüyordu; böyle bir sahte, "yanlış tabloyu okuyorum" kusurunu yapısal
+// olarak göremez (deponun daha önce altı kez ısırıldığı tuzak).
+function fakeDb(
+  rows: readonly Record<string, unknown>[],
+  usage: readonly Record<string, unknown>[] = [{ tokens: 0 }],
+) {
+  return {
+    query: async ({ query }: { query: string }) => ({
+      json: async () => (query.includes('api_usage') ? usage : rows),
+    }),
+  } as never;
 }
 
 describe('DelegationService bütçe ve soy ağacı sınırları', () => {
+  // ASIL KUSUR: harcama parent'ın `tokens_spent` KOLONUNDAN okunuyordu ve o
+  // kolona üretimde yalnızca 0 yazılır. Yani "alt görev parent'ın KALAN
+  // bütçesini aşamaz" kuralı fiilen "TOPLAM bütçesini aşamaz"a dönüşüyordu:
+  // bütçesini bitirmiş bir görev, her alt göreve bütçenin tamamını dağıtabilirdi.
   it('harcanmış tokenleri parent kalan bütçesinden düşer', async () => {
-    const service = new DelegationService(fakeDb([{ task_id: parentId, project_id: projectId, parent_task_id: NIL_UUID, delegation_depth: 0, token_budget: 10, tokens_spent: '7', issuer_agent_id: issuerId }]));
+    const service = new DelegationService(fakeDb(
+      [{ task_id: parentId, project_id: projectId, parent_task_id: NIL_UUID, delegation_depth: 0, token_budget: 10, tokens_spent: '0', issuer_agent_id: issuerId }],
+      [{ tokens: 7 }],
+    ));
     await expect(service.createSubtask({ parentTaskId: parentId as never, issuerAgentId: issuerId as never, title: 'too large', acceptanceCriteria: [], targetFiles: [], group: 'coding', budget: 4 })).rejects.toThrow(/kalan butcesi/);
   });
 

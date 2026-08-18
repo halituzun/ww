@@ -72,11 +72,20 @@ describe.skipIf(!up)('createClickHouseBrakePorts', () => {
     await ch.close();
   });
 
-  it('görevin son sürümündeki token bütçesini ve başlangıç anını okur', async () => {
+  // ASIL KUSUR: harcama `tasks.tokens_spent` kolonundan okunuyordu ve o kolona
+  // ÜRETİMDE HİÇ 0'dan başka bir şey yazılmıyor (tek yazıcı görev açılışıdır).
+  // Yani docs/07'nin "görev token tavanı" freni, kodu yazılı ve testli
+  // olmasına rağmen HİÇBİR ZAMAN atamazdı. Bu testin kendisi de kusuru
+  // gizliyordu: fixture kolonu elle 250/400 yapıyordu — üretimin asla
+  // yapmadığı bir şey.
+  //
+  // Gerçek kaynak `api_usage`'dır: hemen yanındaki maliyet freni de zaten
+  // oradan okuyor.
+  it('gorevin harcamasini api_usage tokenlarindan okur', async () => {
     const ports = createClickHouseBrakePorts(ch);
     const budget = await ports.readTaskBudget(taskId);
     expect(budget.tokenBudget).toBe(1000);
-    expect(budget.tokensSpent).toBe(400); // en yüksek sürüm kazanır
+    expect(budget.tokensSpent).toBe(150); // 100 prompt + 50 completion
     expect(budget.startedAtMs).toBe(Date.parse(startedAt));
   });
 

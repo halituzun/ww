@@ -207,3 +207,30 @@ export async function getActualModelRefForInvocation(
     usageIds: Object.freeze(candidates.map((candidate) => candidate.usageId).sort()),
   });
 }
+
+/**
+ * Bir görevin GERÇEK token harcaması (docs/07 "görev token tavanı").
+ *
+ * NEDEN BURADA: `tasks.tokens_spent` kolonu üretimde yalnızca 0 olarak
+ * yazılıyor — görev açılışı dışında hiçbir yazıcısı yok. Fren o kolonu
+ * okuduğu sürece hiçbir zaman atamaz. Tek gerçek kaynak `api_usage`'dır;
+ * hemen yanındaki maliyet freni de zaten oradan okur.
+ *
+ * Yalnız GÖREVİN KENDİ çağrıları sayılır: alt görevlerin kendi tavanı vardır.
+ * Başarısız çağrılar da sayılır — token yakıldıysa yakılmıştır.
+ */
+export async function sumTaskTokensSpent(
+  ch: ClickHouseClient,
+  taskId: string,
+): Promise<number> {
+  const result = await ch.query({
+    query: `SELECT sum(prompt_tokens + completion_tokens) AS tokens
+      FROM api_usage WHERE task_id = {taskId:UUID}`,
+    query_params: { taskId },
+    format: 'JSONEachRow',
+  });
+  const rows = await result.json<Record<string, unknown>>();
+  const value = Number(rows[0]?.['tokens'] ?? 0);
+  // Bilinmeyen görev ya da hiç çağrı: 0. Fren atmaz, sistem durmaz.
+  return Number.isFinite(value) ? value : 0;
+}

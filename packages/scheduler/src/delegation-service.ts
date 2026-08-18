@@ -1,5 +1,6 @@
 import {
   createTask,
+  sumTaskTokensSpent,
   type ClickHouseClient,
   type TaskRow,
 } from '@ww/db';
@@ -44,7 +45,12 @@ export class DelegationService {
     const projectId = String(raw['project_id']) as EntityId;
     const depth = Number(raw['delegation_depth']);
     const budget = Number(raw['token_budget']);
-    const spent = Number(raw['tokens_spent']);
+    // HARCAMA KOLONDAN DEĞİL, api_usage'DAN. `tasks.tokens_spent` üretimde
+    // hep 0'dır (tek yazıcısı görev açılışıdır), yani "alt görev parent'ın
+    // KALAN bütçesini aşamaz" kuralı fiilen "TOPLAM bütçesini aşamaz"a
+    // dönüşüyordu: bütçesini bitirmiş bir görev her alt göreve bütçenin
+    // tamamını dağıtabilirdi.
+    const spent = await sumTaskTokensSpent(this.#ch, input.parentTaskId);
     const maxDepth = input.maxDepth ?? 3;
     if (!Number.isSafeInteger(depth) || depth >= maxDepth) throw new DelegationError('delegation depth limiti asildi');
     if (!Number.isSafeInteger(spent) || spent < 0 || spent > budget) throw new DelegationError('parent token harcamasi gecersiz');

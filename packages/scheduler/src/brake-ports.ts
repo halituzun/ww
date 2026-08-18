@@ -1,6 +1,6 @@
 // Güvenlik frenlerinin gerçek veri kaynakları (docs/07 → Frenler).
 // brake-guard.ts mekanizmayı kuruyordu; bu modül onu ClickHouse'a bağlar.
-import type { ClickHouseClient } from '@ww/db';
+import { sumTaskTokensSpent, type ClickHouseClient } from '@ww/db';
 import type {
   BrakeGuardPorts,
   ProjectSpendSnapshot,
@@ -38,7 +38,7 @@ export function createClickHouseBrakePorts(
   const nowMs = options.nowMs ?? ((): number => Date.now());
   async function readTaskBudget(taskId: string): Promise<TaskBudgetSnapshot> {
     const result = await ch.query({
-      query: `SELECT token_budget, tokens_spent, created_at, status, updated_at, version
+      query: `SELECT token_budget, created_at, status, updated_at, version
         FROM tasks WHERE task_id = {taskId:UUID}
         ORDER BY version DESC LIMIT 1024`,
       query_params: { taskId },
@@ -59,7 +59,10 @@ export function createClickHouseBrakePorts(
     );
     return {
       pausedMs,
-      tokensSpent: num(row['tokens_spent']),
+      // HARCAMA KOLONDAN DEĞİL, api_usage'DAN. `tasks.tokens_spent` üretimde
+      // hep 0'dır (tek yazıcısı görev açılışıdır), yani bu fren kolonu
+      // okuduğu sürece hiçbir zaman atmazdı.
+      tokensSpent: await sumTaskTokensSpent(ch, taskId),
       tokenBudget: num(row['token_budget']),
       startedAtMs: parseUtc(row['created_at']) || Date.now(),
     };
