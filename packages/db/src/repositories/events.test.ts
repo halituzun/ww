@@ -186,4 +186,39 @@ describe.skipIf(!up)('listEvents imleç desteği', () => {
     await seed(projectId, 2);
     expect(await listRecentEvents(cursorCh, projectId, 10)).toHaveLength(2);
   });
+
+  // ÇİFT KODLAMA KORUMASI. `payload` zaten JsonValue'dur ve depo onu
+  // serileştirir; yazarken bir kez daha JSON.stringify yapmak yükü JSON
+  // METNİNE çevirir ve `JSONExtract*` sorgularının hepsi SESSİZCE boş döner.
+  // Canlı veride 69 error olayının 46'sı böyleydi: kayıt vardı, okunamıyordu.
+  //
+  // Sessiz kusuru yazma anında GÜRÜLTÜLÜ yapmak, onu bulunabilir kılar.
+  describe('payload çift kodlama koruması', () => {
+    const row = (payload: unknown) => ({
+      event_id: randomUUID(), seq: '1', project_id: randomUUID(),
+      task_id: NIL_UUID, agent_id: NIL_UUID, event_type: 'error' as const,
+      tool_name: '', payload, duration_ms: 0,
+      created_at: new Date().toISOString(),
+    });
+
+    it('JSON metni gecirilirse acik hata verir', async () => {
+      await expect(appendEvent(cursorCh, row('{"reason":"x"}') as never))
+        .rejects.toThrow(/çift kodla/i);
+    });
+
+    it('JSON dizisi metnini de reddeder', async () => {
+      await expect(appendEvent(cursorCh, row('[1,2]') as never))
+        .rejects.toThrow(/çift kodla/i);
+    });
+
+    // Düz metin yük MEŞRUDUR: her string yanlış değildir, yalnız JSON'a
+    // benzeyen string yanlıştır.
+    it('duz metin yuku kabul eder', async () => {
+      await expect(appendEvent(cursorCh, row('sadece not') as never)).resolves.toBeTruthy();
+    });
+
+    it('nesne yuku kabul eder', async () => {
+      await expect(appendEvent(cursorCh, row({ reason: 'x' }) as never)).resolves.toBeTruthy();
+    });
+  });
 });

@@ -59,7 +59,35 @@ function parseEvent(value: unknown): EventRow {
   });
 }
 
+/**
+ * ÇİFT KODLAMA KORUMASI.
+ *
+ * `payload` zaten `JsonValue`dur ve bu modül onu serileştirir. Yazarken bir
+ * kez daha `JSON.stringify` yapmak yükü JSON NESNESİ değil JSON METNİ yapar;
+ * ClickHouse onu sıradan bir string sayar ve `JSONExtract*` sorgularının
+ * hepsi SESSİZCE boş döner. Canlı veride 69 `error` olayının 46'sı böyleydi:
+ * sebep yazılıydı ama denetim ekranı, anlatıcı ve analitik okuyamıyordu.
+ *
+ * Düz metin yük MEŞRUDUR; yalnız JSON'a BENZEYEN string yanlıştır. Sessiz
+ * kusuru yazma anında gürültülü yapmak onu bulunabilir kılar.
+ */
+function assertNotDoubleEncoded(payload: unknown): void {
+  if (typeof payload !== 'string') return;
+  const trimmed = payload.trim();
+  if (!trimmed.startsWith('{') && !trimmed.startsWith('[')) return;
+  try {
+    JSON.parse(trimmed);
+  } catch {
+    return; // JSON'a benziyor ama değil; düz metin sayılır.
+  }
+  throw new Error(
+    'events.payload çift kodlanmış: JSON metni değil NESNE geçirin '
+    + '(alan zaten serileştirilir; JSON.stringify yapmayın)',
+  );
+}
+
 function normalizeEvent(input: AppendEventInput): EventRow {
+  assertNotDoubleEncoded(input.payload);
   return parseEvent({ ...input, payload: serializeJsonValue(input.payload, 'events.payload') });
 }
 

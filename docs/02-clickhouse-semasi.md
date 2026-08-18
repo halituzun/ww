@@ -173,7 +173,9 @@ folded `max(ordinal)+1` ile sürer. Aynı ordinal'de farklı entry fail-closed'd
 > **`payload` NESNE yazılır, JSON metni olarak DEĞİL.** Alan zaten `JsonValue`
 > ve depo onu serileştirir; yazarken bir kez daha `JSON.stringify` yapmak yükü
 > çift kodlar ve `JSONExtract*` sorgularının hepsini sessizce boş döndürür.
-> (2026-08-18: 69 `error` olayının 69'u böyleydi; sebep yazılıydı ama denetim
+> Kural artık `appendEvent` içinde ZORLANIR: JSON'a benzeyen bir string yük
+> açık hatayla reddedilir (düz metin yük meşrudur).
+> (2026-08-18: 69 `error` olayının 46'sı böyleydi; sebep yazılıydı ama denetim
 > ekranı, anlatıcı ve analitik sorgular okuyamıyordu.)
 | `duration_ms` | UInt32 | |
 | `created_at` | DateTime64(3) | |
