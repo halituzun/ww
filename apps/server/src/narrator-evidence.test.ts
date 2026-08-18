@@ -97,4 +97,74 @@ describe('narrateEvent', () => {
       expect(narrateEvent(event('clone_spawned' as never, {}))).toBe('clone_spawned');
     });
   });
+
+  // TARİHSEL KAYITLAR. Çift kodlama yazma anında artık engelleniyor, ama
+  // canlı veritabanında 46 `error` olayı hâlâ JSON METNİ olarak duruyor ve
+  // sebepleri okunamıyor. Geçmişi yeniden yazmak (kayıt tahrifi) yanlış
+  // olurdu; doğru olan OKUYUCUYU toleranslı yapmaktır.
+  describe('çift kodlanmış tarihsel yükler', () => {
+    it('JSON metni olarak saklanmis yukten sebebi okur', () => {
+      const olay = {
+        event_type: 'error',
+        payload: JSON.stringify({ phase: 'testing', reason: 'TypeError: x is not iterable' }),
+      } as never;
+      expect(narrateEvent(olay)).toContain('TypeError: x is not iterable');
+    });
+
+    it('cift kodlanmis commit yukunu de cozer', () => {
+      const olay = {
+        event_type: 'commit', payload: JSON.stringify({ commitHash: 'abcdef1234' }),
+      } as never;
+      expect(narrateEvent(olay)).toContain('abcdef1');
+    });
+
+    // JSON OLMAYAN düz metin yük bozulmamalı: onu ayrıştırmaya çalışıp
+    // sessizce yutmak, gerçek veriyi kaybetmek olurdu.
+    it('duz metin yuku ayristirmaya calismaz', () => {
+      expect(narrateEvent({ event_type: 'error', payload: 'sadece not' } as never))
+        .toContain('sebep kaydedilmemiş');
+    });
+
+    // Tek kat kodlanmış (doğru) yük eskisi gibi çalışmalı.
+    it('nesne yuku eskisi gibi okunur', () => {
+      expect(narrateEvent(event('error', { reason: 'nesne sebebi' })))
+        .toContain('nesne sebebi');
+    });
+  });
+
+  // İKİNCİ YÜK ŞEKLİ. Canlı veride 69 `error` olayının 23'ü sebebi ÜST
+  // düzeyde değil, iç içe `payload.errorCode` altında taşıyor (kalıcı efekt
+  // yazıcısından geliyor). Anlatıcı yalnız üst düzey `reason`a baktığı için
+  // bu 23 olayda "sebep kaydedilmemiş" diyordu — yine, kayıt var ama
+  // okunamıyor.
+  describe('iç içe hata yükü', () => {
+    it('payload.errorCodedan sebebi okur', () => {
+      const olay = {
+        event_type: 'error',
+        payload: { assignmentAttemptId: 'x', payload: { errorCode: 'FILE_NOT_FOUND', ok: false } },
+      } as never;
+      expect(narrateEvent(olay)).toContain('FILE_NOT_FOUND');
+    });
+
+    it('ic ice message alanini da okur', () => {
+      const olay = {
+        event_type: 'error', payload: { payload: { message: 'disk dolu' } },
+      } as never;
+      expect(narrateEvent(olay)).toContain('disk dolu');
+    });
+
+    // ÜST düzey `reason` varsa O tercih edilir: daha açıklayıcıdır.
+    it('ust duzey reasonu ic ice alana TERCIH eder', () => {
+      const olay = {
+        event_type: 'error',
+        payload: { reason: 'asıl sebep', payload: { errorCode: 'KOD' } },
+      } as never;
+      expect(narrateEvent(olay)).toContain('asıl sebep');
+    });
+
+    it('hicbiri yoksa uydurmaz', () => {
+      expect(narrateEvent({ event_type: 'error', payload: { payload: { ok: true } } } as never))
+        .toContain('sebep kaydedilmemiş');
+    });
+  });
 });

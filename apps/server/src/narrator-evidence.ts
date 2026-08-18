@@ -11,11 +11,56 @@ export interface NarratableEvent {
   readonly created_at?: string;
 }
 
+/**
+ * TARİHSEL ÇİFT KODLAMAYA TOLERANS.
+ *
+ * Çift kodlama artık yazma anında engelleniyor (bkz. appendEvent), ama canlı
+ * veritabanında 46 `error` olayı hâlâ JSON METNİ olarak duruyor ve sebepleri
+ * okunamıyor. Geçmişi yeniden yazmak kayıt tahrifidir; doğru olan okuyucuyu
+ * toleranslı yapmaktır.
+ *
+ * DÜZ METİN yük ayrıştırılmaya çalışılmaz: onu sessizce yutmak gerçek veriyi
+ * kaybetmek olurdu.
+ */
+function asObject(payload: unknown): Record<string, unknown> | undefined {
+  if (payload !== null && typeof payload === 'object') {
+    return payload as Record<string, unknown>;
+  }
+  if (typeof payload !== 'string') return undefined;
+  const trimmed = payload.trim();
+  if (!trimmed.startsWith('{')) return undefined;
+  try {
+    const parsed: unknown = JSON.parse(trimmed);
+    return parsed !== null && typeof parsed === 'object'
+      ? parsed as Record<string, unknown>
+      : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 const read = (payload: unknown, key: string): string | undefined => {
-  if (payload === null || typeof payload !== 'object') return undefined;
-  const value = (payload as Record<string, unknown>)[key];
+  const record = asObject(payload);
+  if (record === undefined) return undefined;
+  const value = record[key];
   return typeof value === 'string' && value.trim() !== '' ? value : undefined;
 };
+
+/**
+ * Hata sebebi İKİ ŞEKİLDE saklanıyor:
+ *  - üst düzey `reason` (execution-error-recorder),
+ *  - iç içe `payload.errorCode` / `payload.message` (kalıcı efekt yazıcısı).
+ * Canlı veride 69 hata olayının 23'ü ikinci şekildeydi ve anlatıcı yalnız
+ * ilkine baktığı için "sebep kaydedilmemiş" diyordu — kayıt var, okunamıyor.
+ *
+ * Üst düzey `reason` TERCİH edilir: daha açıklayıcıdır (kod değil cümle).
+ */
+function errorReason(payload: unknown): string | undefined {
+  const top = read(payload, 'reason');
+  if (top !== undefined) return top;
+  const nested = asObject(payload)?.['payload'];
+  return read(nested, 'errorCode') ?? read(nested, 'message') ?? read(nested, 'error');
+}
 
 /** Tek olayın insan cümlesi. Bilinmeyen tür için tür adı korunur, uydurulmaz. */
 export function narrateEvent(event: NarratableEvent): string {
@@ -39,11 +84,11 @@ export function narrateEvent(event: NarratableEvent): string {
     case 'brief_sealed':
       return 'görev brief’i mühürlendi';
     case 'test_run': {
-      const passed = (payload as { passed?: unknown } | null)?.passed;
+      const passed = asObject(payload)?.['passed'];
       return `kapı çalıştı: ${passed === true ? 'geçti' : 'geçemedi'}`;
     }
     case 'error':
-      return `hata: ${read(payload, 'reason') ?? 'sebep kaydedilmemiş'}`;
+      return `hata: ${errorReason(payload) ?? 'sebep kaydedilmemiş'}`;
     case 'recovery_completed':
       return 'kurtarma turu tamamlandı';
 
@@ -68,7 +113,7 @@ export function narrateEvent(event: NarratableEvent): string {
     case 'message_rejected':
       return `mesaj reddedildi: ${read(payload, 'reason') ?? 'sebep kaydedilmemiş'}`;
     case 'policy_decision': {
-      const allowed = (payload as { allowed?: unknown } | null)?.allowed;
+      const allowed = asObject(payload)?.['allowed'];
       const reason = read(payload, 'reason');
       const verdict = allowed === false ? 'reddetti' : 'izin verdi';
       return `politika ${verdict}${reason === undefined ? '' : `: ${reason}`}`;
