@@ -27,6 +27,17 @@ export interface RuntimeContextInput {
    * sorusunun cevabı yoktu.
    */
   persistSnapshot?: (snapshot: PromptInputSnapshotV1) => Promise<unknown>;
+  /**
+   * Görevin nedensel imleci (docs/06 → provenance). Verilmezse 0 varsayılır.
+   *
+   * NEDEN VAR: imleç SABİT 0 yazılıyordu; yani her mühür "bu agent daha önce
+   * hiçbir şey görmedi" diyordu. Görevin gerçekten işlediği önceki girdiler
+   * varken bu iddia yanlıştır ve replay yanlış noktadan başlar.
+   */
+  loadCausalOrdinal?: (input: Readonly<{
+    taskId: EntityId;
+    assignmentAttemptId: EntityId;
+  }>) => Promise<number>;
 }
 
 export function createRuntimeContextService(input: RuntimeContextInput) {
@@ -45,6 +56,15 @@ export function createRuntimeContextService(input: RuntimeContextInput) {
       }
 
       const contextPack = await input.loadContextPack({ brief });
+      const taskId = (brief as unknown as { taskId: EntityId }).taskId;
+      // Gerçek imleç okunur; kayıt yoksa 0 DOĞRUDUR (henüz hiçbir girdi
+      // işlenmemiştir), uydurma değildir.
+      const cursorOrdinal = input.loadCausalOrdinal === undefined
+        ? 0
+        : await input.loadCausalOrdinal({
+          taskId,
+          assignmentAttemptId: attempt.assignmentAttemptId,
+        });
       const promptMessages = assemblePromptMessages({ brief, template, contextPack });
 
       const snapshot = {
@@ -54,13 +74,13 @@ export function createRuntimeContextService(input: RuntimeContextInput) {
         // iki çağrıyı tek olay gibi gösterip kontörü ve izi bozar.
         invocationId: randomUUID() as EntityId,
         projectId: attempt.projectId,
-        taskId: (brief as unknown as { taskId: EntityId }).taskId,
+        taskId,
         taskBriefId: attempt.taskBriefId,
         assignmentAttemptId: attempt.assignmentAttemptId,
         // Şema cursor'un aynı attempt içinde kalmasını zorunlu kılar.
         inputTaskCausalCursor: {
           assignmentAttemptId: attempt.assignmentAttemptId,
-          ordinal: 0,
+          ordinal: cursorOrdinal,
         },
         sourceVersionManifest: refs.sourceVersionManifest,
         promptMessages,

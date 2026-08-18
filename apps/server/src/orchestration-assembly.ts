@@ -24,7 +24,7 @@ import { createExecutionErrorRecorder } from './execution-error-recorder.js';
 import { renderContextPack } from './context-pack-render.js';
 import { classifyArtifact, classifyLayer } from './artifact-classify.js';
 import { buildAgentCapabilities } from './agent-capabilities.js';
-import { appendArtifact, appendEvent, appendPromptInputSnapshot, getPromptVersion, getAssignmentAttempt, getLatestTask, listLatestAgents } from '@ww/db';
+import { appendArtifact, appendEvent, appendPromptInputSnapshot, getPromptVersion, getTaskCausalCursor, getAssignmentAttempt, getLatestTask, listLatestAgents } from '@ww/db';
 import type { RuntimeModels } from './runtime-context.js';
 import type { Phase9RuntimeCompositionInput } from './runtime-composition.js';
 import { createLateBoundPort, type LateBoundPort } from './late-binding.js';
@@ -226,6 +226,10 @@ export async function createOrchestrationComposition(
       // anlık görüntüye işaret eder ve "bu çıktıyı hangi prompt üretti"
       // sorusunun cevabı olmaz.
       persistSnapshot: (snapshot) => appendPromptInputSnapshot(input.ch, snapshot),
+      // İmleç sabit 0 yazılıyordu: her mühür "bu agent daha önce hiçbir şey
+      // görmedi" diyordu ve replay yanlış noktadan başlardı.
+      loadCausalOrdinal: async ({ taskId, assignmentAttemptId }) =>
+        (await getTaskCausalCursor(input.ch, taskId, assignmentAttemptId))?.ordinal ?? 0,
       // Context Builder bağlantısı ayrı bir adım; şimdilik boş bağlam.
       // docs/06 Context Builder: geçmiş kararlar, özetler, fihrist ve ilgili
       // yazışmalar modele girer. Boş dize dönmek hafıza katmanını yazıp

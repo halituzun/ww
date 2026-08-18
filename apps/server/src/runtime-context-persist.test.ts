@@ -63,3 +63,39 @@ describe('createRuntimeContextService — mühür kalıcılığı', () => {
     expect(written.promptHash).toMatch(/^[0-9a-f]{64}$/);
   });
 });
+
+describe('createRuntimeContextService — nedensel imleç', () => {
+  // ASIL KUSUR: imleç SABİT 0 yazılıyordu; her mühür "bu agent daha önce
+  // hiçbir şey görmedi" diyordu ve replay yanlış noktadan başlardı.
+  it('gercek imleci muhre yazar', async () => {
+    const loadCausalOrdinal = vi.fn(async () => 7);
+    const result = await createRuntimeContextService({
+      prompts: { load: async () => 'şablon' },
+      workspaceRoot: '/tmp/ww',
+      models: { workerModelRef: 'm:1', verifierModelRef: 'm:1' },
+      loadContextPack: async () => '',
+      loadCausalOrdinal,
+    }).load({ brief, attempt });
+
+    expect(loadCausalOrdinal).toHaveBeenCalledWith({
+      taskId: id(1), assignmentAttemptId: id(4),
+    });
+    expect((result.snapshot as unknown as {
+      inputTaskCausalCursor: { ordinal: number };
+    }).inputTaskCausalCursor.ordinal).toBe(7);
+  });
+
+  // Kayıt yoksa 0 DOĞRUDUR (henüz hiçbir girdi işlenmemiştir), uydurma değil.
+  it('imlec okuyucusu verilmezse sifir kalir', async () => {
+    const result = await createRuntimeContextService({
+      prompts: { load: async () => 'şablon' },
+      workspaceRoot: '/tmp/ww',
+      models: { workerModelRef: 'm:1', verifierModelRef: 'm:1' },
+      loadContextPack: async () => '',
+    }).load({ brief, attempt });
+
+    expect((result.snapshot as unknown as {
+      inputTaskCausalCursor: { ordinal: number };
+    }).inputTaskCausalCursor.ordinal).toBe(0);
+  });
+});
