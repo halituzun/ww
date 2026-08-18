@@ -122,7 +122,7 @@ Test ortamlarının ([10](10-test-ortamlari.md)) temeli — `ProcessManager`:
 
 | Hata | Davranış |
 |---|---|
-| Araç argüman hatası (şema uyumsuz) | Modele hata mesajı döner, aynı turda düzeltmesi beklenir (retry maliyeti düşük) |
+| Araç argüman hatası (şema uyumsuz) | Modele hata mesajı ARAÇ CEVABI olarak döner (çağrı kimliğine bağlı), model sonraki turda düzeltir; `maxTurns` sınırı korunur. Brief DIŞI araç istemek bu kapsamda değildir: o bir sınır ihlalidir ve sert reddedilir |
 | Dosya kilidi alınamadı | Araç `LOCKED` döner; worker beklemek yerine kilit sahibini ve tahmini süreyi görür; zamanlayıcı görevi kısa erteleyebilir |
 | Komut zaman aşımı | Süreç öldürülür, çıktı + `TIMEOUT` worker'a döner |
 | LLM çağrısı hatası | Router fallback'i dener ([04](04-model-katmani.md#fallback)); tükendiyse görev `queued`'a döner |

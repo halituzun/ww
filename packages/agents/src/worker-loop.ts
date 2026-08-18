@@ -36,6 +36,11 @@ export async function runWorkerLoop(input: WorkerLoopInput): Promise<WorkerLoopR
       return { reason: 'report', turns: turn + 1, summary };
     }
     const registeredTools = new Set(allowedDefinitions().map((definition) => definition.name));
+    // Bu turda KAÇ araç cevabı yazıldı. Sabit `toolCalls.length` varsaymak,
+    // döngüden erken çıkıldığında assistant mesajını yanlış yere sokar ve
+    // konuşmayı bozar (sağlayıcı "tool_calls must be followed by tool
+    // messages" 400'ü verir).
+    const startLength = messages.length;
     for (const toolCall of result.result.toolCalls as readonly NormalizedToolCall[]) {
       if (!registeredTools.has(toolCall.name)) return { reason: 'failure', turns: turn + 1, detail: `model kayıtlı olmayan aracı istedi: ${toolCall.name}` };
       let args: unknown;
@@ -45,7 +50,31 @@ export async function runWorkerLoop(input: WorkerLoopInput): Promise<WorkerLoopR
         parsedCallId = toolCallEntityId(input.snapshot.invocationId, toolCall.id);
         args = input.tools.validate(toolCall.name, toolCall.args);
       } catch (toolError) {
-        return { reason: 'failure', turns: turn + 1, detail: `araç çağrısı doğrulanamadı: ${toolCall.name} — ${toolError instanceof Error ? toolError.message : String(toolError)}` };
+        // docs/05 Hata ve Retry: "Araç argüman hatası (şema uyumsuz) → Modele
+        // hata mesajı döner, AYNI TURDA düzeltmesi beklenir (retry maliyeti
+        // düşük)." Eskiden görev anında düşüyordu ve bir deneme yanıyordu;
+        // canlı veride bu, düzeltilebilir yazım hataları yüzünden iki görevi
+        // öldürmüştü.
+        //
+        // Sonsuz düzeltme turu YOKTUR: döngü zaten `maxTurns` ile sınırlı.
+        const detail = toolError instanceof Error ? toolError.message : String(toolError);
+        if (turn + 1 >= maxTurns) {
+          return { reason: 'failure', turns: turn + 1, detail: `araç çağrısı doğrulanamadı: ${toolCall.name} — ${detail}` };
+        }
+        // Hata ARAÇ CEVABI olarak döner: modelin hangi çağrıyı düzelteceğini
+        // bilmesi için çağrı kimliğine bağlı olması şart.
+        messages.push({
+          role: 'tool',
+          toolCallId: toolCall.id,
+          content: JSON.stringify({
+            error: 'invalid_arguments',
+            tool: toolCall.name,
+            detail,
+            hint: 'Argümanları araç şemasına göre düzelt ve çağrıyı tekrarla.',
+          }),
+        });
+        // Bu turu bitir; model düzeltilmiş çağrıyı sonraki turda yapar.
+        break;
       }
       if (toolCall.name === 'ask_question') {
         const candidate = typeof args === 'object' && args !== null && 'content' in args ? (args as { content: unknown }).content : undefined;
@@ -84,7 +113,7 @@ export async function runWorkerLoop(input: WorkerLoopInput): Promise<WorkerLoopR
       // tool_call_id" 400'üne yol açıyordu.
       messages.push({ role: 'tool', toolCallId: toolCall.id, content: JSON.stringify(toolResult) });
     }
-    messages.splice(messages.length - result.result.toolCalls.length, 0, {
+    messages.splice(startLength, 0, {
       role: 'assistant',
       content: result.result.content ?? '',
       toolCalls: result.result.toolCalls.map((call) => ({ id: call.id, name: call.name, args: typeof call.args === 'object' && call.args !== null && !Array.isArray(call.args) ? call.args as JsonObject : {} })),

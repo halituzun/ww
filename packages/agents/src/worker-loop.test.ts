@@ -153,4 +153,59 @@ describe('runWorkerLoop araç hatası', () => {
     const second = seen[1] as { role: string; content?: string }[];
     expect(JSON.stringify(second)).toContain('Dosya bulunamadı');
   });
+
+  // docs/05 Hata ve Retry: "Araç argüman hatası (şema uyumsuz) → Modele hata
+  // mesajı döner, AYNI TURDA düzeltmesi beklenir (retry maliyeti düşük)."
+  // Uygulanmıyordu: şema hatası görevi anında düşürüyordu. Canlı veride bu
+  // iki görevi öldürmüş (write_file şema hatası ve bir Zod hatası).
+  //
+  // Brief DIŞI araç istemek ayrı bir konudur ve sert reddedilmeye devam eder:
+  // o bir sınır ihlalidir, düzeltilebilir bir yazım hatası değil.
+  it('sema hatasinda modele hatayi dondurur ve duzeltmesine izin verir', async () => {
+    const provider = new MockProvider({ script: [
+      { content: null, toolCalls: [{ id: id(8), name: 'read_file', args: { yol: 'a.ts' } }] },
+      { content: 'düzelttim ve bitirdim', toolCalls: [] },
+    ] });
+    let calls = 0;
+    const result = await runWorkerLoop({
+      brief, attempt, snapshot, modelRef: 'mock:mock-model', router: router(provider),
+      prompt: [{ role: 'user', content: 'iş' }],
+      tools: {
+        definitions: () => [{ name: 'read_file', description: '', parameters: {} }],
+        validate: (_name, args) => {
+          calls += 1;
+          if (calls === 1) throw new Error("'path' alanı zorunlu");
+          return args;
+        },
+        execute: async () => ({}),
+      },
+      communication: { report: async () => undefined, question: async () => ({ messageId: id(9) }) },
+    });
+
+    // Görev DÜŞMEZ; model kendini düzeltir.
+    expect(result.reason).toBe('report');
+    // Hata modele ARAÇ CEVABI olarak döner: yoksa neyi düzelteceğini bilemez.
+    const second = provider.calls[1]!.messages;
+    expect(second.some((message) => message.role === 'tool'
+      && message.toolCallId === id(8)
+      && String(message.content).includes('path'))).toBe(true);
+  });
+
+  it('sema hatasi duzelmezse tur siniri icinde yine de duser', async () => {
+    const provider = new MockProvider({ script: Array.from({ length: 4 }, () => (
+      { content: null, toolCalls: [{ id: id(8), name: 'read_file', args: {} }] }
+    )) });
+    const result = await runWorkerLoop({
+      brief, attempt, snapshot, modelRef: 'mock:mock-model', router: router(provider),
+      prompt: [{ role: 'user', content: 'iş' }], maxTurns: 3,
+      tools: {
+        definitions: () => [{ name: 'read_file', description: '', parameters: {} }],
+        validate: () => { throw new Error('hep bozuk'); },
+        execute: async () => ({}),
+      },
+      communication: { report: async () => undefined, question: async () => ({ messageId: id(9) }) },
+    } as never);
+    // Sonsuz düzeltme turu YOK: tur sınırı freni yerinde kalır.
+    expect(result.reason).not.toBe('report');
+  });
 });
