@@ -1,8 +1,13 @@
 // Web önizleme — SALT GÖRÜNÜM (docs/09 MVVM; docs/10 test ortamları).
 import { usePreviewViewModel } from '../viewmodels/usePreviewViewModel.js';
 
-export function PreviewPanel({ projectId }: { readonly projectId: string }) {
-  const { status, error, busy, start, stop } = usePreviewViewModel(projectId);
+export function PreviewPanel({ projectId, onActiveUrl }: {
+  readonly projectId: string;
+  /** docs/10: emre iliştirilecek aktif ekran bağlamı için. */
+  readonly onActiveUrl?: ((url: string) => void) | undefined;
+}) {
+  // Bildirim ViewModel'de yapılır: docs/09 View'da yan etki yasaklar.
+  const { status, error, busy, start, stop } = usePreviewViewModel(projectId, { onActiveUrl });
 
   return (
     <div className="preview-frame">

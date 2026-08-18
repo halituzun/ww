@@ -1,8 +1,10 @@
+import { useState } from 'react';
 // Çalışma alanı ekranı — SALT GÖRÜNÜM (docs/09 MVVM).
 //
 // Durum, veri yükleme, yoklama, canlı bağlantı ve eylemler
 // `useWorkspaceViewModel` içindedir; burada iş mantığı bulunmaz.
 import { useHealth } from './viewmodels/useHealth.js';
+import { commandScreenContext } from './viewmodels/command-context.js';
 import { TabBar } from './components/TabBar.js';
 import { MobilePreviewPanel } from './components/MobilePreviewPanel.js';
 import { ProjectPicker } from './components/ProjectPicker.js';
@@ -22,6 +24,10 @@ import { connectionLabel } from './viewmodels/live-connection.js';
 import { useWorkspaceViewModel } from './viewmodels/useWorkspaceViewModel.js';
 
 export default function App() {
+  // docs/10: emre iliştirilecek aktif ekran bağlamı. Global durum yerine
+  // bileşenlerden AÇIK geri çağırımla toplanır.
+  const [activeUrl, setActiveUrl] = useState('');
+  const [activeSession, setActiveSession] = useState('');
   const { health, state, status } = useHealth();
   const {
     page, setPage,
@@ -75,7 +81,7 @@ export default function App() {
       </section>
       <section className="command-card">
         <label htmlFor="command">PM’e mesaj gönder</label>
-        <div className="command-row"><input id="command" value={message} onChange={(event) => setMessage(event.target.value)} placeholder="Bir sonraki adımı sor…" /><button type="button" onClick={() => void sendCommand()}>Gönder</button></div>
+        <div className="command-row"><input id="command" value={message} onChange={(event) => setMessage(event.target.value)} placeholder="Bir sonraki adımı sor…" /><button type="button" onClick={() => void sendCommand(commandScreenContext({ tab, previewUrl: activeUrl, mobileSessionId: activeSession }))}>Gönder</button></div>
         {messageStatus ? <small>{messageStatus}</small> : null}
       </section>
       {projectId ? <section className="workspace-card">
@@ -89,7 +95,7 @@ export default function App() {
           <p className="audit-error" role="alert">{workspaceError}</p>
         )}
         <TabBar tab={tab} onTab={setTab} counts={{ tasks: tasks.length, events: events.length }} />
-        {tab === 'tasks' ? <TaskListPanel tasks={tasks} statusCounts={statusCounts} /> : tab === 'timeline' ? <TimelinePanel events={events} cursor={timelineCursor} onCursor={setTimelineCursor} visible={replay.visible} at={replay.at} /> : tab === 'canvas' ? <CanvasPanel projectId={projectId} events={events} cursor={timelineCursor} onCursor={setTimelineCursor} at={replay.at} tasks={tasks} statusByTask={timelineCursor >= events.length ? undefined : replay.statusByTask} selectedAgent={selectedAgent} onSelectAgent={setSelectedAgent} /> : tab === 'files' ? <FileBrowserPanel projectId={projectId} files={files} selectedFile={selectedFile} onSelectFile={setSelectedFile} narratorQuestion={narratorQuestion} onNarratorQuestion={setNarratorQuestion} onAskNarrator={() => void askNarrator()} narratorResult={narratorResult ?? undefined} /> : tab === 'api' ? <ApiConsole projectId={projectId} artifacts={apiArtifacts} /> : <><PreviewPanel projectId={projectId} /><MobilePreviewPanel projectId={projectId} /></>}
+        {tab === 'tasks' ? <TaskListPanel tasks={tasks} statusCounts={statusCounts} /> : tab === 'timeline' ? <TimelinePanel events={events} cursor={timelineCursor} onCursor={setTimelineCursor} visible={replay.visible} at={replay.at} /> : tab === 'canvas' ? <CanvasPanel projectId={projectId} events={events} cursor={timelineCursor} onCursor={setTimelineCursor} at={replay.at} tasks={tasks} statusByTask={timelineCursor >= events.length ? undefined : replay.statusByTask} selectedAgent={selectedAgent} onSelectAgent={setSelectedAgent} /> : tab === 'files' ? <FileBrowserPanel projectId={projectId} files={files} selectedFile={selectedFile} onSelectFile={setSelectedFile} narratorQuestion={narratorQuestion} onNarratorQuestion={setNarratorQuestion} onAskNarrator={() => void askNarrator()} narratorResult={narratorResult ?? undefined} /> : tab === 'api' ? <ApiConsole projectId={projectId} artifacts={apiArtifacts} /> : <><PreviewPanel projectId={projectId} onActiveUrl={setActiveUrl} /><MobilePreviewPanel projectId={projectId} onActiveSession={setActiveSession} /></>}
       </section> : <ProjectPicker projects={projects} draft={projectDraft} onDraft={(patch) => setProjectDraft((current) => ({ ...current, ...patch }))} onCreate={() => void createProject()} statusMessage={projectStatusMessage} onSelect={setProjectId} loadError={projectsError} />}
     </main>
   );

@@ -23,6 +23,8 @@ export interface PreviewViewModelPorts {
   start?: typeof startPreview;
   stop?: typeof stopPreview;
   pollMs?: number;
+  /** Aktif önizleme URL'sini YUKARI bildirir (docs/10 ekran bağlamı). */
+  onActiveUrl?: ((url: string) => void) | undefined;
 }
 
 export function usePreviewViewModel(projectId: string, ports: PreviewViewModelPorts = {}) {
@@ -33,6 +35,12 @@ export function usePreviewViewModel(projectId: string, ports: PreviewViewModelPo
 
   const [status, setStatus] = useState<PreviewStatus>(IDLE);
   const [error, setError] = useState('');
+
+  // docs/10: emre iliştirilecek ekran bağlamı için aktif URL bildirilir.
+  const report = ports.onActiveUrl;
+  useEffect(() => {
+    report?.(status.running ? status.url ?? '' : '');
+  }, [status.running, status.url, report]);
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {

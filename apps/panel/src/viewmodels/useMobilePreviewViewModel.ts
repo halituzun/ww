@@ -16,6 +16,8 @@ export interface MobilePreviewPorts {
   stopSession?: typeof stopMobileSession;
   tapSession?: typeof tapMobileSession;
   pollMs?: number;
+  /** Aktif oturumu YUKARI bildirir (docs/10 ekran bağlamı). */
+  onActiveSession?: ((sessionId: string) => void) | undefined;
 }
 
 const EMPTY: MobileTargets = { avds: [], devices: [] };
@@ -39,6 +41,10 @@ export function useMobilePreviewViewModel(
   const [frameDataUrl, setFrameDataUrl] = useState('');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+
+  // docs/10: emre iliştirilecek ekran bağlamı için aktif oturum bildirilir.
+  const report = ports.onActiveSession;
+  useEffect(() => { report?.(sessionId); }, [sessionId, report]);
 
   useEffect(() => {
     let active = true;

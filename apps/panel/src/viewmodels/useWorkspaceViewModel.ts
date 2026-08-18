@@ -1,3 +1,4 @@
+import { withScreenContext } from './command-context.js';
 import { loadSignal } from './workspace-signals.js';
 import type { PanelTab } from '../services/tabs.js';
 // Çalışma alanı ekranının ViewModel'i (docs/09 MVVM).
@@ -172,11 +173,16 @@ export function useWorkspaceViewModel() {
 
   const statusCounts = useMemo(() => countTaskStatuses(tasks), [tasks]);
 
-  const sendCommand = useCallback(async () => {
+  /**
+   * docs/10: "aktif ekran bağlamı emre iliştirilir". Bağlamsız emir
+   * ("gördüğüm şu ekranda X'i değiştir") PM için anlamsızdır ve soru sormak
+   * zorunda bırakır — her soru bir tur ve bir model çağrısı demektir.
+   */
+  const sendCommand = useCallback(async (screenContext = '') => {
     if (!projectId || message.trim() === '') return;
     setMessageStatus('Gönderiliyor…');
     try {
-      await sendUserCommand(projectId, message);
+      await sendUserCommand(projectId, withScreenContext(message, screenContext));
       setMessage('');
       setMessageStatus('Mesaj gönderildi');
     } catch (reason) {

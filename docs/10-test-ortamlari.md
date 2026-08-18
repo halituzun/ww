@@ -105,4 +105,8 @@ Emülatör **host'ta** çalışır (Docker'a girmez); gereksinimler ve akış:
   değildir.)*
 - Test ortamındayken kullanıcının verdiği emirler normal akışla PM'e gider;
   "gördüğüm şu ekranda X'i değiştir" türü emirler için aktif ekran bağlamı
-  (hangi route/ekran açık) emre iliştirilir.
+  (hangi route/ekran açık) emre iliştirilir. *(2026-08-18'de uygulandı:
+  `sendUserCommand` yalnız METİN taşıyordu ve bağlamsız emir PM'i soru
+  sormaya zorluyordu — her soru bir tur ve bir model çağrısı. Bağlam AYRI bir
+  `[panel bağlamı]` bloğu olarak eklenir; metne karıştırmak PM'e kullanıcının
+  yazdığı sanılan bir cümle verirdi.)*

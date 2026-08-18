@@ -7,13 +7,16 @@ import {
 } from '../viewmodels/useMobilePreviewViewModel.js';
 import { deviceTapPoint } from '../viewmodels/tap-coordinates.js';
 
-export function MobilePreviewPanel({ projectId, ports }: {
+export function MobilePreviewPanel({ projectId, ports, onActiveSession }: {
   /** Verilirse docs/10'un proje başına sınırı ve yaşam döngüsü olayları
    * devreye girer. */
   readonly projectId?: string | undefined;
   readonly ports?: MobilePreviewPorts;
+  /** docs/10: emre iliştirilecek aktif ekran bağlamı için. */
+  readonly onActiveSession?: ((sessionId: string) => void) | undefined;
 }) {
-  const vm = useMobilePreviewViewModel(projectId, ports);
+  // Bildirim ViewModel'de yapılır: docs/09 View'da yan etki yasaklar.
+  const vm = useMobilePreviewViewModel(projectId, { ...ports, onActiveSession });
   const choices = [...vm.targets.devices, ...vm.targets.avds];
 
   return (
