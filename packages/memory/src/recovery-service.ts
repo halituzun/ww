@@ -1,4 +1,6 @@
 import {
+  fileLockKey,
+  releaseFileLock,
   listLatestTaskEffectsByStates,
   appendEffectVersion,
   appendAgentVersion,
@@ -18,6 +20,7 @@ import { NIL_UUID, canonicalSha256V1, type EntityId } from '@ww/shared';
 import { planQueueRefill } from './queue-refill.js';
 import { DEFAULT_RECOVERY_GRACE_MS, isRecoverableStale } from './recovery-staleness.js';
 import { planEffectReconciliation } from './abandoned-effects.js';
+import { plannedLockReleases } from './recovered-file-locks.js';
 
 export interface RecoveryClock { now(): string; }
 
@@ -125,6 +128,10 @@ export class RecoveryService {
         // replay-safe olanlar kapatılır; tekrarı güvenli olmayan etki
         // otomatik çözülmez (bkz. abandoned-effects.ts).
         await this.#reconcileAbandonedEffects(task.task_id, now);
+        // docs/07: kurtarmada KİLİTLER DE BIRAKILIR. Bırakılmazsa ölü
+        // denemenin kilitleri TTL dolana dek durur (~8,5 dk) ve hemen kuyruğa
+        // alınan görev kendi dosyalarını kilitli bulup çalışamaz.
+        await this.#releaseDeadTaskLocks(task);
         await enqueueTask(this.#redis, `ww:queue:${projectId}`, task.task_id);
         requeuedTaskIds.push(task.task_id);
         streamRepairedTaskIds.push(task.task_id);
@@ -198,6 +205,28 @@ export class RecoveryService {
       });
     }
     return plan.escalate.length;
+  }
+
+
+  /**
+   * Ölü denemenin dosya kilitlerini bırakır. `releaseFileLock` sahiplik
+   * kontrollüdür: kilidi başka bir deneme devralmışsa çağrı etkisizdir, yani
+   * canlı bir işin kilidi ÇALINAMAZ.
+   */
+  async #releaseDeadTaskLocks(
+    task: Readonly<{
+      project_id: string;
+      target_files: readonly string[];
+      assignment_attempt_id: string;
+    }>,
+  ): Promise<number> {
+    const plan = plannedLockReleases(task.target_files, task.assignment_attempt_id, NIL_UUID);
+    let released = 0;
+    for (const entry of plan) {
+      const key = fileLockKey(task.project_id, entry.fileHash);
+      if (await releaseFileLock(this.#redis, key, entry.owner)) released += 1;
+    }
+    return released;
   }
 
 }
