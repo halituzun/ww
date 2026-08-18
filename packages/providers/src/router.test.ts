@@ -206,6 +206,61 @@ describe('ModelRouter', () => {
   });
 
 
+  // docs/04 fallback TETİKLEYİCİLERİ: "... zaman aşımı, `health_status='down'`".
+  // Sağlık durumu yazılıyor ve panelde gösteriliyordu ama HİÇBİR yönlendirme
+  // kararı onu okumuyordu: düşmüş olduğu BİLİNEN sağlayıcıya istek gidiyor,
+  // zaman aşımı kadar bekleniyor ve ancak ondan sonra yedeğe geçiliyordu.
+  it('down saglayiciyi atlar, cagri bile yapmaz', async () => {
+    const down = new MockProvider({ script: [{ content: 'olmamali', toolCalls: [] }] });
+    const good = new MockProvider({ script: [{ content: 'saglikli', toolCalls: [] }] });
+    const rows: ApiUsageRow[] = [];
+    const router = new ModelRouter(new Map([['down', down], ['good', good]]), {
+      fallbacks: () => ['good:m'],
+      usageSink: async (row) => { rows.push(row); },
+      providerHealth: (providerId) => (providerId === 'down' ? 'down' : 'ok'),
+    });
+
+    const res = await router.complete('down:m', {
+      messages: [], meta: { purpose: 'council', projectId: meta.projectId, agentId: meta.agentId },
+    });
+
+    expect(res.result.content).toBe('saglikli');
+    expect(res.fallbackUsed).toBe(true);
+    // Düşmüş sağlayıcıya HİÇ çağrı yapılmadı: atlanan deneme kontör de yazmaz.
+    expect(rows.every((row) => row.provider !== 'down')).toBe(true);
+  });
+
+  // 'degraded' düşmüş DEĞİLDİR: yavaş ya da hatalı ama hâlâ cevap veriyor.
+  // Onu da atlamak, tek sağlayıcılı kurulumda sistemi durdururdu.
+  it('degraded saglayiciyi atlamaz', async () => {
+    const slow = new MockProvider({ script: [{ content: 'yine de calisti', toolCalls: [] }] });
+    const router = new ModelRouter(new Map([['slow', slow]]), {
+      fallbacks: () => [],
+      usageSink: async () => undefined,
+      providerHealth: () => 'degraded',
+    });
+
+    expect((await router.complete('slow:m', {
+      messages: [], meta: { purpose: 'council', projectId: meta.projectId, agentId: meta.agentId },
+    })).result.content).toBe('yine de calisti');
+  });
+
+  // Sağlık kaydı YANILABİLİR (1 token'lık ping'in düşmesi gerçek isteğin de
+  // düşeceği anlamına gelmez). Zincirin tamamı 'down' ise hiç denemeden pes
+  // etmek, kendi kaydımız yüzünden çalışan bir sağlayıcıyı kapatmak olurdu.
+  it('zincirin tamami down ise son care olarak yine de dener', async () => {
+    const only = new MockProvider({ script: [{ content: 'aslinda ayakta', toolCalls: [] }] });
+    const router = new ModelRouter(new Map([['only', only]]), {
+      fallbacks: () => [],
+      usageSink: async () => undefined,
+      providerHealth: () => 'down',
+    });
+
+    expect((await router.complete('only:m', {
+      messages: [], meta: { purpose: 'council', projectId: meta.projectId, agentId: meta.agentId },
+    })).result.content).toBe('aslinda ayakta');
+  });
+
   // docs/04: "429 (rate limit, 2 DENEMEDEN SONRA)". Geçici bir 429'da hemen
   // yedeğe geçmek fallback'i boşa harcar ve çoğu zaman aynı kotaya çarpar;
   // sağlayıcı "yavaşla" diyor, "gitme" demiyor.

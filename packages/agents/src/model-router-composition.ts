@@ -10,6 +10,10 @@ export interface DurableModelRouterOptions {
   readonly redis: WwRedis;
   readonly usageSink: UsageSink;
   readonly fallbacks: RouterOptions['fallbacks'];
+  /** docs/07 sağlayıcı başına istek/dakika. Verilmezse sınır YOKTUR. */
+  readonly rateLimiter?: RouterOptions['rateLimiter'];
+  /** docs/04 `health_status='down'` fallback tetikleyicisi. */
+  readonly providerHealth?: RouterOptions['providerHealth'];
   readonly timeoutMs?: number;
   readonly effect?: Omit<EffectRunnerOptions, 'escalationPort'>;
   readonly escalationPort: EffectEscalationPort;
@@ -33,6 +37,10 @@ export function createDurableModelRouter(
   const router = new Router(providers, {
     fallbacks: options.fallbacks,
     usageSink: options.usageSink,
+    // exactOptionalPropertyTypes: undefined'ı GEÇMEK, alanı hiç vermemekle
+    // aynı şey değil; koşullu yayılım şart.
+    ...(options.rateLimiter === undefined ? {} : { rateLimiter: options.rateLimiter }),
+    ...(options.providerHealth === undefined ? {} : { providerHealth: options.providerHealth }),
     ...(options.timeoutMs === undefined ? {} : { timeoutMs: options.timeoutMs }),
     invocationEffect,
   });

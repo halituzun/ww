@@ -98,6 +98,14 @@ export interface Phase8RuntimeCompositionInput {
   readonly redis: WwRedis;
   readonly providers: Map<string, LlmProvider>;
   readonly fallbacks: RouterOptions['fallbacks'];
+  /**
+   * docs/07 sağlayıcı başına istek/dakika ve docs/04 `health_status='down'`
+   * fallback tetikleyicisi. İkisi de orchestration-assembly'de kuruluyordu
+   * ama buraya kadar TAŞINMIYORDU: üretim yolundaki yönlendirici ne hız
+   * sınırı ne de sağlık kapısı görüyordu.
+   */
+  readonly rateLimiter?: RouterOptions['rateLimiter'] | undefined;
+  readonly providerHealth?: RouterOptions['providerHealth'] | undefined;
   readonly communication: CommunicationService;
   readonly internalAuthentication: PrincipalAuthentication;
   readonly providerContext: ProviderEffectContext;
@@ -168,6 +176,8 @@ export function createPhase8RuntimeComposition(
     redis: input.redis,
     usageSink: input.usageSink,
     fallbacks: input.fallbacks,
+    ...(input.rateLimiter === undefined ? {} : { rateLimiter: input.rateLimiter }),
+    ...(input.providerHealth === undefined ? {} : { providerHealth: input.providerHealth }),
     escalationPort: escalation,
     providerContext: input.providerContext,
   });
@@ -296,6 +306,8 @@ export function createPhase9RuntimeComposition(
     redis: input.redis,
     usageSink: input.usageSink,
     fallbacks: input.fallbacks,
+    ...(input.rateLimiter === undefined ? {} : { rateLimiter: input.rateLimiter }),
+    ...(input.providerHealth === undefined ? {} : { providerHealth: input.providerHealth }),
     escalationPort: escalation,
     providerContext: input.providerContext,
     // Kalıcı kayıt sansürlü kalır; ham sebep YALNIZCA yerel loga düşer.

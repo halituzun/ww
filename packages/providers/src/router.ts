@@ -29,6 +29,13 @@ export interface RouterOptions {
    * yedeğe geçmek fallback'i boşa harcar ve çoğu zaman aynı kotaya çarpar.
    */
   rateLimitRetries?: number;
+  /**
+   * Sağlayıcının son bilinen sağlığı (`api_providers.health_status`).
+   * docs/04 bunu fallback TETİKLEYİCİSİ sayar: düşmüş olduğu bilinen
+   * sağlayıcıya istek göndermek, zaman aşımı kadar beklemek ve ancak ondan
+   * sonra yedeğe geçmek demektir. Verilmezse sağlık gözetilmez.
+   */
+  providerHealth?: (providerId: string) => string;
   usageSink: UsageSink;
   timeoutMs?: number;
   invocationEffect?: ProviderInvocationEffect;
@@ -94,7 +101,24 @@ export class ModelRouter {
     const chain = [modelRef, ...this.opts.fallbacks(modelRef)];
     let lastErr: unknown = new Error(`kullanılabilir sağlayıcı yok: ${modelRef}`);
 
-    for (const [i, ref] of chain.entries()) {
+    // docs/04: `health_status='down'` bir fallback tetikleyicisidir. Sıra
+    // KORUNUR (indeks fallbackAttempt ve fallback_used'a yazılır); yalnızca
+    // düşmüş sağlayıcılar elenir.
+    //
+    // 'degraded' elenmez: yavaş/hatalı ama hâlâ cevap veriyor demektir.
+    //
+    // Zincirin tamamı düşmüşse eleme YAPILMAZ: sağlık kaydı yanılabilir
+    // (1 token'lık ping'in düşmesi gerçek isteğin de düşeceğini kanıtlamaz)
+    // ve hiç denemeden pes etmek, kendi kaydımız yüzünden ayakta olan bir
+    // sağlayıcıyı kapatmak olurdu.
+    const entries = chain.map((ref, index) => ({ ref, index }));
+    const health = this.opts.providerHealth;
+    const healthy = health === undefined
+      ? entries
+      : entries.filter(({ ref }) => health(splitRef(ref).providerId) !== 'down');
+    const candidates = healthy.length > 0 ? healthy : entries;
+
+    for (const { ref, index: i } of candidates) {
       const { providerId, model } = splitRef(ref);
       const provider = this.providers.get(providerId);
       if (!provider) continue;

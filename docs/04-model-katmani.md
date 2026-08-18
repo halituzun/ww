@@ -76,6 +76,13 @@ Normalizasyon kuralları:
   `api_providers.is_default` sağlayıcının varsayılan modeli.
 - Tetikleyiciler: bağlantı hatası, 5xx, 429 (rate limit, 2 denemeden sonra),
   zaman aşımı, `health_status='down'`.
+- `health_status` kapısının iki emniyet kuralı (uygulama kararı):
+  `degraded` ELENMEZ (yavaş ama cevap veriyor), ve zincirin TAMAMI `down` ise
+  eleme yapılmaz — son çare olarak yine denenir. Sağlık kaydı yanılabilir
+  (1 token'lık ping'in düşmesi gerçek isteğin de düşeceğini kanıtlamaz) ve
+  hiç denemeden pes etmek, kendi kaydımız yüzünden ayakta olan bir sağlayıcıyı
+  kapatmak olurdu. Aynı nedenle sağlık görüntüsü bayatlarsa (>5 dk) `unknown`
+  sayılır: ölmüş bir tarayıcı hiçbir sağlayıcıyı kalıcı kara listeye alamaz.
 - Fallback kullanımı gizlenmez: `api_usage.status='fallback_used'` + `events` kaydı +
   panelde uyarı rozeti. Konsey üyeleri için istisna: üye çeşitliliği bozulmasın diye
   aynı sağlayıcı içinde model düşümü tercih edilir; sağlayıcı tamamen düştüyse üye

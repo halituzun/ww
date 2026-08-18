@@ -24,10 +24,11 @@ import { createExecutionErrorRecorder } from './execution-error-recorder.js';
 import { renderContextPack } from './context-pack-render.js';
 import { classifyArtifact, classifyLayer } from './artifact-classify.js';
 import { buildAgentCapabilities } from './agent-capabilities.js';
-import { appendArtifact, appendEvent, appendPromptInputSnapshot, getPromptVersion, getTaskCausalCursor, getAssignmentAttempt, getLatestTask, listLatestAgents } from '@ww/db';
+import { appendArtifact, appendEvent, appendPromptInputSnapshot, getPromptVersion, getTaskCausalCursor, getAssignmentAttempt, getLatestTask, listLatestAgents, listLatestApiProviders } from '@ww/db';
 import type { RuntimeModels } from './runtime-context.js';
 import type { Phase9RuntimeCompositionInput } from './runtime-composition.js';
 import { createLateBoundPort, type LateBoundPort } from './late-binding.js';
+import { ProviderHealthCache } from './provider-health-cache.js';
 import type { LateBoundServices } from './late-bind-runtime.js';
 import { providerRequestsPerMinute } from './provider-rate.js';
 
@@ -162,6 +163,18 @@ export async function createOrchestrationComposition(
     execute: (...args: never[]) => never;
   }> = createLateBoundPort('toolExecutor');
 
+  // Yönlendiricinin zincir kararı senkrondur; sağlık ClickHouse'ta durur.
+  // Arada senkron okunabilen, bayatlayınca kendini geçersiz kılan bir görüntü
+  // gerekir.
+  const providerHealth = new ProviderHealthCache(
+    () => listLatestApiProviders(input.ch),
+    { onError: (reason) => {
+      // Sağlık okunamıyorsa kapı AÇIK kalır; sessizce kalmaz.
+      const detail = reason instanceof Error ? reason.message : String(reason);
+      console.warn(`[ww] saglayici sagligi okunamadi: ${detail}`);
+    } },
+  );
+
   const composition = {
     ch: input.ch,
     redis: input.redis,
@@ -184,6 +197,12 @@ export async function createOrchestrationComposition(
     // beri sınırsız çıkış gerçek bir 429 riski; 429'lar fallback'i tetikleyip
     // yükü daha da artırır.
     rateLimiter: new ProviderRateLimiter(() => providerRequestsPerMinute()),
+    // docs/04: `health_status='down'` bir fallback tetikleyicisidir. Sağlık
+    // taraması bu değeri yazıyor ve panel gösteriyordu, ama zincir kararına
+    // hiç girmiyordu: düşmüş olduğu BİLİNEN sağlayıcı yine deneniyor,
+    // zaman aşımı kadar bekleniyor, ancak ondan sonra yedeğe geçiliyordu.
+    // Önbellek bilgisizliği "kapalı" saymaz (bkz. provider-health-cache.ts).
+    providerHealth: (providerId: string) => providerHealth.statusOf(providerId),
     snapshotBuilder: new TaskContextSnapshotBuilder(input.ch),
     executor,
     toolFactory: createToolPortFactory({
