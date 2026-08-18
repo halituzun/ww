@@ -13,6 +13,7 @@ import {
 } from './workspace-logic.js';
 import { createLiveEventSubscription } from './live-subscription.js';
 import { replayAt } from './timeline-replay.js';
+import { describeLoadFailures } from './workspace-load.js';
 import type { ConnectionState } from './live-connection.js';
 import { fetchBudgetReport, EMPTY_BUDGET_REPORT, type BudgetReport } from '../services/budget.js';
 import { fetchAuditReport, EMPTY_AUDIT_REPORT, type AuditReport } from '../services/audit.js';
@@ -93,33 +94,40 @@ export function useWorkspaceViewModel() {
     if (!projectId) return;
     let active = true;
     const load = async () => {
-      // Uçlardan biri artık hatayı yutmuyor; Promise.all içinde reddedince
-      // TÜM yükleme düşer. Yakalamazsak hiçbir yüzey güncellenmez ve panel
-      // sessizce donar — düzelttiğimiz yalanın yerine daha kötüsü geçerdi.
-      let loaded;
-      try {
-        loaded = await Promise.all([
+      // HER UÇ AYRI DEĞERLENDİRİLİR. Tek `Promise.all` ile hepsini
+      // reddettirmek, bir uç düştüğünde görevleri ve dosyaları da
+      // güncellememek demekti: panel sessizce donardı. `allSettled` ile
+      // gelen gösterilir, düşen ADIYLA söylenir; düşen uç kendinden önceki
+      // veriyi SİLMEZ (boş liste yazmak "artık sağlayıcı yok" demek olurdu).
+      const [project, nextTasks, nextUsage, nextFiles, health, artifacts] =
+        await Promise.allSettled([
           fetchProject(projectId), fetchTasks(projectId), fetchUsage(projectId),
           fetchFiles(projectId), fetchProviderHealth(projectId), fetchApiArtifacts(projectId),
         ]);
-      } catch (reason) {
-        if (active) {
-          setWorkspaceError(
-            reason instanceof Error ? reason.message : 'Çalışma alanı verisi alınamadı',
-          );
-        }
-        return;
-      }
-      const [project, nextTasks, nextUsage, nextFiles, health, artifacts] = loaded;
       if (!active) return;
-      setWorkspaceError('');
-      if (project) setProjectStatus(project.status);
-      setTasks(nextTasks);
-      setUsage(nextUsage);
-      setFiles(nextFiles);
-      setSelectedFile((current) => pickSelectedFile(current, nextFiles));
-      setProviderHealth(health);
-      setApiArtifacts(artifacts);
+
+      const failed: string[] = [];
+      const failedName = (result: PromiseSettledResult<unknown>, name: string): void => {
+        if (result.status === 'rejected') failed.push(name);
+      };
+      failedName(project, 'proje');
+      failedName(nextTasks, 'görevler');
+      failedName(nextUsage, 'kontör');
+      failedName(nextFiles, 'dosyalar');
+      failedName(health, 'sağlayıcı sağlığı');
+      failedName(artifacts, 'API uçları');
+
+      if (project.status === 'fulfilled' && project.value) setProjectStatus(project.value.status);
+      if (nextTasks.status === 'fulfilled') setTasks(nextTasks.value);
+      if (nextUsage.status === 'fulfilled') setUsage(nextUsage.value);
+      if (nextFiles.status === 'fulfilled') {
+        const files = nextFiles.value;
+        setFiles(files);
+        setSelectedFile((current) => pickSelectedFile(current, files));
+      }
+      if (health.status === 'fulfilled') setProviderHealth(health.value);
+      if (artifacts.status === 'fulfilled') setApiArtifacts(artifacts.value);
+      setWorkspaceError(describeLoadFailures(failed));
     };
     void load();
     const timer = window.setInterval(() => { void load(); }, WORKSPACE_POLL_MS);

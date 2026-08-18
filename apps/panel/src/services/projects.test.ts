@@ -6,6 +6,7 @@ import {
   fetchFiles,
   fetchProjects,
   fetchTasks,
+  fetchProviderHealth,
   fetchUsage,
   sendUserCommand,
   updateProjectStatus,
@@ -64,15 +65,16 @@ describe('okuma uçları', () => {
     expect(urlOf(mock)).toBe(`${DEFAULT_API_BASE}${expected}`);
   });
 
-  // Okuma hatası panelin akışını kesmemeli.
-  // DEĞİŞTİ: `fetchTasks` artık hatayı yutmuyor — boş dizi döndürmek panele
-  // "henüz görev yok" dedirtiyordu ve bu, veri gelmediğinde yalandı.
-  // `fetchUsage` hâlâ null'a düşüyor: kontör ROZETİ yokluğu sessizce
-  // gizleyebilir, ama panonun kendisi ayrı bir uçtan besleniyor ve o
-  // hatayı gösteriyor.
-  it('kontör ucu hata verirse bos sonuc doner', async () => {
+  // DEĞİŞTİ: bu üç uç de artık hatayı YUTMUYOR. Yutulduğunda "veri yok" ile
+  // "veri alınamadı" aynı görünüyordu; sağlayıcı sağlığında bu, rozetin
+  // yokluğunu "her şey yolunda" diye okutuyordu (docs/04 düşen sağlayıcının
+  // KIRMIZI görünmesini ister). Dayanıklılık artık ViewModel'de: her uç ayrı
+  // değerlendirilir, düşen adıyla söylenir, diğerleri güncellenmeye devam eder.
+  it('kontör, saglik ve API uclari hatayi yutmaz', async () => {
     const fetchImpl = vi.fn(async () => jsonResponse({}, { status: 500 })) as unknown as typeof fetch;
-    await expect(fetchUsage('p1', { fetchImpl })).resolves.toBeNull();
+    await expect(fetchUsage('p1', { fetchImpl })).rejects.toThrow();
+    await expect(fetchProviderHealth('p1', { fetchImpl })).rejects.toThrow();
+    await expect(fetchApiArtifacts('p1', { fetchImpl })).rejects.toThrow();
   });
 
   it('proje kimliğini URL için kodlar', async () => {

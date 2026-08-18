@@ -126,17 +126,23 @@ export const fetchProject = (projectId: string, options: RequestOptions = {}): P
 export const fetchTasks = (projectId: string, options: RequestOptions = {}): Promise<Task[]> =>
   getJson<Task[]>(scope(projectId, '/tasks'), options);
 
+// HATAYI YUTMAZ: kontör verisi gelmediğinde hiçbir şey çizilmiyordu ve
+// "harcama yok" ile "harcama bilinmiyor" aynı görünüyordu.
 export const fetchUsage = (projectId: string, options: RequestOptions = {}): Promise<Usage | null> =>
-  getJsonOr<Usage | null>(scope(projectId, '/usage'), null, options);
+  getJson<Usage | null>(scope(projectId, '/usage'), options);
 
 export const fetchFiles = (projectId: string, options: RequestOptions = {}): Promise<FileIndex[]> =>
   getJson<FileIndex[]>(scope(projectId, '/files'), options);
 
+// HATAYI YUTMAZ: boş dizi hiç rozet çizdirmiyordu ve rozetin YOKLUĞU
+// "her şey yolunda" diye okunuyordu — docs/04 düşen sağlayıcının panelde
+// kırmızı görünmesini ister.
 export const fetchProviderHealth = (projectId: string, options: RequestOptions = {}): Promise<ProviderHealth[]> =>
-  getJsonOr<ProviderHealth[]>(scope(projectId, '/provider-health'), [], options);
+  getJson<ProviderHealth[]>(scope(projectId, '/provider-health'), options);
 
+// HATAYI YUTMAZ: boş liste API konsoluna "bu projede uç yok" dedirtiyordu.
 export const fetchApiArtifacts = (projectId: string, options: RequestOptions = {}): Promise<ApiArtifact[]> =>
-  getJsonOr<ApiArtifact[]>(scope(projectId, '/artifacts?type=api_endpoint'), [], options);
+  getJson<ApiArtifact[]>(scope(projectId, '/artifacts?type=api_endpoint'), options);
 
 /* --------------------------------- yazma --------------------------------- */
 // Yazma uçları sessizce yutmaz: hata çağırana döner, ViewModel kullanıcıya gösterir.

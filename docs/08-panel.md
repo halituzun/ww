@@ -106,6 +106,14 @@ anında kuruluyor ve panelde ham kimlikle değil BAŞLIKLA gösteriliyor.)*
 
 ## API Yönetimi ve Kontör
 
+*(2026-08-18: `/usage`, `/provider-health` ve `/artifacts` uçları panelde
+hatayı YUTUYORDU. Sağlayıcı sağlığı alınamadığında hiç rozet çizilmiyor ve
+rozetin YOKLUĞU "her şey yolunda" diye okunuyordu — oysa docs/04 düşen
+sağlayıcının kırmızı görünmesini ister. Üçü de artık hatayı yukarı taşıyor;
+dayanıklılık ViewModel'e taşındı: yükleme `Promise.allSettled` ile yapılır,
+gelen gösterilir, düşen ADIYLA söylenir ("Alınamadı: kontör, sağlayıcı
+sağlığı") ve düşen uç kendinden önceki veriyi silmez.)*
+
 - **Sağlayıcı listesi**: kart başına — ad, sağlık ışığı (yeşil/sarı/kırmızı),
   aktif/pasif anahtarı, model listesi, maskeli anahtar (`sk-…abc4`), fallback sırası
   (sürükle-bırak).
