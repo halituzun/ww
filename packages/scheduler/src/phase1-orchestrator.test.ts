@@ -74,6 +74,54 @@ describe('Phase 1 orchestrator', () => {
     expect(seen[0]).toContain('MVVM ihlali');
   });
 
+  // docs/05: "Ret/iptal/kurtarma → git checkout . && git clean -fd (yarım iş
+  // kuralı)." Kurtarma tarafı bağlandı; RET tarafı bağlanmamıştı.
+  //
+  // Neden önemli: yeni denemenin prompt'u "önceki deneme şu yüzden düştü"
+  // diyor ama worker DOSYALARIN zaten önceki denemenin kodunu içerdiğini
+  // bilmiyor. Temiz sanıp yazınca yinelenen kod ya da yarım birleşim çıkar.
+  it('ret sonrasi calisma agacini temizler', async () => {
+    const calls: string[] = [];
+    const s = scheduler({
+      resetWorkspace: async () => { calls.push('reset'); },
+    } as never);
+    let run = 0;
+    const runtime: Phase1RuntimePort = {
+      work: async () => ({ kind: 'report', summary: 'ok' }),
+      verify: async () => ({ verdict: verdict(++run === 1 ? 'reject' : 'approve'), diff: 'diff' }),
+    };
+    await runPhase1Orchestrator({ taskId: id(2), brief, scheduler: s, runtime });
+    expect(calls).toEqual(['reset']);
+  });
+
+  it('kapi dususunde de temizler', async () => {
+    const calls: string[] = [];
+    let gateRun = 0;
+    const s = scheduler({
+      resetWorkspace: async () => { calls.push('reset'); },
+      gate: async () => ({ passed: ++gateRun > 1, evidenceRefs: ['gate'] }),
+    } as never);
+    const runtime: Phase1RuntimePort = {
+      work: async () => ({ kind: 'report', summary: 'ok' }),
+      verify: async () => ({ verdict: verdict('approve'), diff: 'diff' }),
+    };
+    await runPhase1Orchestrator({ taskId: id(2), brief, scheduler: s, runtime });
+    expect(calls).toEqual(['reset']);
+  });
+
+  // Temizleyici bağlanmamışsa akış eskisi gibi çalışır: isteğe bağlı yetenek
+  // zorunlu bağımlılığa dönüşmemeli.
+  it('temizleyici yoksa akis bozulmaz', async () => {
+    const s = scheduler();
+    let run = 0;
+    const runtime: Phase1RuntimePort = {
+      work: async () => ({ kind: 'report', summary: 'ok' }),
+      verify: async () => ({ verdict: verdict(++run === 1 ? 'reject' : 'approve'), diff: 'diff' }),
+    };
+    await expect(runPhase1Orchestrator({ taskId: id(2), brief, scheduler: s, runtime }))
+      .resolves.toMatchObject({ status: 'done' });
+  });
+
   it('ret sonrası yeni attempt ile düzeltme yapıp temiz terminale ulaşır', async () => {
     const s = scheduler();
     let run = 0;

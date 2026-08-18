@@ -160,3 +160,40 @@ describe('createGateOperations', () => {
       .resolves.toMatchObject({ commitHash: 'abc1234def' });
   });
 });
+
+// docs/05 yarım iş kuralı: ret/kapı düşüşünde çalışma ağacı son commit'e döner.
+// Reddedilen denemenin dosyaları kalırsa yeni worker, prompt'unda YAZMAYAN bir
+// kodun üstüne yazar.
+describe('resetWorkspace', () => {
+  it('cozulmus workspace kokunde temizlik kosar', async () => {
+    const { gateRunner, git } = fakes();
+    const roots: string[] = [];
+    const ops = createGateOperations({
+      workspaceRoot: '/w',
+      taskDetails: details,
+      // Kök `initialize()` SONRASI okunur: sembolik bağ çözülmeden temizlik
+      // yanlış dizinde koşabilirdi.
+      resetWorkingTree: async (root: string) => { roots.push(root); },
+    } as never);
+    let initialized = false;
+    ops.bind({
+      gateRunner,
+      git,
+      workspace: {
+        initialize: async () => { initialized = true; return undefined; },
+        get root() { return initialized ? '/w/real' : '/w/raw'; },
+      } as never,
+    });
+
+    await (ops as unknown as { resetWorkspace: () => Promise<void> }).resetWorkspace();
+    expect(roots).toEqual(['/w/real']);
+  });
+
+  it('temizleyici baglanmamissa hata atmaz', async () => {
+    const { gateRunner, git } = fakes();
+    const ops = createGateOperations({ workspaceRoot: '/w', taskDetails: details });
+    ops.bind({ gateRunner, git, workspace: { initialize: async () => undefined, root: '/w' } as never });
+    await expect((ops as unknown as { resetWorkspace: () => Promise<void> }).resetWorkspace())
+      .resolves.toBeUndefined();
+  });
+});

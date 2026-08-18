@@ -4,7 +4,7 @@
 // ayrıştığında ikisi de okunur kalır ve bootstrap testleri kablolamayı
 // mock'lamak zorunda kalmaz.
 import { randomUUID } from 'node:crypto';
-import { CommandRunner, DockerSandboxAdapter, WorkspacePaths, clickHouseExecutorEventStore, dbRedisExecutorAccess } from '@ww/executor';
+import { CommandRunner, DockerSandboxAdapter, resetWorkingTree, WorkspacePaths, clickHouseExecutorEventStore, dbRedisExecutorAccess } from '@ww/executor';
 import { MemoryService, TaskContextSnapshotBuilder } from '@ww/memory';
 import {
   createAwaitUserAnswerOperation,
@@ -99,6 +99,9 @@ export async function createOrchestrationComposition(
   } as never);
 
   const gateOps = createGateOperations({
+    // docs/05 yarım iş kuralı; komutlar ve emniyetleri workspace-reset.ts'te.
+    resetWorkingTree: (workspaceRoot) =>
+      resetWorkingTree(new CommandRunner(), input.projectId, workspaceRoot),
     onCommitted: async ({ projectId, taskId, targetFiles, readFile }) => {
       // docs/06 özet katmanı: "her görev bitiminde özetleyici görev özetini
       // yazar". `summaries` canlı veritabanında TAMAMEN BOŞTU: yazıcı vardı,

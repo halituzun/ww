@@ -27,6 +27,8 @@ export interface GateEvidenceLike {
 
 export interface WorkspaceLike {
   initialize(): Promise<unknown>;
+  /** Çalışma ağacı kökü; sıfırlama git komutlarını burada koşar. */
+  readonly root: string;
   /** Denetim commit'lenen dosyanın İÇERİĞİNİ görmeli. */
   readText?(relativePath: string, offset: number, limit: number): Promise<string>;
 }
@@ -89,6 +91,8 @@ export interface GateOperationsInput {
    * Hatası commit'i düşürmez.
    */
   onCommitted?: (notice: CommittedTaskNotice) => Promise<unknown>;
+  /** docs/05: ret/kapı düşüşünde ağacı son commit'e döndürür. */
+  resetWorkingTree?: (workspaceRoot: string) => Promise<void>;
   taskDetails: (taskId: EntityId) => Promise<TaskCommitDetails>;
   /**
    * Commit sonrası üretilen çıktıları ve dosya fihristini kaydeder.
@@ -160,6 +164,17 @@ export function createGateOperations(input: GateOperationsInput) {
         evidenceRefs: gateEvidenceRefs(evidence),
         ...(failureSummary === '' ? {} : { failureSummary }),
       };
+    },
+
+    /**
+     * docs/05 yarım iş kuralı: ret/kapı düşüşünde çalışma ağacı son commit'e
+     * döner. Reddedilen denemenin dosyaları kalırsa yeni worker, prompt'unda
+     * yazmayan bir kodun üstüne yazar.
+     */
+    async resetWorkspace() {
+      const { workspace } = required();
+      await workspace.initialize();
+      await input.resetWorkingTree?.(workspace.root);
     },
 
     async commit({ taskId, attempt }: Readonly<{ taskId: EntityId; attempt: AssignmentAttemptV1 }>) {

@@ -79,7 +79,16 @@ sağlayıcı biçimine çevirir. Roller yalnızca kendine tanınan araçları g�
     `task(<task_id kısa>): <title>` + gövdede görev özeti ve agent adları.
   - Hash `tasks.commit_hash`'e ve `artifacts.commit_hash`'e yazılır.
 - Ret/iptal/kurtarma → `git checkout . && git clean -fd` (yarım iş kuralı;
-  `.ww-trash/` hariç).
+  `.ww-trash/` hariç). Komutlar ve sırası `packages/executor/src/workspace-reset.ts`
+  içinde tek yerde tanımlıdır. İki çağıran vardır:
+  - **kurtarma**: çöküş sonrası açılışta, yalnız görevi kuyruğa geri düşen
+    projeler için (`apps/server/src/workspace-recovery.ts`);
+  - **ret / kapı düşüşü**: yeni denemeye geçmeden önce
+    (`Phase1SchedulerPort.resetWorkspace`, orkestratörden çağrılır). Reddedilen
+    denemenin dosyaları diskte kalırsa yeni worker, prompt'unda YAZMAYAN bir
+    kodun üstüne yazar; temiz sanıp eklediğinde yinelenen kod ya da yarım
+    birleşim çıkar. Temizlik başarısız olursa yeniden deneme yine yapılır:
+    kirli ağaç kötüdür ama hiç denememek daha kötüdür.
 - Panel diff görünümü `git_diff` çıktısından beslenir; geri alma =
   PM'e "şu görevi geri al" emri → revert görevi açılır (`git revert <hash>`,
   yine worker+verifier çiftiyle).

@@ -17,6 +17,16 @@ export interface Phase1SchedulerPort {
   escalate(input: Readonly<{ taskId: EntityId; attempt: AssignmentAttemptV1; reason: string }>): Promise<void>;
   gate(input: Readonly<{ taskId: EntityId; attempt: AssignmentAttemptV1; targetFiles?: readonly string[] }>): Promise<Readonly<{ passed: boolean; evidenceRefs: readonly string[]; failureSummary?: string }>>;
   commit(input: Readonly<{ taskId: EntityId; attempt: AssignmentAttemptV1 }>): Promise<Readonly<{ commitHash: string }>>;
+  /**
+   * docs/05 yarım iş kuralı: "Ret/iptal/kurtarma → git checkout . &&
+   * git clean -fd". Reddedilen denemenin dosyaları diskte kalırsa yeni
+   * worker, prompt'unda YAZMAYAN bir kodun üstüne yazar: temiz sanıp
+   * ekleyince yinelenen kod ya da yarım birleşim çıkar.
+   *
+   * İSTEĞE BAĞLI: bağlanmamışsa akış eskisi gibi çalışır — isteğe bağlı
+   * yetenek zorunlu bağımlılığa dönüşmemeli.
+   */
+  resetWorkspace?(input: Readonly<{ taskId: EntityId; attempt: AssignmentAttemptV1 }>): Promise<void>;
 }
 
 export interface Phase1OrchestratorInput {
@@ -123,6 +133,11 @@ async function runAssignedLifecycle(input: Phase1OrchestratorInput & { brief: Ta
         evidenceRefs: checked.verdict.evidenceRefs,
         ...(verdictReason === '' ? {} : { resultSummary: verdictReason }),
       });
+      // docs/05: reddedilen denemenin dosyaları diskte kalmaz. Temizlik
+      // BAŞARISIZ olursa yeniden deneme yine yapılır: kirli ağaç kötüdür ama
+      // hiç denememek daha kötüdür.
+      await input.scheduler.resetWorkspace?.({ taskId: input.taskId, attempt })
+        .catch(() => undefined);
       attempt = await input.scheduler.reassign({ taskId: input.taskId, reason: 'retry_after_rejection', evidenceRefs: checked.verdict.evidenceRefs });
       continue;
     }
@@ -149,6 +164,8 @@ async function runAssignedLifecycle(input: Phase1OrchestratorInput & { brief: Ta
         taskId: input.taskId, attempt, action: 'gate_failed', evidenceRefs: gate.evidenceRefs,
         ...(gateReason === '' ? {} : { resultSummary: gateReason }),
       });
+      await input.scheduler.resetWorkspace?.({ taskId: input.taskId, attempt })
+        .catch(() => undefined);
       attempt = await input.scheduler.reassign({ taskId: input.taskId, reason: 'retry_after_gate_failure', evidenceRefs: gate.evidenceRefs });
       continue;
     }
