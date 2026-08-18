@@ -45,70 +45,70 @@
   },
   {
     "symbol": "apps/server/src/process-pool.ts:PortPoolError.portOf",
-    "reason": "Zamanlayıcı/agent yeteneği yazılmış ve testli, ama bugün hiçbir üretim yolu çağırmıyor. GERÇEK BOŞLUK — metot taraması 2026-08-18'de eklendiğinde ortaya çıktı; ayrı turlarda tek tek ele alınacak."
+    "reason": "HİÇ BAĞLANMAMIŞ YETENEK: ne üretim çağrısı ne de özel bir ikizi var. Gerçek boşluk; gizlenmiyor, görünür kılınıyor."
   },
   {
     "symbol": "packages/agents/src/communication-service.ts:CommunicationService.pollInbox",
-    "reason": "Zamanlayıcı/agent yeteneği yazılmış ve testli, ama bugün hiçbir üretim yolu çağırmıyor. GERÇEK BOŞLUK — metot taraması 2026-08-18'de eklendiğinde ortaya çıktı; ayrı turlarda tek tek ele alınacak."
+    "reason": "PARALEL GENEL YÜZEY: üretim yolu bu sınıfın ÖZEL metodunu kullanıyor (ör. drainOnce → #processItem); bu genel metot yalnız testlerin çağırdığı ikinci bir kapı. Riski şudur: test bu yüzeyden geçer ama üretimin koştuğu yol denenmemiş kalır. Kaldırmak/birleştirmek ayrı bir tur."
   },
   {
     "symbol": "packages/agents/src/inbox-worker.ts:InboxWorker.processNext",
-    "reason": "Zamanlayıcı/agent yeteneği yazılmış ve testli, ama bugün hiçbir üretim yolu çağırmıyor. GERÇEK BOŞLUK — metot taraması 2026-08-18'de eklendiğinde ortaya çıktı; ayrı turlarda tek tek ele alınacak."
+    "reason": "PARALEL GENEL YÜZEY: üretim yolu bu sınıfın ÖZEL metodunu kullanıyor (ör. drainOnce → #processItem); bu genel metot yalnız testlerin çağırdığı ikinci bir kapı. Riski şudur: test bu yüzeyden geçer ama üretimin koştuğu yol denenmemiş kalır. Kaldırmak/birleştirmek ayrı bir tur."
   },
   {
     "symbol": "packages/executor/src/git-workspace.ts:GitWorkspace.initializeWebStarter",
-    "reason": "Zamanlayıcı/agent yeteneği yazılmış ve testli, ama bugün hiçbir üretim yolu çağırmıyor. GERÇEK BOŞLUK — metot taraması 2026-08-18'de eklendiğinde ortaya çıktı; ayrı turlarda tek tek ele alınacak."
+    "reason": "HİÇ BAĞLANMAMIŞ YETENEK: ne üretim çağrısı ne de özel bir ikizi var. Gerçek boşluk; gizlenmiyor, görünür kılınıyor."
   },
   {
     "symbol": "packages/executor/src/tool-registry.ts:ToolRegistry.validator",
-    "reason": "Zamanlayıcı/agent yeteneği yazılmış ve testli, ama bugün hiçbir üretim yolu çağırmıyor. GERÇEK BOŞLUK — metot taraması 2026-08-18'de eklendiğinde ortaya çıktı; ayrı turlarda tek tek ele alınacak."
+    "reason": "HİÇ BAĞLANMAMIŞ YETENEK: ne üretim çağrısı ne de özel bir ikizi var. Gerçek boşluk; gizlenmiyor, görünür kılınıyor."
   },
   {
     "symbol": "packages/providers/src/adapters/anthropic.ts:AnthropicAdapter.embed",
-    "reason": "docs/04 embedding sağlayıcısını tanımlıyor ama HİÇBİR üretim yolu embedding üretmiyor: adaptör metodu yazılmış, çağıran yok. GERÇEK BOŞLUK — gizlenmiyor, görünür kılınıyor (metot taraması 2026-08-18'de eklendi)."
+    "reason": "docs/04 embedding sağlayıcısını tanımlıyor ama HİÇBİR üretim yolu embedding üretmiyor — docs/06'nın semantik geri getirme katmanı fiilen yok. Gerçek boşluk, görünür kılındı."
   },
   {
     "symbol": "packages/providers/src/adapters/anthropic.ts:AnthropicAdapter.listModels",
-    "reason": "Sağlayıcının model listesini hiçbir üretim yolu okumuyor; panel modelleri api_providers.models'tan alıyor. GERÇEK BOŞLUK, görünür kılındı."
+    "reason": "Sağlayıcının model listesini hiçbir üretim yolu okumuyor; panel modelleri api_providers.models'tan alıyor. Gerçek boşluk, görünür kılındı."
   },
   {
     "symbol": "packages/providers/src/adapters/openai.ts:OpenAiAdapter.embed",
-    "reason": "docs/04 embedding sağlayıcısını tanımlıyor ama HİÇBİR üretim yolu embedding üretmiyor: adaptör metodu yazılmış, çağıran yok. GERÇEK BOŞLUK — gizlenmiyor, görünür kılınıyor (metot taraması 2026-08-18'de eklendi)."
+    "reason": "docs/04 embedding sağlayıcısını tanımlıyor ama HİÇBİR üretim yolu embedding üretmiyor — docs/06'nın semantik geri getirme katmanı fiilen yok. Gerçek boşluk, görünür kılındı."
   },
   {
     "symbol": "packages/providers/src/adapters/openai.ts:OpenAiAdapter.listModels",
-    "reason": "Sağlayıcının model listesini hiçbir üretim yolu okumuyor; panel modelleri api_providers.models'tan alıyor. GERÇEK BOŞLUK, görünür kılındı."
+    "reason": "Sağlayıcının model listesini hiçbir üretim yolu okumuyor; panel modelleri api_providers.models'tan alıyor. Gerçek boşluk, görünür kılındı."
   },
   {
     "symbol": "packages/providers/src/mock.ts:MockProvider.embed",
-    "reason": "docs/04 embedding sağlayıcısını tanımlıyor ama HİÇBİR üretim yolu embedding üretmiyor: adaptör metodu yazılmış, çağıran yok. GERÇEK BOŞLUK — gizlenmiyor, görünür kılınıyor (metot taraması 2026-08-18'de eklendi)."
+    "reason": "docs/04 embedding sağlayıcısını tanımlıyor ama HİÇBİR üretim yolu embedding üretmiyor — docs/06'nın semantik geri getirme katmanı fiilen yok. Gerçek boşluk, görünür kılındı."
   },
   {
     "symbol": "packages/providers/src/mock.ts:MockProvider.listModels",
-    "reason": "Sağlayıcının model listesini hiçbir üretim yolu okumuyor; panel modelleri api_providers.models'tan alıyor. GERÇEK BOŞLUK, görünür kılındı."
+    "reason": "Sağlayıcının model listesini hiçbir üretim yolu okumuyor; panel modelleri api_providers.models'tan alıyor. Gerçek boşluk, görünür kılındı."
   },
   {
     "symbol": "packages/scheduler/src/assignment-service.ts:AssignmentService.rebase",
-    "reason": "Zamanlayıcı/agent yeteneği yazılmış ve testli, ama bugün hiçbir üretim yolu çağırmıyor. GERÇEK BOŞLUK — metot taraması 2026-08-18'de eklendiğinde ortaya çıktı; ayrı turlarda tek tek ele alınacak."
+    "reason": "HİÇ BAĞLANMAMIŞ YETENEK: ne üretim çağrısı ne de özel bir ikizi var. Gerçek boşluk; gizlenmiyor, görünür kılınıyor."
   },
   {
     "symbol": "packages/scheduler/src/assignment-service.ts:AssignmentService.renewAttemptFileLocks",
-    "reason": "Zamanlayıcı/agent yeteneği yazılmış ve testli, ama bugün hiçbir üretim yolu çağırmıyor. GERÇEK BOŞLUK — metot taraması 2026-08-18'de eklendiğinde ortaya çıktı; ayrı turlarda tek tek ele alınacak."
+    "reason": "PARALEL GENEL YÜZEY: üretim yolu bu sınıfın ÖZEL metodunu kullanıyor (ör. drainOnce → #processItem); bu genel metot yalnız testlerin çağırdığı ikinci bir kapı. Riski şudur: test bu yüzeyden geçer ama üretimin koştuğu yol denenmemiş kalır. Kaldırmak/birleştirmek ayrı bir tur."
   },
   {
     "symbol": "packages/scheduler/src/assignment-service.ts:AssignmentService.retry",
-    "reason": "Zamanlayıcı/agent yeteneği yazılmış ve testli, ama bugün hiçbir üretim yolu çağırmıyor. GERÇEK BOŞLUK — metot taraması 2026-08-18'de eklendiğinde ortaya çıktı; ayrı turlarda tek tek ele alınacak."
+    "reason": "HİÇ BAĞLANMAMIŞ YETENEK: ne üretim çağrısı ne de özel bir ikizi var. Gerçek boşluk; gizlenmiyor, görünür kılınıyor."
   },
   {
     "symbol": "packages/scheduler/src/scheduler-worker.ts:SchedulerWorker.runOnce",
-    "reason": "Zamanlayıcı/agent yeteneği yazılmış ve testli, ama bugün hiçbir üretim yolu çağırmıyor. GERÇEK BOŞLUK — metot taraması 2026-08-18'de eklendiğinde ortaya çıktı; ayrı turlarda tek tek ele alınacak."
+    "reason": "HİÇ BAĞLANMAMIŞ YETENEK: ne üretim çağrısı ne de özel bir ikizi var. Gerçek boşluk; gizlenmiyor, görünür kılınıyor."
   },
   {
     "symbol": "packages/scheduler/src/task-brief-service.ts:TaskBriefService.seal",
-    "reason": "Zamanlayıcı/agent yeteneği yazılmış ve testli, ama bugün hiçbir üretim yolu çağırmıyor. GERÇEK BOŞLUK — metot taraması 2026-08-18'de eklendiğinde ortaya çıktı; ayrı turlarda tek tek ele alınacak."
+    "reason": "PARALEL GENEL YÜZEY: üretim yolu bu sınıfın ÖZEL metodunu kullanıyor (ör. drainOnce → #processItem); bu genel metot yalnız testlerin çağırdığı ikinci bir kapı. Riski şudur: test bu yüzeyden geçer ama üretimin koştuğu yol denenmemiş kalır. Kaldırmak/birleştirmek ayrı bir tur."
   },
   {
     "symbol": "packages/scheduler/src/task-transition-service.ts:TaskTransitionService.applyWithLease",
-    "reason": "Zamanlayıcı/agent yeteneği yazılmış ve testli, ama bugün hiçbir üretim yolu çağırmıyor. GERÇEK BOŞLUK — metot taraması 2026-08-18'de eklendiğinde ortaya çıktı; ayrı turlarda tek tek ele alınacak."
+    "reason": "PARALEL GENEL YÜZEY: üretim yolu bu sınıfın ÖZEL metodunu kullanıyor (ör. drainOnce → #processItem); bu genel metot yalnız testlerin çağırdığı ikinci bir kapı. Riski şudur: test bu yüzeyden geçer ama üretimin koştuğu yol denenmemiş kalır. Kaldırmak/birleştirmek ayrı bir tur."
   }
 ]

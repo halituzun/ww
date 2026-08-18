@@ -10,6 +10,7 @@ import {
   type AuthenticatedPrincipalV1,
 } from '@ww/shared';
 import { randomUUID } from 'node:crypto';
+import { projectWorkspacePath } from './workspace-path.js';
 import {
   appendProjectVersion,
   createAgent,
@@ -110,7 +111,10 @@ export class ProjectApplicationService implements ProjectApplication {
   async create(input: ReturnType<typeof parseProjectInput>): Promise<ProjectRow> {
     const projectId = randomUUID() as EntityId;
     const now = new Date().toISOString();
-    const project = await createProject(this.database.ch, { project_id: projectId, name: input.name, slug: input.slug ?? input.name.toLowerCase().replace(/[^a-z0-9]+/g, '-'), type: input.type ?? 'web', status: 'draft', description: input.description, workspace_path: `workspace/${projectId}`, budget_usd_limit: input.budgetUsdLimit, settings: {}, active_plan_id: NIL_UUID, created_at: now, updated_at: now });
+    // Kayıtlı yol çalışma zamanının çözdüğü yolla AYNI olmalı: çalışma
+    // zamanı kökü SLUG ile çözüyor, kayıt ise uuid yazıyordu.
+    const slug = input.slug ?? input.name.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+    const project = await createProject(this.database.ch, { project_id: projectId, name: input.name, slug, type: input.type ?? 'web', status: 'draft', description: input.description, workspace_path: projectWorkspacePath(slug), budget_usd_limit: input.budgetUsdLimit, settings: {}, active_plan_id: NIL_UUID, created_at: now, updated_at: now });
     // Workspace iskeleti: kapı komutlarını ww.gate.json'dan okur. Dosya
     // yoksa iş üretilebiliyor ama KABUL EDİLEMİYOR ("Dosya bulunamadı").
     await writeProjectScaffold(

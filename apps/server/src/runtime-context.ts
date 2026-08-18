@@ -41,7 +41,9 @@ export function resolveRuntimeModels(routing: RoutingIndex): RuntimeModels {
 }
 
 // Sandbox sınırı yol düzeyinde başlar: proje kendi klasörünün dışına çıkamaz.
-const SAFE_SLUG = /^[a-z0-9][a-z0-9_-]*$/i;
+/** Kayıt ve çalışma zamanı AYNI kuralı kullanmalı; ayrışırsa kayıt gerçeği
+ * yansıtmaz (bkz. workspace-path.ts). */
+export const SAFE_SLUG = /^[a-z0-9][a-z0-9_-]*$/i;
 
 export function resolveWorkspaceRoot(workspaceRoot: string, slug: string): string {
   if (!isAbsolute(workspaceRoot)) throw new Error('workspace kökü mutlak yol olmalıdır');
