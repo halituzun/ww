@@ -22,7 +22,7 @@ import {
   listLatestProjects,
   getLatestTask,
   listLatestPlansByStatus,
-  listLatestTasksByStatus,
+  listLatestTasks,
   listLatestAgents,
   getMessage,
   getTaskBrief,
@@ -194,7 +194,11 @@ export class TaskApplicationService implements TaskApplication {
     return task;
   }
   get(projectId: string, taskId: string): Promise<TaskRow | null> { return getLatestTask(this.database.ch, projectId, taskId); }
-  list(projectId: string): Promise<TaskRow[]> { return listLatestTasksByStatus(this.database.ch, projectId, 'queued'); }
+  /**
+   * TÜM görevler. Eskiden yalnız 'queued' okunuyordu: görevler kuyruğu geçer
+   * geçmez panelin listesi boşalıyordu ve yüzey "iş yok" diyordu.
+   */
+  list(projectId: string): Promise<TaskRow[]> { return listLatestTasks(this.database.ch, projectId); }
 }
 
 @Injectable()

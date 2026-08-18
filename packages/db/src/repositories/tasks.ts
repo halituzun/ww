@@ -302,6 +302,42 @@ export async function listLatestTasksByStatus(
     .filter((row) => row.status === state);
 }
 
+/**
+ * Projenin TÜM görevleri (durum filtresi yok).
+ *
+ * NEDEN VAR: panelin görev listesi `listLatestTasksByStatus(..., 'queued')`
+ * kullanıyordu; görevler kuyruğu geçer geçmez liste BOŞALIYORDU. Canlı koşuda
+ * REST 0 görev döndürürken veritabanında 3 görev vardı — yüzey "iş yok"
+ * diyordu, oysa hepsi bitmişti. Tuval de aynı sebeple aktif iş ilişkisini
+ * çizemiyordu.
+ */
+export async function listLatestTasks(
+  ch: ClickHouseClient,
+  projectId: string,
+): Promise<TaskRow[]> {
+  const project = concreteEntityId(projectId, 'projectId');
+  const result = await ch.query({
+    query: `SELECT ${TASK_COLUMNS} FROM tasks
+      WHERE project_id = {projectId:UUID}
+        AND (task_id, version) IN (
+          SELECT task_id, max(version) FROM tasks
+          WHERE project_id = {projectId:UUID}
+          GROUP BY task_id
+        )
+      ORDER BY task_id`,
+    query_params: { projectId: project },
+    format: 'JSONEachRow',
+  });
+  const grouped = new Map<string, TaskRow[]>();
+  for (const row of (await result.json<unknown>()).map(parseTaskRow)) {
+    const rows = grouped.get(row.task_id) ?? [];
+    rows.push(row);
+    grouped.set(row.task_id, rows);
+  }
+  return [...grouped.values()]
+    .map((rows) => reconcileVersionedWrite(`task:${rows[0]!.task_id}`, rows[0]!, rows));
+}
+
 export async function createTask(ch: ClickHouseClient, input: CreateTaskInput): Promise<TaskRow> {
   const projectId = concreteEntityId(input.project_id, 'projectId');
   const taskId = concreteEntityId(input.task_id, 'taskId');

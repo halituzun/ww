@@ -339,3 +339,5 @@ dd {
 .preview__logs { margin-top: 8px; }
 .preview__logs pre { max-height: 220px; overflow: auto; font-size: 12px; }
 .device-bar { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+
+.canvas__error { color: var(--danger, #d95926); }

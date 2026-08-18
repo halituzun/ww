@@ -8,6 +8,7 @@ import {
   appendTaskVersion,
   createTask,
   getTaskAsOf,
+  listLatestTasks,
   getLatestTask,
   listLatestTasksByStatus,
   type CreateTaskInput,
@@ -157,5 +158,29 @@ describe.skipIf(!up)('tasks repository', () => {
     const latest = await getLatestTask(ch, row.project_id, row.task_id);
     const asOf = await getTaskAsOf(ch, row.project_id, row.task_id, futureCutoff());
     expect(canonicalSha256V1(asOf)).toBe(canonicalSha256V1(latest));
+  });
+
+  // ASIL KUSUR: panelin görev listesi yalnızca 'queued' okuyordu; görevler
+  // kuyruğu geçer geçmez liste BOŞALIYORDU. Canlı koşuda REST 0 görev
+  // döndürürken veritabanında 3 görev vardı.
+  it('tum durumlardaki gorevleri listeler', async () => {
+    const first = await createTask(ch, task());
+    const second = await createTask(ch, { ...task(), project_id: first.project_id });
+    await appendTaskVersion(ch, {
+      expectedVersion: second.version,
+      next: { ...second, status: 'done' },
+    });
+
+    const rows = await listLatestTasks(ch, first.project_id);
+    expect(rows.map((row) => row.task_id).sort())
+      .toEqual([first.task_id, second.task_id].sort());
+    expect(rows.map((row) => row.status).sort()).toEqual(['done', 'queued']);
+  });
+
+  it('baska projenin gorevlerini sizdirmaz', async () => {
+    const mine = await createTask(ch, task());
+    await createTask(ch, task());
+    const rows = await listLatestTasks(ch, mine.project_id);
+    expect(rows).toHaveLength(1);
   });
 });
