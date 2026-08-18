@@ -405,6 +405,20 @@ network-none, tmpfs izolasyonu; çıktı/disk/timeout/abort sınırları ve temi
 starter'ın atomik materialize edilip donmuş kapı zincirinden geçip temiz Git
 commit'i kurması). Bu testler varsayılan `pnpm test` koşusunda atlanır.
 
+**Doğrulanan (2026-08-18): Android adapter'ı artık GERÇEK adb ile sınandı.**
+Makinede iki gerçek cihaz bağlıydı (`127.0.0.1:26624`, `127.0.0.1:26720`) ve
+adapter onlardan 3.9 MB'lık geçerli bir PNG karesi aldı; durdurma kullanıcının
+cihazını kapatmadı. Bu sınama, yalnız sahteyle test edilirken görünmeyen dört
+kusuru ortaya çıkardı ve kapattı: (1) `start()` SÜREÇ kimliğini döndürüp
+sonraki çağrılar onu `adb -s <seri>` diye kullanıyordu — gerçek adb
+"device not found" der; (2) keşfin tek yolu `emulator -list-avds` idi, o paket
+kurulu olmadığı için panel cihazlar ÇALIŞIRKEN "cihaz yok" diyordu;
+(3) `adb wait-for-device` başka cihaz bağlıyken hemen döndüğünden yeni
+emülatörün serisi çözülemiyordu; (4) durdurma, bağlanılan (bizim
+başlatmadığımız) cihazı da öldürüyordu. Kabul senaryosu bununla KAPANMAZ —
+Flutter projesinin emülatörde koşması hâlâ gerçek model koşusu gerektirir —
+ama "gerçek adapter deployment konfigürasyonudur" maddesi artık doğrulanmıştır.
+
 **Kapatmak için gereken:** Kabul senaryosu üç gerçek proje koşusu istiyor —
 web projesinin panelde canlı önizlenmesi ve sohbetten verilen emrin sonucunun
 önizlemede görülmesi, API projesinin konsoldan test edilmesi, Flutter projesinin
