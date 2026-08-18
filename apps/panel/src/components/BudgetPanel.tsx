@@ -14,7 +14,9 @@ const pct = (value: number): string => `${Math.min(100, Math.max(0, value * 100)
 
 export function BudgetPanel({ projectId }: { projectId: string }) {
   // docs/09: View'da fetch yasak — yükleme ve yoklama ViewModel'de.
-  const { report } = useBudgetViewModel(projectId);
+  const {
+    report, limitDraft, setLimitDraft, limitNote, limitError, saving, saveLimit,
+  } = useBudgetViewModel(projectId);
 
   const { totals, budget } = report;
   const tone = budgetTone(budget.state);
@@ -35,6 +37,23 @@ export function BudgetPanel({ projectId }: { projectId: string }) {
       </div>
 
       {/* Tek başlık sayı: grafik değil, stat tile doğru form. */}
+      {/* docs/08: "bütçe düzenleme". Limit yalnızca proje oluşturulurken
+          verilebiliyordu; sınırsız açılmış projeye fren kurulamıyordu. */}
+      <div className="budget-limit">
+        <label>
+          Bütçe limiti (USD, 0 = sınırsız)
+          <input
+            aria-label="Bütçe limiti"
+            value={limitDraft}
+            placeholder={String(report.budget.limitUsd)}
+            onChange={(event) => setLimitDraft(event.target.value)}
+          />
+        </label>
+        <button type="button" disabled={saving} onClick={() => void saveLimit()}>Kaydet</button>
+      </div>
+      {limitError !== '' ? <p className="budget-limit__error">{limitError}</p> : null}
+      {limitNote !== '' ? <p className="hint">{limitNote}</p> : null}
+
       <div className="budget-tiles">
         <div className="budget-tile budget-tile--hero">
           <strong>{formatUsd(totals.costUsd)}</strong>

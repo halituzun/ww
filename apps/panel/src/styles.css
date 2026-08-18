@@ -355,3 +355,6 @@ dd {
 .questions__answer { display: flex; gap: 8px; }
 .questions__answer input { flex: 1; }
 .questions__error { color: var(--danger, #d95926); }
+
+.budget-limit { display: flex; gap: 8px; align-items: flex-end; margin: 8px 0; }
+.budget-limit__error { color: var(--danger, #d95926); }

@@ -1,5 +1,5 @@
 // Kontör panosu IO + sunum yardımcıları (docs/08 → Kontör Panosu).
-import { getJsonOr, type RequestOptions } from './http.js';
+import { getJsonOr, requestJson, type RequestOptions } from './http.js';
 
 export type BudgetState = 'unlimited' | 'ok' | 'warning' | 'exceeded';
 
@@ -59,3 +59,24 @@ export function budgetTone(state: BudgetState): { tone: Tone; label: string } {
     default: return { tone: 'neutral', label: 'Bütçe sınırsız' };
   }
 }
+
+/**
+ * Bütçe limitini düzenler (docs/08 → "bütçe düzenleme").
+ *
+ * NEDEN VAR: limit yalnızca proje oluşturulurken verilebiliyordu; sonradan
+ * değiştirmenin yolu yoktu ve sınırsız açılmış bir projeye bütçe freni
+ * panelden hiç kurulamıyordu.
+ */
+export interface BudgetLimitResult {
+  limitUsd: number;
+  spentUsd: number;
+  alreadyExceeded: boolean;
+}
+
+export const setBudgetLimit = (
+  projectId: string,
+  limitUsd: number,
+  options: RequestOptions = {},
+): Promise<BudgetLimitResult> =>
+  requestJson<BudgetLimitResult>(`/projects/${projectId}/budget`,
+    { ...options, method: 'PATCH', body: { limitUsd } }, 'Bütçe limiti kaydedilemedi');
