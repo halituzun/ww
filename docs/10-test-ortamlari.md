@@ -60,7 +60,9 @@ Emülatör **host'ta** çalışır (Docker'a girmez); gereksinimler ve akış:
   ve o ikili kurulu değilken uç düşüyordu — oysa `adb devices` gerçek bağlı
   cihazları gösterebiliyor ve önizleme için AVD'ye gerek yok. Uç artık İKİSİNİ
   de döner; hiçbiri yoksa SEBEBİYLE 503 verir. Panel tarafında emülatör
-  yüzeyi hâlâ YOK.)*
+  yüzeyi 2026-08-18'de eklendi: hedefleri listeler, oturum açar, kareyi
+  gösterir ve durdurur. Kare AKIŞI değil düzenli anlık görüntüdür (2 sn);
+  sürekli akış ayrı bir iş.)*
 - **Akış**:
   1. Panel "Emülatörü başlat" → `emulator -avd <ad>` süreci.
   2. `adb wait-for-device` → cihaz hazır.
