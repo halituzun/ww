@@ -1,3 +1,4 @@
+import { NIL_UUID } from '@ww/shared';
 import { describe, expect, it } from 'vitest';
 import { auditTaskRecords } from './record-audit.js';
 
@@ -56,5 +57,38 @@ describe('auditTaskRecords', () => {
   // Hedef dosyası olmayan görev (ör. araştırma) fihrist beklemez.
   it('hedef dosyasi olmayan gorev fihrist beklemez', () => {
     expect(auditTaskRecords([task({ targetFiles: [], indexedFiles: [] })])).toEqual([]);
+  });
+
+  // KENDİ AÇTIĞIM HALKA: plansız `queued` görev ATANAMAZ ve sonsuza dek
+  // bekler. Kurtarma artık onu döngüye sokmuyor ve `blockedTaskIds` olarak
+  // raporluyor — ama PANELDE hiçbir yerde görünmüyordu. Canlı veride 32
+  // queued görevin 6'sı böyle: panel sakin görünüyor, iş ilerlemiyor.
+  //
+  // "Sessizce hiç çalışmayan görev" bu deponun tekrar eden kusuru; onu
+  // görünür kılmak denetçinin işidir.
+  it('plansiz queued gorevi bulgu olarak acar', () => {
+    const found = auditTaskRecords([task({
+      status: 'queued', planId: NIL_UUID, commitHash: '', artifactCount: 0,
+      targetFiles: [], indexedFiles: [],
+    })]);
+    expect(found).toHaveLength(1);
+    expect(found[0]!.ruleId).toBe('REC-004');
+    expect(found[0]!.severity).toBe('high');
+  });
+
+  it('planli queued gorev bulgu degildir', () => {
+    expect(auditTaskRecords([task({
+      status: 'queued', planId: 'aaaaaaaa-0000-4000-8000-000000000001',
+      commitHash: '', artifactCount: 0, targetFiles: [], indexedFiles: [],
+    })])).toEqual([]);
+  });
+
+  // Plan bilgisi verilmeyen çağrılar eskisi gibi çalışmalı: denetçi
+  // bilmediği şeyi ihlal saymaz.
+  it('plan bilgisi yoksa queued gorevi denetlemez', () => {
+    expect(auditTaskRecords([task({
+      status: 'queued', commitHash: '', artifactCount: 0,
+      targetFiles: [], indexedFiles: [],
+    })])).toEqual([]);
   });
 });

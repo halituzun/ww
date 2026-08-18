@@ -104,6 +104,7 @@ export function recordRuleLabel(ruleId: string): string {
     case 'REC-001': return 'Commit yok';
     case 'REC-002': return 'Artifact kaydı yok';
     case 'REC-003': return 'Fihriste girmemiş';
+    case 'REC-004': return 'Plansız: hiç çalışamaz';
     default: return ruleId;
   }
 }

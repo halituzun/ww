@@ -19,10 +19,15 @@ export interface AuditedTaskRecord {
   readonly targetFiles: readonly string[];
   /** `file_index`'te kaydı bulunan dosyalar. */
   readonly indexedFiles: readonly string[];
+  /**
+   * Görevin plan kimliği. NIL/boş ise görev ATANAMAZ. Verilmezse plan
+   * denetimi yapılmaz: denetçi bilmediği şeyi ihlal saymaz.
+   */
+  readonly planId?: string | undefined;
 }
 
 export interface RecordViolation {
-  readonly ruleId: 'REC-001' | 'REC-002' | 'REC-003';
+  readonly ruleId: 'REC-001' | 'REC-002' | 'REC-003' | 'REC-004';
   readonly taskId: string;
   readonly summary: string;
   readonly severity: 'high' | 'medium';
@@ -33,7 +38,25 @@ export function auditTaskRecords(
 ): readonly RecordViolation[] {
   const violations: RecordViolation[] = [];
 
+  const NIL = '00000000-0000-0000-0000-000000000000';
+
   for (const task of tasks) {
+    // PLANSIZ KUYRUK GÖREVİ: atamada reddedilir ("task plan kimligi
+    // tasimiyor"), yani sonsuza dek bekler. Kurtarma onu artık döngüye
+    // sokmuyor ama panelde hiçbir yerde görünmüyordu: panel sakin, iş
+    // ilerlemiyor. "Sessizce hiç çalışmayan görev" bu deponun tekrar eden
+    // kusuru ve onu görünür kılmak denetçinin işidir.
+    if (task.status === 'queued' && task.planId !== undefined
+      && (task.planId.trim() === '' || task.planId === NIL)) {
+      violations.push({
+        ruleId: 'REC-004',
+        taskId: task.taskId,
+        summary: `"${task.title}" görevi plansız kuyrukta: atanamaz ve hiç çalışmaz.`,
+        // En yüksek önem: görev normal görünür ama kalıcı olarak ölüdür.
+        severity: 'high',
+      });
+    }
+
     // Bitmemiş görev için kayıt beklemek YANLIŞ ALARM üretir: iş sürüyorsa
     // commit'i de artifact'ı da olmaması normaldir. Gürültü kapıyı aşındırır.
     if (task.status !== 'done') continue;

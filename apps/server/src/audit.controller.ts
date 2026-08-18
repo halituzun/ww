@@ -72,16 +72,19 @@ export class AuditController {
       const rows = await this.#database.ch.query({
         query: `SELECT t.task_id AS taskId, t.title AS title, t.status AS status,
               t.commit_hash AS commitHash, t.target_files AS targetFiles,
-              a.artifactCount AS artifactCount
+              t.plan_id AS planId, a.artifactCount AS artifactCount
             FROM (SELECT task_id, argMax(title, version) AS title,
                     argMax(status, version) AS status,
                     argMax(commit_hash, version) AS commit_hash,
-                    argMax(target_files, version) AS target_files
+                    argMax(target_files, version) AS target_files,
+                    argMax(plan_id, version) AS plan_id
                   FROM tasks WHERE project_id = {projectId:UUID} GROUP BY task_id) t
             LEFT JOIN (SELECT task_id, count() AS artifactCount FROM artifacts
                        WHERE project_id = {projectId:UUID} GROUP BY task_id) a
               ON a.task_id = t.task_id
-            WHERE t.status = 'done' LIMIT 500`,
+            -- done DISINDA queued da denetlenir: plansiz kuyruk gorevi
+            -- (REC-004) tam olarak burada gorunur hale gelir.
+            WHERE t.status IN ('done', 'queued') LIMIT 500`,
         query_params: { projectId }, format: 'JSONEachRow',
       }).then((r) => r.json<Record<string, unknown>>());
 
@@ -100,6 +103,7 @@ export class AuditController {
         artifactCount: Number(row['artifactCount'] ?? 0),
         targetFiles: Array.isArray(row['targetFiles']) ? row['targetFiles'].map(String) : [],
         indexedFiles,
+        planId: String(row['planId'] ?? ''),
       })));
     } catch (reason) {
       console.warn(`[ww] kayıt denetimi koşulamadı: ${String(reason)}`);
