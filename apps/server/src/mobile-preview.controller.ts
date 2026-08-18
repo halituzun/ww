@@ -11,6 +11,7 @@ import {
 import { AdbMobilePreviewPort, MobilePreviewError, MobilePreviewService } from '@ww/executor';
 import { parseLocalSession, type LocalSessionRequest } from './auth/local-session.js';
 import { assertMobileArgs, assertMobileCommand } from './mobile-command-allowlist.js';
+import { mobileTargets } from './mobile-targets.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -57,12 +58,46 @@ export class MobilePreviewController {
     throw reason;
   }
 
+  /**
+   * docs/10 "AVD tespiti". BAĞLI CİHAZLAR da döner: uç yalnız `listAvds`'ı
+   * yayınlıyordu ve o `emulator` ikilisini çağırır; ikili kurulu değilken uç
+   * düşüyor ve panel "hiçbir şey yok" diyordu — oysa `adb devices` iki gerçek
+   * cihaz gösteriyordu.
+   *
+   * AVD listelenemese bile CİHAZLAR dönülür: birinin yokluğu diğerini
+   * gizlememeli.
+   */
   @Get('avds')
   async avds(@Req() request: LocalSessionRequest) {
     parseLocalSession(request);
-    try {
-      return { avds: await new AdbMobilePreviewPort(new MobileCommands()).listAvds() };
-    } catch (reason) { return this.#unavailable(reason); }
+    const port = new AdbMobilePreviewPort(new MobileCommands());
+    // Sebepler TUTULUR: `.catch(() => [])` ile yutmak, "hedef yok" derken
+    // NEDEN olmadığını gizler — bu deponun tekrar eden kusuru.
+    const failures: string[] = [];
+    const attempt = async (
+      name: string,
+      call: () => Promise<readonly string[]>,
+    ): Promise<readonly string[]> => {
+      try {
+        return await call();
+      } catch (reason) {
+        failures.push(`${name}: ${reason instanceof Error ? reason.message : String(reason)}`);
+        return [];
+      }
+    };
+    const devices = await attempt('adb devices', () => port.listDevices());
+    const avds = await attempt('emulator -list-avds', () => port.listAvds());
+    const targets = mobileTargets(devices, avds);
+    if (!targets.available) {
+      // Boş liste "her şey yolunda" der; hiçbir hedef yoksa AÇIKÇA ve
+      // SEBEBİYLE söylenir.
+      throw new ServiceUnavailableException(
+        `emülatör hedefi yok: bağlı cihaz da başlatılabilir AVD de bulunamadı${
+          failures.length === 0 ? '' : ` (${failures.join('; ')})`}`,
+      );
+    }
+    // Geriye uyum: `avds` alanı korunur.
+    return { avds: targets.avds, devices: targets.devices };
   }
 
   @Post('sessions')
