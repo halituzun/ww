@@ -8,6 +8,7 @@ import { applyLateBinding, type LateBinder } from './late-bind-runtime.js';
 import { internalServiceTokenMap } from './internal-service-tokens.js';
 import { resolveBriefPolicy } from './task-brief-policy.js';
 import { randomUUID } from 'node:crypto';
+import { appendEvent } from '@ww/db';
 import type { ClickHouseClient, WwRedis } from '@ww/db';
 import type { LlmProvider, ModelRouter, RouterOptions } from '@ww/providers';
 import {
@@ -116,6 +117,18 @@ export interface Phase8RuntimeCompositionInput {
   readonly orchestrationRuntime: Phase1RuntimePort;
 }
 
+/**
+ * docs/03: her tırmandırma basamağı hem `messages`'a hem `events`'e yazar.
+ * Olay ucu bağlanmayınca denetim ekranı yapısal olarak eksik kalıyordu.
+ */
+const escalationEvents = (ch: ClickHouseClient) => ({
+  appendEvent: (row: Readonly<Record<string, unknown>>) => appendEvent(ch, row as never),
+  onError: (reason: unknown) => {
+    const detail = reason instanceof Error ? reason.message : String(reason);
+    console.warn(`[ww] tırmandırma olayı yazılamadı: ${detail}`);
+  },
+});
+
 export const PHASE8_RUNTIME = Symbol('PHASE8_RUNTIME');
 export const PHASE9_RUNTIME_CONFIG = Symbol('PHASE9_RUNTIME_CONFIG');
 
@@ -170,6 +183,7 @@ export function createPhase8RuntimeComposition(
   const escalation = new CommunicationEscalationDelivery(
     input.communication,
     input.internalAuthentication,
+    escalationEvents(input.ch),
   );
   const durable = createDurableModelRouter(input.providers, {
     ch: input.ch,
@@ -300,6 +314,7 @@ export function createPhase9RuntimeComposition(
   const escalation = new CommunicationEscalationDelivery(
     communication,
     input.internalAuthentication,
+    escalationEvents(input.ch),
   );
   const durable = createDurableModelRouter(input.providers, {
     ch: input.ch,

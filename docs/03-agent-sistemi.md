@@ -196,9 +196,11 @@ kullanıcı   — panelde soru kutusu (waiting_user)
 ```
 
 Her basamak `messages`'a `escalation` kaydı + `events`'e `escalation` olayı yazar
-(**gerçek durum 2026-08-17:** `escalation-delivery` yalnız mesaj üretiyor, `events`
-tarafına yazan üretim kodu yok; frenler ise `scheduler.escalate` üzerinden event
-bekliyor. Denetim ucu bu yüzden İKİ kaynağı da okur ve tekilleştirir);
+(**2026-08-18'de kapatıldı:** `escalation-delivery` artık mesajın yanı sıra olayı
+da yazar; olay kimliği mesajın idempotency anahtarından türetilir, böylece iki uç
+aynı tırmandırmayı tekil sayar. Olay yazımı düşerse tırmandırma düşmez — mesaj
+teslimattır, olay denetim izidir. Frenler ayrıca `scheduler.escalate` üzerinden
+yazdığı için denetim ucu iki kaynağı okumaya ve tekilleştirmeye devam eder);
 panelin denetim ekranında tırmandırma geçmişi görünür. Bütçe ve kaçak-döngü
 frenlerinin tetiklediği tırmandırmalar da aynı zincire girer
 ([07 — Zamanlayıcı](07-zamanlayici.md#frenler)).
