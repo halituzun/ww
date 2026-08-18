@@ -13,7 +13,7 @@ import {
   createTransitionOperation,
 } from '@ww/scheduler';
 import type { ClickHouseClient, WwRedis } from '@ww/db';
-import { chUsageSink } from '@ww/providers';
+import { chUsageSink, ProviderRateLimiter } from '@ww/providers';
 import type { LlmProvider, RoutingIndex } from '@ww/providers';
 import type { EntityId } from '@ww/shared';
 import { createExecutorComposition, createResumeUserAnswerOperation } from './executor-composition.js';
@@ -29,6 +29,7 @@ import type { RuntimeModels } from './runtime-context.js';
 import type { Phase9RuntimeCompositionInput } from './runtime-composition.js';
 import { createLateBoundPort, type LateBoundPort } from './late-binding.js';
 import type { LateBoundServices } from './late-bind-runtime.js';
+import { providerRequestsPerMinute } from './provider-rate.js';
 
 export interface AssemblyInput {
   ch: ClickHouseClient;
@@ -178,6 +179,11 @@ export async function createOrchestrationComposition(
     // Kontör kaydı ŞART: politika, model çağrısının kanıtlanmış kullanım
     // kaydı olmadan raporu kabul etmez (ve maliyet takibi de buradan gelir).
     usageSink: chUsageSink(input.ch),
+    // docs/04 + docs/07: sağlayıcı başına istek/dakika. Varsayılan
+    // WW_PROVIDER_RPM (0 = sınırsız). Pompa görevleri eşzamanlı işlediğinden
+    // beri sınırsız çıkış gerçek bir 429 riski; 429'lar fallback'i tetikleyip
+    // yükü daha da artırır.
+    rateLimiter: new ProviderRateLimiter(() => providerRequestsPerMinute()),
     snapshotBuilder: new TaskContextSnapshotBuilder(input.ch),
     executor,
     toolFactory: createToolPortFactory({

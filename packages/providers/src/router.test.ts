@@ -168,6 +168,43 @@ describe('ModelRouter', () => {
     expect((rows[0] as { purpose: string }).purpose).toBe('council');
   });
 
+
+  // docs/07: "Rate limit aşımında router BEKLETİR (kuyruklu token-bucket)".
+  // İstek düşürülmez; sınırsız çıkış 429'a çarpar ve 429'lar fallback'i
+  // tetikleyip yükü daha da artırır.
+  it('rate limit asiminda bekler, istegi dusurmez', async () => {
+    const mock = new MockProvider({ script: [
+      { content: 'bir', toolCalls: [] }, { content: 'iki', toolCalls: [] },
+    ] });
+    const waits: number[] = [];
+    let allowed = 1;
+    const router = new ModelRouter(new Map([['mock', mock]]), {
+      fallbacks: () => [],
+      usageSink: async () => undefined,
+      rateLimiter: { reserve: () => (allowed-- > 0 ? 0 : 500) },
+      sleep: async (ms) => { waits.push(ms); },
+    });
+
+    expect((await router.complete('mock:m', { messages: [], meta: { purpose: 'council', projectId: meta.projectId, agentId: meta.agentId } })).result.content).toBe('bir');
+    expect(waits).toEqual([]);
+
+    expect((await router.complete('mock:m', { messages: [], meta: { purpose: 'council', projectId: meta.projectId, agentId: meta.agentId } })).result.content).toBe('iki');
+    expect(waits).toEqual([500]);
+  });
+
+  it('sinirlayici yokken beklemez', async () => {
+    const mock = new MockProvider({ script: [{ content: 'tamam', toolCalls: [] }] });
+    const waits: number[] = [];
+    const router = new ModelRouter(new Map([['mock', mock]]), {
+      fallbacks: () => [],
+      usageSink: async () => undefined,
+      sleep: async (ms) => { waits.push(ms); },
+    });
+
+    await router.complete('mock:m', { messages: [], meta: { purpose: 'council', projectId: meta.projectId, agentId: meta.agentId } });
+    expect(waits).toEqual([]);
+  });
+
   it('bad_request fallback tetiklemez, hata fırlar', async () => {
     const bad = new MockProvider({ script: [], failFirst: 99, failKind: 'bad_request' });
     const good = new MockProvider({ script: [{ content: 'yedek', toolCalls: [] }] });

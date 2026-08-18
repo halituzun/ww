@@ -24,7 +24,10 @@ import {
 } from '@ww/agents';
 import { CommunicationWakeupPublisher, createRedis } from '@ww/db';
 import { buildAgentCapabilities } from './agent-capabilities.js';
-import { Keystore, ModelRouter, buildProviderRegistry, chUsageSink } from '@ww/providers';
+import {
+  Keystore, ModelRouter, ProviderRateLimiter, buildProviderRegistry, chUsageSink,
+} from '@ww/providers';
+import { providerRequestsPerMinute } from './provider-rate.js';
 import type { EntityId } from '@ww/shared';
 import { composeCouncil } from './council-members.js';
 import { buildCouncilPlan } from './council-plan.js';
@@ -161,6 +164,11 @@ export class CouncilApplicationService {
       fallbacks: (modelRef) => routing.fallbacks(modelRef),
       // Konsey turları da paralıdır: kontör panosunda görünmeleri gerekir.
       usageSink: chUsageSink(this.#database.ch),
+      // docs/04 + docs/07: sağlayıcı başına istek/dakika. Varsayılan
+      // WW_PROVIDER_RPM (0 = sınırsız). Pompa görevleri eşzamanlı işlediğinden
+      // beri sınırsız çıkış gerçek bir 429 riski; 429'lar fallback'i tetikleyip
+      // yükü daha da artırır.
+      rateLimiter: new ProviderRateLimiter(() => providerRequestsPerMinute()),
     });
 
     const sessionId = randomUUID() as EntityId;

@@ -14,6 +14,15 @@ import {
 
 export interface RouterOptions {
   fallbacks: (modelRef: string) => string[];
+  /**
+   * Sağlayıcı başına istek/dakika (docs/04, docs/07). Verilmezse sınır yok.
+   * Sınırsız çıkış 429'a çarpar ve 429'lar fallback'i tetikleyip yükü daha da
+   * artırır — pompa görevleri eşzamanlı işlemeye başladığından beri bu risk
+   * teorik değil.
+   */
+  rateLimiter?: { reserve(providerId: string): number };
+  /** Beklemeyi testler kontrol edebilsin diye enjekte edilebilir. */
+  sleep?: (ms: number) => Promise<void>;
   usageSink: UsageSink;
   timeoutMs?: number;
   invocationEffect?: ProviderInvocationEffect;
@@ -51,6 +60,9 @@ function errStatus(e: unknown): ApiUsageRow['status'] {
 const errKind = (e: unknown): string =>
   e instanceof ProviderError ? e.kind : e instanceof Error ? e.name : 'unknown';
 
+const defaultSleep = (ms: number): Promise<void> =>
+  new Promise((resolve) => { setTimeout(resolve, ms); });
+
 // Tüm LLM çağrıları buradan geçer: fallback zinciri + api_usage kaydı (docs/04-model-katmani.md).
 export class ModelRouter {
   constructor(
@@ -77,6 +89,12 @@ export class ModelRouter {
       const { providerId, model } = splitRef(ref);
       const provider = this.providers.get(providerId);
       if (!provider) continue;
+
+      // İstek DÜŞÜRÜLMEZ, sırası gelene kadar beklenir (docs/07).
+      const waitMs = this.opts.rateLimiter?.reserve(providerId) ?? 0;
+      if (waitMs > 0) {
+        await (this.opts.sleep ?? defaultSleep)(waitMs);
+      }
 
       const t0 = Date.now();
       const attemptRequest = {

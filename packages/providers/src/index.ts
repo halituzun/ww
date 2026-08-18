@@ -5,6 +5,7 @@ export * from './registry.js';
 export * from './routing.js';
 export * from './usage.js';
 export * from './router.js';
+export * from './rate-limiter.js';
 export * from './mock.js';
 export * from './keystore.js';
 export * from './adapters/normalize.js';
