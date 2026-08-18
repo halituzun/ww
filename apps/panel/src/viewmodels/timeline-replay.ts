@@ -10,9 +10,10 @@
 // "bilinmiyor"dur — şimdiki durumu geçmişe yazmak, olmayan bir geçmiş
 // uydurmak olurdu.
 
+import { compareCursors } from './cursor-order.js';
 export interface ReplayEvent {
   readonly event: string;
-  readonly seq: number;
+  readonly cursor: string;
   readonly ts: string;
   /** Sunucu zarfındaki görev kimliği; `events.task_id` KOLONUNDAN gelir. */
   readonly taskId?: string | undefined;
@@ -35,7 +36,9 @@ const readString = (source: unknown, key: string): string | undefined => {
 
 /** Olayları seq'e göre sıralar; canlı akış sırasız gelebilir. */
 export function orderedEvents(events: readonly ReplayEvent[]): readonly ReplayEvent[] {
-  return [...events].sort((left, right) => left.seq - right.seq);
+  // Sayısal fark YETMEZ: imleçler 2^53'ü aşar ve Number'a çevirmek sıralamayı
+  // bozar (bkz. cursor-order.ts).
+  return [...events].sort((left, right) => compareCursors(left.cursor, right.cursor));
 }
 
 /**

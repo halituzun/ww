@@ -3,7 +3,7 @@ import { createLiveEventSubscription, type LiveSocket } from './live-subscriptio
 import type { TimelineEvent } from './workspace-logic.js';
 
 const event = (seq: number): TimelineEvent =>
-  ({ event: 'task_changed', seq, ts: '2026-08-17T09:00:00Z', data: null });
+  ({ event: 'task_changed', cursor: String(seq), ts: '2026-08-17T09:00:00Z', data: null });
 
 class FakeSocket implements LiveSocket {
   onopen: (() => void) | undefined;
@@ -39,7 +39,7 @@ describe('createLiveEventSubscription', () => {
     const { sockets } = harness();
     sockets[0]!.onopen?.();
     expect(JSON.parse(sockets[0]!.sent[0]!)).toEqual({
-      event: 'subscribe', data: { projectId: 'p1', afterSeq: 0 },
+      event: 'subscribe', data: { projectId: 'p1', afterSeq: '0' },
     });
   });
 
@@ -47,14 +47,14 @@ describe('createLiveEventSubscription', () => {
   it('görülen en yüksek seq’ten devam eder', () => {
     const { sockets } = harness([event(4), event(11), event(7)]);
     sockets[0]!.onopen?.();
-    expect(JSON.parse(sockets[0]!.sent[0]!).data.afterSeq).toBe(11);
+    expect(JSON.parse(sockets[0]!.sent[0]!).data.afterSeq).toBe('11');
   });
 
   it('gelen olayları iletir', () => {
     const { sockets, received } = harness();
     sockets[0]!.onmessage?.({ data: JSON.stringify(event(1)) });
     expect(received).toHaveLength(1);
-    expect(received[0]!.seq).toBe(1);
+    expect(received[0]!.cursor).toBe('1');
   });
 
   // Bozuk bir çerçeve tüm canlı beslemeyi düşürmemeli.
@@ -62,7 +62,7 @@ describe('createLiveEventSubscription', () => {
     const { sockets, received } = harness();
     sockets[0]!.onmessage?.({ data: '{bozuk' });
     sockets[0]!.onmessage?.({ data: JSON.stringify(event(2)) });
-    expect(received.map((item) => item.seq)).toEqual([2]);
+    expect(received.map((item) => item.cursor)).toEqual(['2']);
   });
 
   // Asıl kusur buydu: kopan bağlantı sessizce ölüyordu.
@@ -99,7 +99,7 @@ describe('createLiveEventSubscription', () => {
     sockets[0]!.onclose?.();
     timers[0]!.fn();
     sockets[1]!.onopen?.();
-    expect(JSON.parse(sockets[1]!.sent[0]!).data.afterSeq).toBe(9);
+    expect(JSON.parse(sockets[1]!.sent[0]!).data.afterSeq).toBe('9');
   });
 
   it('durdurulunca soketi kapatır ve yeniden bağlanmaz', () => {

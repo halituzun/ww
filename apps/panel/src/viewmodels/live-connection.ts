@@ -1,3 +1,4 @@
+import { parseCursor } from './cursor-order.js';
 // Canlı bağlantının dayanıklılık mantığı (MVVM: ViewModel katmanı).
 //
 // Panel WebSocket'i açıyor ama onclose/onerror dinlemiyordu: bağlantı
@@ -20,13 +21,16 @@ export function nextReconnectDelay(attempt: number): number {
  * Yeniden bağlanmada nereden devam edileceği. 0'dan başlamak tüm geçmişi
  * tekrar akıtır ve zaman çizelgesini çift kayıtla doldurur.
  */
-export function resumeCursor(events: readonly TimelineEvent[]): number {
-  let highest = 0;
+export function resumeCursor(events: readonly TimelineEvent[]): string {
+  // BigInt karşılaştırma şart: metinsel karşılaştırma "9" > "10" der ve
+  // devam noktası geriye kayıp tüm geçmişi yeniden akıtırdı.
+  let highest = 0n;
   for (const event of events) {
-    if (!Number.isFinite(event.seq)) continue;
-    if (event.seq > highest) highest = event.seq;
+    let value: bigint;
+    try { value = parseCursor(event.cursor); } catch { continue; }
+    if (value > highest) highest = value;
   }
-  return highest;
+  return highest.toString();
 }
 
 export function connectionLabel(state: ConnectionState): string {

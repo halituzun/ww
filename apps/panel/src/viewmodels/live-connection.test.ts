@@ -7,7 +7,7 @@ import {
 } from './live-connection.js';
 import type { TimelineEvent } from './workspace-logic.js';
 
-const event = (seq: number): TimelineEvent => ({ event: 'task.updated', seq, ts: '', data: null });
+const event = (seq: number): TimelineEvent => ({ event: 'task.updated', cursor: String(seq), ts: '', data: null });
 
 describe('nextReconnectDelay', () => {
   it('ilk denemede kısa bekler', () => {
@@ -35,15 +35,15 @@ describe('resumeCursor', () => {
   // Yeniden bağlanmada 0'dan başlamak tüm geçmişi tekrar akıtır; görülen en
   // yüksek seq'ten devam etmek gerekir.
   it('görülen en yüksek seq ile devam eder', () => {
-    expect(resumeCursor([event(3), event(7), event(5)])).toBe(7);
+    expect(resumeCursor([event(3), event(7), event(5)])).toBe('7');
   });
 
   it('hiç olay yoksa baştan başlar', () => {
-    expect(resumeCursor([])).toBe(0);
+    expect(resumeCursor([])).toBe('0');
   });
 
   it('geçersiz seq değerlerini yok sayar', () => {
-    expect(resumeCursor([{ ...event(0), seq: Number.NaN }, event(4)])).toBe(4);
+    expect(resumeCursor([{ ...event(0), cursor: 'bozuk' }, event(4)])).toBe('4');
   });
 });
 

@@ -6,7 +6,7 @@ import { TimelineScrubber } from './TimelineScrubber.js';
 afterEach(cleanup);
 
 const events = [1, 2, 3].map((seq) => ({
-  event: 'status_change', seq, ts: '2026-08-18T00:00:00.000Z', data: {},
+  event: 'status_change', cursor: String(seq), ts: '2026-08-18T00:00:00.000Z', data: {},
 }));
 
 describe('TimelineScrubber', () => {
@@ -48,7 +48,7 @@ describe('TimelineScrubber', () => {
 
 describe('TimelineScrubber — pencere sınırı', () => {
   const many = Array.from({ length: 100 }, (_, index) => ({
-    event: 'status_change', seq: index + 1, ts: '2026-08-18T00:00:00.000Z', data: {},
+    event: 'status_change', cursor: String(index + 1), ts: '2026-08-18T00:00:00.000Z', data: {},
   }));
 
   // Kullanıcı "1 / 100"da geçmişin BAŞINDA olduğunu sanmamalı: daha eskisi

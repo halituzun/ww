@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { orderedEvents, replayAt } from './timeline-replay.js';
 
 const event = (seq: number, name: string, data: unknown = {}) => ({
-  event: name, seq, ts: `2026-08-18T00:00:${String(seq).padStart(2, '0')}.000Z`, data,
+  event: name, cursor: String(seq), ts: `2026-08-18T00:00:${String(seq).padStart(2, '0')}.000Z`, data,
 });
 
 const stream = [
@@ -15,14 +15,14 @@ const stream = [
 describe('orderedEvents', () => {
   // Canlı akış sırasız gelebilir; sırasız oynatma yanlış bir geçmiş gösterir.
   it('olaylari seq sirasina koyar', () => {
-    expect(orderedEvents([event(3, 'a'), event(1, 'b'), event(2, 'c')]).map((e) => e.seq))
-      .toEqual([1, 2, 3]);
+    expect(orderedEvents([event(3, 'a'), event(1, 'b'), event(2, 'c')]).map((e) => e.cursor))
+      .toEqual(['1', '2', '3']);
   });
 });
 
 describe('replayAt', () => {
   it('kaydiricinin durdugu ana kadarki olaylari gosterir', () => {
-    expect(replayAt(stream, 2).visible.map((e) => e.seq)).toEqual([1, 2]);
+    expect(replayAt(stream, 2).visible.map((e) => e.cursor)).toEqual(['1', '2']);
   });
 
   // ASIL KUSUR: geçmişe dönmek mümkün değildi; tuval hep şimdiki durumu
@@ -59,7 +59,7 @@ describe('replayAt', () => {
   });
 
   it('durdugu olayi bildirir', () => {
-    expect(replayAt(stream, 3).at?.seq).toBe(3);
+    expect(replayAt(stream, 3).at?.cursor).toBe('3');
   });
 
   it('bos akista bos durum doner', () => {
@@ -74,14 +74,14 @@ describe('replayAt — zarf alanları', () => {
   // bakmak her görevi "bilinmiyor" gösteriyordu.
   it('gorev kimligini zarftan okur', () => {
     const state = replayAt([
-      { event: 'status_change', seq: 1, ts: 'x', taskId: 't9', data: { toStatus: 'working' } },
+      { event: 'status_change', cursor: '1', ts: 'x', taskId: 't9', data: { toStatus: 'working' } },
     ], 1);
     expect(state.statusByTask.get('t9')).toBe('working');
   });
 
   it('zarf kimligi bos ise payloada duser', () => {
     const state = replayAt([
-      { event: 'status_change', seq: 1, ts: 'x', taskId: '', data: { taskId: 't5', status: 'done' } },
+      { event: 'status_change', cursor: '1', ts: 'x', taskId: '', data: { taskId: 't5', status: 'done' } },
     ], 1);
     expect(state.statusByTask.get('t5')).toBe('done');
   });

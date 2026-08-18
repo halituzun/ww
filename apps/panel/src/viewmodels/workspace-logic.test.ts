@@ -47,10 +47,10 @@ describe('pickSelectedFile', () => {
 });
 
 describe('appendTimelineEvent', () => {
-  const event = (seq: number) => ({ event: 'task.updated', seq, ts: '', data: null });
+  const event = (seq: number) => ({ event: 'task.updated', cursor: String(seq), ts: '', data: null });
 
   it('olayı sona ekler', () => {
-    expect(appendTimelineEvent([event(1)], event(2)).map((e) => e.seq)).toEqual([1, 2]);
+    expect(appendTimelineEvent([event(1)], event(2)).map((e) => e.cursor)).toEqual(['1', '2']);
   });
 
   // Sınırsız birikim paneli zamanla kilitler.
@@ -58,8 +58,8 @@ describe('appendTimelineEvent', () => {
     const full = Array.from({ length: TIMELINE_LIMIT }, (_, i) => event(i));
     const next = appendTimelineEvent(full, event(9999));
     expect(next).toHaveLength(TIMELINE_LIMIT);
-    expect(next.at(-1)?.seq).toBe(9999);
-    expect(next[0]?.seq).toBe(1);
+    expect(next.at(-1)?.cursor).toBe('9999');
+    expect(next[0]?.cursor).toBe('1');
   });
 
   // WebSocket yeniden bağlanınca aynı olay tekrar gelebilir.
@@ -69,6 +69,6 @@ describe('appendTimelineEvent', () => {
   });
 
   it('sıra dışı gelen olayı yine de kaydeder', () => {
-    expect(appendTimelineEvent([event(5)], event(3)).map((e) => e.seq)).toEqual([5, 3]);
+    expect(appendTimelineEvent([event(5)], event(3)).map((e) => e.cursor)).toEqual(['5', '3']);
   });
 });

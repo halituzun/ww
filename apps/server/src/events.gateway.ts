@@ -7,6 +7,7 @@ const NIL_TASK = '00000000-0000-0000-0000-000000000000';
 import { listEvents, type ClickHouseClient } from '@ww/db';
 import type { Server, WebSocket } from 'ws';
 import { SERVER_DATABASE, type ServerDatabase } from './orchestration.module.js';
+import { toCursor } from './ws-cursor.js';
 
 interface Subscription { readonly projectId: string; readonly afterSeq: bigint; }
 interface ClientState { subscription?: Subscription; timer?: ReturnType<typeof setInterval>; }
@@ -68,7 +69,7 @@ export class EventsGateway implements OnModuleDestroy {
     for (const event of events) {
       const seq = BigInt(event.seq);
       if (seq <= after) continue;
-      const envelope: WsEnvelope = { event: event.event_type, projectId: subscription.projectId, taskId: event.task_id === NIL_TASK ? '' : event.task_id, seq: Number(seq <= BigInt(Number.MAX_SAFE_INTEGER) ? seq : BigInt(Number.MAX_SAFE_INTEGER)), ts: event.created_at, data: event.payload };
+      const envelope: WsEnvelope = { event: event.event_type, projectId: subscription.projectId, taskId: event.task_id === NIL_TASK ? '' : event.task_id, cursor: toCursor(seq), ts: event.created_at, data: event.payload };
       client.send(JSON.stringify(envelope));
       state.subscription = { ...subscription, afterSeq: seq };
     }

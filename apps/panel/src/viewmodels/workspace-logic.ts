@@ -4,7 +4,13 @@ import type { FileIndex, Task } from '../services/projects.js';
 
 export interface TimelineEvent {
   event: string;
-  seq: number;
+  /**
+   * OPAK imleç (docs/08). Eskiden `seq: number` idi ve UInt64 değerler 2^53
+   * üstünde kırpılıyordu; canlı veride olayların %65'i o sınırın üstünde
+   * olduğu için kırpılmış değerler EŞİTLENİYOR ve aşağıdaki tekilleştirme
+   * onları "tekrar" sanıp atıyordu. Besleme bağlı görünüp ölü kalıyordu.
+   */
+  cursor: string;
   ts: string;
   /** Olayı üreten görev; sunucu zarfında kolon olarak gelir, payload'da değil. */
   taskId?: string;
@@ -42,6 +48,6 @@ export function appendTimelineEvent(
   current: readonly TimelineEvent[],
   next: TimelineEvent,
 ): TimelineEvent[] {
-  if (current.some((event) => event.seq === next.seq)) return [...current];
+  if (current.some((event) => event.cursor === next.cursor)) return [...current];
   return [...current.slice(-(TIMELINE_LIMIT - 1)), next];
 }

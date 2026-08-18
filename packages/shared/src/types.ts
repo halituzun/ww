@@ -12,7 +12,14 @@ export interface WsEnvelope<T = unknown> {
    * Görevle ilgisi olmayan olaylarda boş dizedir.
    */
   taskId: string;
-  seq: number;
+  /**
+   * OPAK imleç (docs/08). `seq` UInt64'tür; `number` olarak taşınması 2^53
+   * üstünde KAYIPLIDIR ve canlı veritabanında olayların %65'i o sınırın
+   * üstündedir. Kırpılan değerler eşitlenince panel onları "tekrar" sanıp
+   * atıyordu. Metin olarak taşımak kayıpsızdır ve dokümanın zaten
+   * söylediğidir: "`events.seq` alanı public istemci sözleşmesi değildir".
+   */
+  cursor: string;
   ts: string;
   data: T;
 }
