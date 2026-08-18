@@ -6,7 +6,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import {
   fetchMobileFrame, fetchMobileTargets, openMobileSession, stopMobileSession,
-  type MobileTargets,
+  tapMobileSession, type MobileTargets,
 } from '../services/mobile.js';
 
 export interface MobilePreviewPorts {
@@ -14,6 +14,7 @@ export interface MobilePreviewPorts {
   openSession?: typeof openMobileSession;
   fetchFrame?: typeof fetchMobileFrame;
   stopSession?: typeof stopMobileSession;
+  tapSession?: typeof tapMobileSession;
   pollMs?: number;
 }
 
@@ -27,6 +28,7 @@ export function useMobilePreviewViewModel(ports: MobilePreviewPorts = {}) {
   const open_ = ports.openSession ?? openMobileSession;
   const frame_ = ports.fetchFrame ?? fetchMobileFrame;
   const stop_ = ports.stopSession ?? stopMobileSession;
+  const tap_ = ports.tapSession ?? tapMobileSession;
   const pollMs = ports.pollMs ?? MOBILE_FRAME_POLL_MS;
 
   const [targets, setTargets] = useState<MobileTargets>(EMPTY);
@@ -93,5 +95,19 @@ export function useMobilePreviewViewModel(ports: MobilePreviewPorts = {}) {
     }
   }, [sessionId, stop_]);
 
-  return { targets, sessionId, frameDataUrl, error, busy, open, stop };
+  /**
+   * Dokunuştan SONRA kare hemen tazelenir: 2 saniyelik yoklamayı beklemek
+   * kullanıcıya "dokunuş işe yaramadı" hissi verir.
+   */
+  const tap = useCallback(async (point: Readonly<{ x: number; y: number }>) => {
+    if (sessionId === '') return;
+    try {
+      await tap_(sessionId, point);
+      await refreshFrame(sessionId);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : 'Dokunuş gönderilemedi');
+    }
+  }, [sessionId, tap_, refreshFrame]);
+
+  return { targets, sessionId, frameDataUrl, error, busy, open, stop, tap };
 }

@@ -55,3 +55,13 @@ export const stopMobileSession = (
     `/mobile-preview/sessions/${encodeURIComponent(sessionId)}`,
     { ...options, method: 'DELETE' },
   );
+
+export const tapMobileSession = (
+  sessionId: string,
+  point: Readonly<{ x: number; y: number }>,
+  options: RequestOptions = {},
+): Promise<{ sessionId: string; x: number; y: number }> =>
+  requestJson<{ sessionId: string; x: number; y: number }>(
+    `/mobile-preview/sessions/${encodeURIComponent(sessionId)}/tap`,
+    { ...options, method: 'POST', body: point },
+  );

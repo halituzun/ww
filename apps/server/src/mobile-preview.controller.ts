@@ -117,6 +117,30 @@ export class MobilePreviewController {
     } catch (reason) { return this.#unavailable(reason); }
   }
 
+  /**
+   * docs/11 Faz 6 "temel etkileşim". `MobilePreviewService.tap` yazılmıştı
+   * ama hiçbir uç onu yayınlamıyordu: etkileşim erişilemezdi.
+   */
+  @Post('sessions/:sessionId/tap')
+  async tap(
+    @Req() request: LocalSessionRequest,
+    @Param('sessionId') sessionId: string,
+    @Body() body: { x?: unknown; y?: unknown },
+  ) {
+    parseLocalSession(request);
+    const x = Number(body?.x);
+    const y = Number(body?.y);
+    // Koordinat doğrulaması SUNUCUDA da yapılır: panele güvenmek, bu yüzeyi
+    // panelden gelen rastgele değerle host komutu çalıştırmaya açar.
+    if (!Number.isSafeInteger(x) || !Number.isSafeInteger(y) || x < 0 || y < 0) {
+      throw new BadRequestException('dokunma koordinatı güvenli tam sayı olmalıdır');
+    }
+    try {
+      await this.#service.tap(sessionId, x, y);
+      return { sessionId, x, y };
+    } catch (reason) { return this.#unavailable(reason); }
+  }
+
   @Delete('sessions/:sessionId')
   async stop(@Req() request: LocalSessionRequest, @Param('sessionId') sessionId: string) {
     parseLocalSession(request);
