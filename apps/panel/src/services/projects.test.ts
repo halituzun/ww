@@ -40,6 +40,19 @@ describe('okuma uçları', () => {
       .rejects.toBeTruthy();
   });
 
+
+  // Bu iki uç, bu oturumda EKLEDİĞİM "henüz görev/dosya yok" boş durumlarını
+  // besliyor. Hata yutulursa o mesajlar YALAN söyler: kullanıcı 32 kuyruk
+  // görevi varken "görev yok" görür.
+  it.each([
+    ['görev listesi', fetchTasks],
+    ['dosya listesi', fetchFiles],
+  ])('%s alinamazsa hatayi YUTMAZ', async (_name, call) => {
+    const mock = vi.fn(async () => new Response('bozuk', { status: 500 }));
+    await expect(call('p1', { fetchImpl: mock as unknown as typeof fetch }))
+      .rejects.toBeTruthy();
+  });
+
   it.each([
     ['tasks', fetchTasks, '/projects/p1/tasks'],
     ['usage', fetchUsage, '/projects/p1/usage'],
@@ -52,9 +65,13 @@ describe('okuma uçları', () => {
   });
 
   // Okuma hatası panelin akışını kesmemeli.
-  it('okuma ucu hata verirse boş sonuç döner', async () => {
+  // DEĞİŞTİ: `fetchTasks` artık hatayı yutmuyor — boş dizi döndürmek panele
+  // "henüz görev yok" dedirtiyordu ve bu, veri gelmediğinde yalandı.
+  // `fetchUsage` hâlâ null'a düşüyor: kontör ROZETİ yokluğu sessizce
+  // gizleyebilir, ama panonun kendisi ayrı bir uçtan besleniyor ve o
+  // hatayı gösteriyor.
+  it('kontör ucu hata verirse bos sonuc doner', async () => {
     const fetchImpl = vi.fn(async () => jsonResponse({}, { status: 500 })) as unknown as typeof fetch;
-    await expect(fetchTasks('p1', { fetchImpl })).resolves.toEqual([]);
     await expect(fetchUsage('p1', { fetchImpl })).resolves.toBeNull();
   });
 

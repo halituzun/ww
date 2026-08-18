@@ -105,14 +105,16 @@ export const fetchProjects = (options: RequestOptions = {}): Promise<Project[]> 
 export const fetchProject = (projectId: string, options: RequestOptions = {}): Promise<Project | null> =>
   getJsonOr<Project | null>(scope(projectId), null, options);
 
+// HATAYI YUTMAZ: boş dizi döndürmek panele "henüz görev/dosya yok" dedirtir
+// ve bu, veri gelmediğinde YALAN olur (bkz. fetchProjects).
 export const fetchTasks = (projectId: string, options: RequestOptions = {}): Promise<Task[]> =>
-  getJsonOr<Task[]>(scope(projectId, '/tasks'), [], options);
+  getJson<Task[]>(scope(projectId, '/tasks'), options);
 
 export const fetchUsage = (projectId: string, options: RequestOptions = {}): Promise<Usage | null> =>
   getJsonOr<Usage | null>(scope(projectId, '/usage'), null, options);
 
 export const fetchFiles = (projectId: string, options: RequestOptions = {}): Promise<FileIndex[]> =>
-  getJsonOr<FileIndex[]>(scope(projectId, '/files'), [], options);
+  getJson<FileIndex[]>(scope(projectId, '/files'), options);
 
 export const fetchProviderHealth = (projectId: string, options: RequestOptions = {}): Promise<ProviderHealth[]> =>
   getJsonOr<ProviderHealth[]>(scope(projectId, '/provider-health'), [], options);

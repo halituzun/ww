@@ -26,7 +26,7 @@ export default function App() {
     page, setPage,
     projectId, setProjectId,
     budgetReport, auditReport, providerList,
-    tasks, projects, projectsError, projectDraft, setProjectDraft,
+    tasks, projects, projectsError, workspaceError, projectDraft, setProjectDraft,
     projectStatusMessage, projectStatus,
     usage, files, providerHealth, apiArtifacts,
     timelineCursor, setTimelineCursor, replay,
@@ -84,6 +84,9 @@ export default function App() {
         {usage ? <div className="metrics usage-metrics"><div><strong>${usage.costUsd.toFixed(4)}</strong><span>Maliyet</span></div><div><strong>{usage.calls}</strong><span>Çağrı</span></div><div><strong>{usage.promptTokens + usage.completionTokens}</strong><span>Token</span></div></div> : null}
         {providerHealth.length > 0 ? <div className="provider-health" aria-label="Sağlayıcı sağlığı">{providerHealth.map((provider) => <span key={provider.provider_id} className={`provider-badge provider-badge--${provider.health_status}`}><i aria-hidden="true" />{provider.provider_id}: {provider.health_status}</span>)}</div> : null}
         <p className="hint">API sağlayıcıları ve anahtarlar <button type="button" className="linklike" onClick={() => setPage('providers')}>API'ler sayfasında</button> yönetilir.</p>
+        {workspaceError === '' ? null : (
+          <p className="audit-error" role="alert">{workspaceError}</p>
+        )}
         <TabBar tab={tab} onTab={setTab} counts={{ tasks: tasks.length, events: events.length }} />
         {tab === 'tasks' ? <TaskListPanel tasks={tasks} statusCounts={statusCounts} /> : tab === 'timeline' ? <TimelinePanel events={events} cursor={timelineCursor} onCursor={setTimelineCursor} visible={replay.visible} at={replay.at} /> : tab === 'canvas' ? <CanvasPanel projectId={projectId} events={events} cursor={timelineCursor} onCursor={setTimelineCursor} at={replay.at} tasks={tasks} statusByTask={timelineCursor >= events.length ? undefined : replay.statusByTask} selectedAgent={selectedAgent} onSelectAgent={setSelectedAgent} /> : tab === 'files' ? <FileBrowserPanel projectId={projectId} files={files} selectedFile={selectedFile} onSelectFile={setSelectedFile} narratorQuestion={narratorQuestion} onNarratorQuestion={setNarratorQuestion} onAskNarrator={() => void askNarrator()} narratorResult={narratorResult ?? undefined} /> : tab === 'api' ? <ApiConsole projectId={projectId} artifacts={apiArtifacts} /> : <PreviewPanel projectId={projectId} />}
       </section> : <ProjectPicker projects={projects} draft={projectDraft} onDraft={(patch) => setProjectDraft((current) => ({ ...current, ...patch }))} onCreate={() => void createProject()} statusMessage={projectStatusMessage} onSelect={setProjectId} loadError={projectsError} />}

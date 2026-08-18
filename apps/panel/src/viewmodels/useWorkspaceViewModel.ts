@@ -72,6 +72,9 @@ export function useWorkspaceViewModel() {
   // "Proje yok" ile "liste alınamadı" ayrı tutulur: ikisini karıştırmak
   // kullanıcıya projelerini kaybettiğini düşündürür.
   const [projectsError, setProjectsError] = useState('');
+  // Çalışma alanı verisi ALINAMADI. Boş listelerden ayrı tutulur: "görev yok"
+  // ile "görev listesi gelmedi" aynı şey değildir.
+  const [workspaceError, setWorkspaceError] = useState('');
 
   useEffect(() => {
     if (projectId) return;
@@ -89,11 +92,26 @@ export function useWorkspaceViewModel() {
     if (!projectId) return;
     let active = true;
     const load = async () => {
-      const [project, nextTasks, nextUsage, nextFiles, health, artifacts] = await Promise.all([
-        fetchProject(projectId), fetchTasks(projectId), fetchUsage(projectId),
-        fetchFiles(projectId), fetchProviderHealth(projectId), fetchApiArtifacts(projectId),
-      ]);
+      // Uçlardan biri artık hatayı yutmuyor; Promise.all içinde reddedince
+      // TÜM yükleme düşer. Yakalamazsak hiçbir yüzey güncellenmez ve panel
+      // sessizce donar — düzelttiğimiz yalanın yerine daha kötüsü geçerdi.
+      let loaded;
+      try {
+        loaded = await Promise.all([
+          fetchProject(projectId), fetchTasks(projectId), fetchUsage(projectId),
+          fetchFiles(projectId), fetchProviderHealth(projectId), fetchApiArtifacts(projectId),
+        ]);
+      } catch (reason) {
+        if (active) {
+          setWorkspaceError(
+            reason instanceof Error ? reason.message : 'Çalışma alanı verisi alınamadı',
+          );
+        }
+        return;
+      }
+      const [project, nextTasks, nextUsage, nextFiles, health, artifacts] = loaded;
       if (!active) return;
+      setWorkspaceError('');
       if (project) setProjectStatus(project.status);
       setTasks(nextTasks);
       setUsage(nextUsage);
@@ -202,7 +220,7 @@ export function useWorkspaceViewModel() {
     page, setPage,
     projectId, setProjectId,
     budgetReport, auditReport, providerList,
-    tasks, projects, projectsError, projectDraft, setProjectDraft,
+    tasks, projects, projectsError, workspaceError, projectDraft, setProjectDraft,
     projectStatusMessage, projectStatus,
     usage, files, providerHealth, apiArtifacts,
     selectedFile, setSelectedFile,
