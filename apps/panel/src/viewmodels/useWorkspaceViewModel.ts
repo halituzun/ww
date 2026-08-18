@@ -1,3 +1,4 @@
+import type { PanelTab } from '../services/tabs.js';
 // Çalışma alanı ekranının ViewModel'i (docs/09 MVVM).
 //
 // NEDEN VAR: App.tsx bir View olmasına rağmen 20+ useState, 4 useEffect,
@@ -66,7 +67,7 @@ export function useWorkspaceViewModel() {
   const [timelineCursor, setTimelineCursor] = useState(Number.POSITIVE_INFINITY);
   // docs/08: tuvalde seçilen agent'ın geçmişi yan panelde açılır.
   const [selectedAgent, setSelectedAgent] = useState<string | undefined>();
-  const [tab, setTab] = useState<'tasks' | 'timeline' | 'canvas' | 'files' | 'api' | 'preview'>('tasks');
+  const [tab, setTab] = useState<PanelTab>('tasks');
 
   useEffect(() => {
     if (projectId) return;
