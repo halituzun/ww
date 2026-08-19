@@ -1,13 +1,14 @@
 import type { ClickHouseClient } from '@ww/db';
 import {
   EntityIdSchema,
+  NIL_UUID,
   canonicalSha256V1,
   type EntityId,
 } from '@ww/shared';
-import { getFileIndex, getTaskAsOf, listFileIndex, listLatestKnowledgeByStatus, listRecentSummaries, upsertFileIndex, type FileIndexLayer, type KnowledgeRow } from '@ww/db';
+import { getFileIndex, getPlanAsOf, getTaskAsOf, listFileIndex, listFileIndexAsOf, listLatestKnowledgeByStatus, listLatestKnowledgeByStatusAsOf, listRecentMessages, listRecentSummaries, upsertFileIndex, type FileIndexLayer, type KnowledgeRow } from '@ww/db';
 
 export interface MemoryChunk {
-  readonly sourceTable: 'knowledge' | 'summaries' | 'file_index' | 'messages';
+  readonly sourceTable: 'plans' | 'knowledge' | 'summaries' | 'file_index' | 'messages';
   readonly sourceId: EntityId;
   readonly text: string;
   readonly label: string;
@@ -48,7 +49,7 @@ export interface SummaryInput {
 
 export interface EmbeddingInput {
   readonly projectId: EntityId;
-  readonly sourceTable: 'knowledge' | 'summaries' | 'file_index' | 'messages';
+  readonly sourceTable: 'plans' | 'knowledge' | 'summaries' | 'file_index' | 'messages';
   readonly sourceId: EntityId;
   readonly chunkIndex: number;
   readonly text: string;
@@ -215,16 +216,20 @@ export class MemoryService {
     const query = input.query.trim();
     if (query.length === 0) throw new Error('memory query bos olamaz');
     const cutoff = input.cutoffAt === undefined ? undefined : validCutoff(input.cutoffAt);
-    const knowledge = await listLatestKnowledgeByStatus(this.#ch, projectId, 'active');
-    const files = await listFileIndex(this.#ch, projectId, Math.min(1_000, limit * 20));
+    const knowledge = cutoff === undefined
+      ? await listLatestKnowledgeByStatus(this.#ch, projectId, 'active')
+      : await listLatestKnowledgeByStatusAsOf(this.#ch, projectId, 'active', cutoff);
+    const files = cutoff === undefined
+      ? await listFileIndex(this.#ch, projectId, Math.min(1_000, limit * 20))
+      : await listFileIndexAsOf(this.#ch, projectId, cutoff, Math.min(1_000, limit * 20));
     // ÖZETLER ARTIK BİRİNCİ SINIF KAYNAK. Eskiden yalnızca knowledge ve
     // file_index HİÇ eşleşmediğinde sorgulanıyordu; eşleşen tek bir karar
     // piramidin orta katmanını tamamen görünmez yapıyordu.
     const summaries = await listRecentSummaries(this.#ch, projectId, 200, cutoff);
+    const messages = await listRecentMessages(this.#ch, projectId, 200, cutoff);
     const terms = query.toLocaleLowerCase('tr-TR').split(/\s+/u).filter(Boolean);
     const candidates: MemoryCandidate[] = [
       ...knowledge
-        .filter((row) => cutoff === undefined || Date.parse(row.created_at) <= Date.parse(cutoff))
         .map((row) => ({
           chunk: {
             sourceTable: 'knowledge' as const,
@@ -252,6 +257,15 @@ export class MemoryService {
         },
         haystack: row.content.toLocaleLowerCase('tr-TR'),
       })),
+      ...messages.map((row) => ({
+        chunk: {
+          sourceTable: 'messages' as const,
+          sourceId: row.protocolVersion === 1 ? row.envelope.messageId : row.messageId,
+          text: row.content,
+          label: `[message:${row.protocolVersion === 1 ? row.envelope.kind : row.kind}]`,
+        },
+        haystack: row.content.toLocaleLowerCase('tr-TR'),
+      })),
     ];
     return rankMemoryCandidates(candidates, terms, limit);
   }
@@ -261,10 +275,39 @@ export class MemoryService {
     const cutoffAt = validCutoff(input.cutoffAt);
     const task = await getTaskAsOf(this.#ch, input.projectId, input.taskId, cutoffAt);
     if (task === null) throw new Error(`context task bulunamadi: ${input.taskId}`);
+    const plan = await getPlanAsOf(this.#ch, input.projectId, task.plan_id, cutoffAt);
+    // Eski/süren görevlerde henüz maddileşmiş plan olmayabilir; görev yine
+    // de kullanılabilir. Mühürlü brief'ler her zaman plan taşır ve aşağıdaki
+    // zengin plan chunk'ını alır.
+    const planChunk = plan === null ? [] : [Object.freeze({
+      sourceTable: 'plans' as const,
+      sourceId: plan.plan_id,
+      text: `${plan.title}\n${plan.content_md}`,
+      label: `[plan:${plan.plan_version} #${plan.plan_id}]`,
+      score: 4,
+    })];
     const taskText = `${task.title}\n${task.description}\nKabul: ${task.acceptance_criteria.join('; ')}`;
+    // Hedef dosyalar mühürlü görev sözleşmesinin parçasıdır; açıkça
+    // eklenmelidir. Amaç "özelliği uygula" dediğinde anahtar kelime
+    // eşleşmesine güvenmek dosya fihristini sessizce düşürür.
+    const targetPaths = new Set(task.target_files);
+    const targetFileChunks = (await listFileIndexAsOf(
+      this.#ch,
+      input.projectId,
+      cutoffAt,
+      Math.min(1_000, Math.max(1, targetPaths.size * 2)),
+    ))
+      .filter((row) => targetPaths.has(row.file_path))
+      .map((row) => Object.freeze({
+        sourceTable: 'file_index' as const,
+        sourceId: id('file-index', { projectId: input.projectId, path: row.file_path }),
+        text: `${row.file_path}\n${row.summary}`,
+        label: `[file:${row.file_path}]`,
+        score: 3,
+      }));
     const requiredKinds = new Set(input.knowledgeKinds ?? ['requirement', 'standard', 'decision']);
-    const knowledge = (await listLatestKnowledgeByStatus(this.#ch, input.projectId, 'active'))
-      .filter((row) => requiredKinds.has(row.kind) && Date.parse(row.created_at) <= Date.parse(cutoffAt))
+    const knowledge = (await listLatestKnowledgeByStatusAsOf(this.#ch, input.projectId, 'active', cutoffAt))
+      .filter((row) => requiredKinds.has(row.kind))
       .map((row) => knowledgeChunk(row, row.kind === 'requirement' ? 3 : row.kind === 'standard' ? 2 : 1));
     // docs/06 Context Builder 4. katman "Taze gelişmeler": projenin SON N
     // görev özeti, kronolojik farkındalık için. Bu katman hiç yoktu — sorgu
@@ -280,11 +323,41 @@ export class MemoryService {
         label: `[summary:${row.scope} #${row.summary_id}]`,
         score: RECENT_SUMMARY_SCORE,
       }));
+    // Bağımlılık ve üst görev özetleri "son zamanlar" bağlamı değil, görev
+    // bağlamıdır: bir bağımlılık projenin en yeni beş özetinden eski olabilir
+    // ve yine de sonraki görev tarafından görülebilmelidir.
+    const relatedTaskIds = new Set([
+      ...(task.parent_task_id === NIL_UUID ? [] : [task.parent_task_id]),
+      ...task.depends_on,
+    ]);
+    const relatedSummaries = relatedTaskIds.size === 0
+      ? []
+      : (await listRecentSummaries(this.#ch, input.projectId, 200, cutoffAt))
+        .filter((row) => relatedTaskIds.has(row.ref_id))
+        .map((row) => Object.freeze({
+          sourceTable: 'summaries' as const,
+          sourceId: EntityIdSchema.parse(row.summary_id),
+          text: row.content,
+          label: `[summary:${row.scope} #${row.summary_id}]`,
+          score: 3,
+        }));
+    const recentMessages = (await listRecentMessages(this.#ch, input.projectId, 5, cutoffAt))
+      .map((row) => Object.freeze({
+        sourceTable: 'messages' as const,
+        sourceId: row.protocolVersion === 1 ? row.envelope.messageId : row.messageId,
+        text: row.content,
+        label: `[message:${row.protocolVersion === 1 ? row.envelope.kind : row.kind}]`,
+        score: RECENT_SUMMARY_SCORE,
+      }));
     const chunks = [
+      ...planChunk,
       { sourceTable: 'summaries' as const, sourceId: input.taskId, text: taskText, label: `[task #${input.taskId}]`, score: 4 },
       ...knowledge,
+      ...targetFileChunks,
       ...(input.query === undefined ? [] : await this.query({ projectId: input.projectId, query: input.query, cutoffAt, limit: 12 })),
+      ...relatedSummaries,
       ...recent,
+      ...recentMessages,
     ];
     const selected = selectMemoryChunks(chunks, input.tokenBudget);
     return Object.freeze({
@@ -354,4 +427,3 @@ export class MemoryService {
     return id('file-index-row', row);
   }
 }
-

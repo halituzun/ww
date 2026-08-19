@@ -143,6 +143,35 @@ describe.skipIf(!up)('MemoryService.appendSummary', () => {
     );
   });
 
+  it('muhurlu gorevin hedef dosya fihristini sorgu olmadan tasir', async () => {
+    const projectId = randomUUID();
+    const taskId = randomUUID();
+    const memory = new MemoryService(ch);
+    await createTask(ch, {
+      task_id: taskId, project_id: projectId, plan_id: randomUUID(),
+      parent_task_id: NIL_UUID, title: 'Renk yardimcisi', description: 'yardimciyi ekle',
+      acceptance_criteria: ['calisir'], status: 'queued', priority: 0,
+      issuer_agent_id: randomUUID(), worker_agent_id: NIL_UUID,
+      verifier_agent_id: NIL_UUID, group: 'coding', depends_on: [],
+      target_files: ['src/colors.ts'], attempt: 0, max_attempts: 3,
+      delegation_depth: 0, token_budget: 0, tokens_spent: 0, commit_hash: '',
+      result_summary: '', reject_reason: '', task_brief_id: NIL_UUID,
+      assignment_attempt_id: NIL_UUID,
+      created_at: '2026-08-18T09:00:00.000Z', updated_at: '2026-08-18T09:00:00.000Z',
+    } as never);
+    await memory.updateFileIndex({
+      projectId: projectId as never, filePath: 'src/colors.ts',
+      summary: 'Renk sabitleri ve tema yardimcilari', layer: 'service',
+      updatedAt: '2026-08-18T09:30:00.000Z',
+    });
+
+    const pack = await memory.buildContextPack({
+      projectId: projectId as never, taskId: taskId as never,
+      cutoffAt: '2026-08-18T12:00:00.000Z', tokenBudget: 4_000,
+    });
+    expect(pack.chunks.map((chunk) => chunk.label)).toContain('[file:src/colors.ts]');
+  });
+
   // Kesme anı özetlerde de geçerlidir: yeniden koşan bir görev, KENDİSİNDEN
   // SONRA oluşmuş bir gelişmeyi görürse koşu tekrar edilemez olur.
   it('kesme anindan sonraki ozeti baglama koymaz', async () => {
