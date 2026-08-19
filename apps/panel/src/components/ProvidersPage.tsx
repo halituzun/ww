@@ -1,6 +1,7 @@
 import { healthStatusLabel } from '../services/labels.js';
 import { useProviders } from '../viewmodels/useProviders.js';
 import { RoleModelTable } from './RoleModelTable.js';
+import { CliproxyGatewayCard } from './CliproxyGatewayCard.js';
 
 // API sağlayıcı yönetimi — docs/08-panel.md'de tanımlı bağımsız "API'ler" sayfası.
 // Proje seçiminden bağımsızdır: sağlayıcılar proje-bağımsızdır (api_providers'ta
@@ -11,9 +12,14 @@ export function ProvidersPage() {
   return (
     <section className="workspace-card providers-page" aria-label="API sağlayıcıları">
       <div className="section-heading">
-        <h2>API sağlayıcıları</h2>
-        <small>Anahtarlar şifreli yerel depoda tutulur; panel yalnız maskeli değeri görür.</small>
+        <div>
+          <p className="eyebrow">MODEL ERİŞİMİ</p>
+          <h2>AI gateway ve sağlayıcılar</h2>
+        </div>
+        <small>Hesaplarını gateway’den, doğrudan API anahtarlarını aşağıdan yönet.</small>
       </div>
+
+      <CliproxyGatewayCard />
 
       {vm.status ? <p className="provider-status" role="status">{vm.status}</p> : null}
       {vm.loading ? <p className="hint">Yükleniyor…</p> : null}
@@ -67,6 +73,8 @@ export function ProvidersPage() {
 
       <RoleModelTable providers={vm.providers} />
 
+      <details className="provider-advanced">
+        <summary>Doğrudan API sağlayıcısı ekle veya düzenle</summary>
       <form
         className="provider-create"
         onSubmit={(event) => { event.preventDefault(); void vm.submitDraft(); }}
@@ -91,6 +99,7 @@ export function ProvidersPage() {
         </div>
         <button type="submit">Sağlayıcı ekle</button>
       </form>
+      </details>
     </section>
   );
 }

@@ -20,6 +20,8 @@ import { OperationsController } from './operations.controller.js';
 import { FilesController } from './files.controller.js';
 import { NarratorController } from './narrator.controller.js';
 import { ProvidersController } from './providers.controller.js';
+import { CliproxyApiController } from './cliproxyapi.controller.js';
+import { CliproxyApiService } from './cliproxyapi.service.js';
 import { ProviderHealthScheduler } from './provider-health.scheduler.js';
 import { TaskPumpService } from './task-pump.service.js';
 import { RecoverySweeperService } from './recovery-sweeper.service.js';
@@ -72,12 +74,13 @@ import {
     InterviewController,
     CouncilController,
     StandardsAuditController,
-    PlansController,HealthController, ProjectsController, TasksController, MessagesController, OperationsController, FilesController, NarratorController, ProvidersController, RoleModelsController, BudgetController, AuditController, RuntimeController],
+    PlansController,HealthController, ProjectsController, TasksController, MessagesController, OperationsController, FilesController, NarratorController, ProvidersController, CliproxyApiController, RoleModelsController, BudgetController, AuditController, RuntimeController],
   providers: [
     EVENTS_GATEWAY_PROVIDER,
     ProviderHealthScheduler,
     TaskPumpService,
     RecoverySweeperService,
+    CliproxyApiService,
     PlanApplicationService,
     PreviewApplicationService,
     InterviewApplicationService,
