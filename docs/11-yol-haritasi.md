@@ -37,6 +37,15 @@
 > anahtarı yok, Chrome eklentisi bağlı değil, Android SDK kurulu değil.
 > Bu girdiler geldiğinde koşulacak adımlar her fazın kendi bölümünde tabloyla
 > yazılıdır.
+>
+> **Not (2026-08-20):** `api_usage`'daki `no_key` hatalarının kök nedeni
+> bulundu ve düzeltildi: anahtar kaybolmamıştı; server `.env` yüklü olmayan
+> bir shell'den başlatıldığında cwd'ye bağlı keystore yolu yanlış çözülüyor
+> ve `keystore.readAll()` her okuma hatasını sessizce "boş depo" sayıyordu.
+> Artık yalnızca `ENOENT` boş sayılır, sağlık tarayıcısı çözülen tam yolu
+> log'lar ve Keychain geçici hatasında ana anahtarın üstüne yazılmaz. Anahtar
+> yeniden girildiğinde server'ı `set -a; source .env; set +a; pnpm dev` ile
+> başlatın.
 
 | Faz | Durum | Dayanak |
 |---|---|---|
