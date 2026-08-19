@@ -139,10 +139,24 @@ async function tryStartOrchestration(): Promise<void> {
             process.env['WW_KEYSTORE_FILE'] ?? `${process.cwd()}/.ww/keys.json`,
           );
           const providers = await db.listLatestApiProviders(ch);
-          return buildProviderRegistry(providers.map((row) => ({
+          const records = providers.map((row) => ({
             provider_id: row.provider_id, base_url: row.base_url,
             enabled: row.enabled, models: row.models, key_ref: row.key_ref,
-          })), store);
+          }));
+          const cliproxyKey = process.env['WW_CLIPROXY_API_KEY']?.trim() ?? '';
+          const cliproxyEnabled = process.env['WW_CLIPROXY_ENABLED'] === '1' && cliproxyKey.length > 0;
+          if (cliproxyEnabled) {
+            records.push({
+              provider_id: 'cliproxyapi',
+              base_url: `${(process.env['WW_CLIPROXY_BASE_URL'] ?? 'http://127.0.0.1:8317').replace(/\/+$/, '')}/v1`,
+              enabled: true,
+              models: [],
+              key_ref: '__ww_cliproxyapi_env__',
+            });
+          }
+          return buildProviderRegistry(records, {
+            get: async (keyRef) => keyRef === '__ww_cliproxyapi_env__' ? cliproxyKey : store.get(keyRef),
+          });
         },
         loadRouting: () => loadRoutingIndex(ch),
         // bindLate'i kaydın parçası yap: composition kurulunca çağrılır.
