@@ -110,6 +110,16 @@ export function assemblePromptMessages(input: AssembleInput): PromptMessage[] {
     { role: 'user', content: scope },
   ];
 
+  // Bağlam zorunlu girdidir, isteğe bağlı şablon süsü değil. Bazı eski/
+  // sağlayıcı prompt sürümleri {{context_pack}} içermez; bu yedek olmadan
+  // Context Builder başarıyla çalışır ama model çıktısının hiçbirini görmez.
+  if (input.contextPack.trim() !== '' && !input.template.includes('{{context_pack}}')) {
+    messages.push({
+      role: 'user',
+      content: `Bağlam paketi (mühürlü kaynaklardan):\n${input.contextPack.trim()}`,
+    });
+  }
+
   // ÖNCEKİ DENEMENİN HATASI. Bu bölüm yokken yeniden denenen worker'ın
   // prompt'u ilk denemeyle aynıydı: göremediği bir hatayı düzeltmesi
   // bekleniyor, aynı çıktıyı üretiyor ve üç denemenin biri her turda boşa

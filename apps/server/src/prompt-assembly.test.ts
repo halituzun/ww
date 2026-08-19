@@ -65,6 +65,18 @@ describe('assemblePromptMessages', () => {
     expect(text).toContain('ÖNCEKİ KARAR: tailwind');
   });
 
+  it('context placeholder yoksa baglami ayri user mesajinda tasir', () => {
+    const messages = assemblePromptMessages({
+      brief: brief() as never,
+      template: 'Sen bir worker agent’sın.',
+      contextPack: 'ÖNCEKİ KARAR: react',
+    });
+
+    expect(messages.some((message) =>
+      message.role === 'user' && message.content.includes('ÖNCEKİ KARAR: react'),
+    )).toBe(true);
+  });
+
   it('boş şablonu reddeder', () => {
     expect(() => assemblePromptMessages({ brief: brief() as never, template: '   ', contextPack: '' }))
       .toThrow(/şablon/i);

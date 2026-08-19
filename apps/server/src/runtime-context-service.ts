@@ -5,7 +5,7 @@
 // girdiyi kurar ve mührü (promptHash) hesaplar.
 import { randomUUID } from 'node:crypto';
 import { canonicalSha256V1 } from '@ww/shared';
-import type { AssignmentAttemptV1, EntityId, PromptInputSnapshotV1, TaskBriefV1 } from '@ww/shared';
+import type { AssignmentAttemptV1, EntityId, PromptInputSnapshotV1, PromptMessageV1, TaskBriefV1 } from '@ww/shared';
 import { assemblePromptMessages } from './prompt-assembly.js';
 
 export interface PromptLoaderPort {
@@ -18,7 +18,10 @@ export interface RuntimeContextInput {
   workspaceRoot: string;
   models: { workerModelRef: string; verifierModelRef: string };
   /** docs/06 Context Builder çıktısı. */
-  loadContextPack: (input: Readonly<{ brief: TaskBriefV1 }>) => Promise<string>;
+  loadContextPack: (input: Readonly<{
+    brief: TaskBriefV1;
+    cutoffAt: string;
+  }>) => Promise<string>;
   /**
    * Mühürlü girdiyi KALICI yazar. Verilmezse mühür yalnızca bellekte kalır ve
    * `api_usage.prompt_input_snapshot_id` var olmayan bir kayda işaret eder —
@@ -38,6 +41,13 @@ export interface RuntimeContextInput {
     taskId: EntityId;
     assignmentAttemptId: EntityId;
   }>) => Promise<number>;
+  /** Cursor'a kadar aynı görevin nedensel mesajları; retry bağlamını korur. */
+  loadCausalMessages?: (input: Readonly<{
+    taskId: EntityId;
+    taskBriefId: EntityId;
+    assignmentAttemptId: EntityId;
+    ordinal: number;
+  }>) => Promise<readonly PromptMessageV1[]>;
   /**
    * Bu görevin ÖNCEKİ denemesi neden düştü (docs/05: "Hata → tam çıktı
    * worker'a döner"). Verilmezse prompt eskisi gibi kurulur.
@@ -67,7 +77,12 @@ export function createRuntimeContextService(input: RuntimeContextInput) {
         throw new Error(`prompt bulunamadı: ${primary.sourceId} v${primary.version}`);
       }
 
-      const contextPack = await input.loadContextPack({ brief });
+      const contextPack = await input.loadContextPack({
+        brief,
+        // Context must be reconstructed from the sealed brief cutoff, never
+        // from wall-clock time; otherwise retries see future decisions.
+        cutoffAt: brief.baseContextCutoffAt,
+      });
       const taskId = (brief as unknown as { taskId: EntityId }).taskId;
       // Gerçek imleç okunur; kayıt yoksa 0 DOĞRUDUR (henüz hiçbir girdi
       // işlenmemiştir), uydurma değildir.
@@ -89,6 +104,15 @@ export function createRuntimeContextService(input: RuntimeContextInput) {
         contextPack,
         ...(priorFailure === null ? {} : { priorFailure }),
       });
+      const causalMessages = input.loadCausalMessages === undefined
+        ? []
+        : await input.loadCausalMessages({
+          taskId,
+          taskBriefId: attempt.taskBriefId,
+          assignmentAttemptId: attempt.assignmentAttemptId,
+          ordinal: cursorOrdinal,
+        });
+      const sealedPromptMessages = Object.freeze([...promptMessages, ...causalMessages]);
 
       const snapshot = {
         contractVersion: 1,
@@ -106,9 +130,9 @@ export function createRuntimeContextService(input: RuntimeContextInput) {
           ordinal: cursorOrdinal,
         },
         sourceVersionManifest: refs.sourceVersionManifest,
-        promptMessages,
+        promptMessages: sealedPromptMessages,
         // Mühür: şema promptHash'in mesajlarla eşleşmesini zorunlu kılar.
-        promptHash: canonicalSha256V1(promptMessages),
+        promptHash: canonicalSha256V1(sealedPromptMessages),
         sealedAt: new Date().toISOString(),
       } as unknown as PromptInputSnapshotV1;
 

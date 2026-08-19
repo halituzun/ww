@@ -89,6 +89,28 @@ describe('createRuntimeContextService', () => {
     expect(text).toContain('ÖNCEKİ KARAR: react');
   });
 
+  it('causal mesajlari cursor ile prompt snapshotina ekler', async () => {
+    const result = await service({
+      loadCausalOrdinal: async () => 3,
+      loadCausalMessages: async (input) => {
+        expect(input).toMatchObject({ taskId: id(2), taskBriefId: id(3), assignmentAttemptId: id(4), ordinal: 3 });
+        return [{ role: 'user', content: 'Önceki denemede kullanıcı düzeltme istedi.' }];
+      },
+    }).load({ brief, attempt });
+    expect(result.snapshot.promptMessages.at(-1)).toEqual({
+      role: 'user', content: 'Önceki denemede kullanıcı düzeltme istedi.',
+    });
+  });
+
+  it('bağlam yükleyiciye briefin mühürlü cutoff anını verir', async () => {
+    const loadContextPack = vi.fn(async () => 'bağlam');
+    await service({ loadContextPack }).load({ brief, attempt });
+    expect(loadContextPack).toHaveBeenCalledWith(expect.objectContaining({
+      brief,
+      cutoffAt: brief.baseContextCutoffAt,
+    }));
+  });
+
   // docs/05: kapı düşünce "tam çıktı worker'a döner". Görev kaydındaki
   // reject_reason bu yüzden okunmalı; okunmayınca yeniden denenen worker'ın
   // prompt'u ilk denemeyle AYNI oluyor ve aynı hatayı üretiyordu.

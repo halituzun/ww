@@ -15,6 +15,7 @@ import {
 import type { ClickHouseClient, WwRedis } from '@ww/db';
 import { chUsageSink, ProviderRateLimiter } from '@ww/providers';
 import type { LlmProvider, RoutingIndex } from '@ww/providers';
+import { SYSTEM_SENTINEL, USER_SENTINEL } from '@ww/shared';
 import type { EntityId } from '@ww/shared';
 import { createExecutorComposition, createResumeUserAnswerOperation } from './executor-composition.js';
 import { createGateOperations } from './gate-operations.js';
@@ -24,7 +25,7 @@ import { createExecutionErrorRecorder } from './execution-error-recorder.js';
 import { renderContextPack } from './context-pack-render.js';
 import { classifyArtifact, classifyLayer } from './artifact-classify.js';
 import { buildAgentCapabilities } from './agent-capabilities.js';
-import { appendArtifact, appendEvent, appendPromptInputSnapshot, listKnowledgeIdsBySourceTask, getPromptVersion, getTaskCausalCursor, getAssignmentAttempt, getLatestTask, listLatestAgents, listLatestApiProviders } from '@ww/db';
+import { appendArtifact, appendEvent, appendPromptInputSnapshot, getMessage, getTaskHandoff, listTaskCausalEntriesThroughCursor, listKnowledgeIdsBySourceTask, getPromptVersion, getTaskCausalCursor, getAssignmentAttempt, getLatestTask, listLatestAgents, listLatestApiProviders } from '@ww/db';
 import type { RuntimeModels } from './runtime-context.js';
 import type { Phase9RuntimeCompositionInput } from './runtime-composition.js';
 import { createLateBoundPort, type LateBoundPort } from './late-binding.js';
@@ -322,6 +323,38 @@ export async function createOrchestrationComposition(
       // görmedi" diyordu ve replay yanlış noktadan başlardı.
       loadCausalOrdinal: async ({ taskId, assignmentAttemptId }) =>
         (await getTaskCausalCursor(input.ch, taskId, assignmentAttemptId))?.ordinal ?? 0,
+      // Nedensel kayıtlar yalnızca cursor olarak mühürleniyordu; içerikleri
+      // prompt'a eklenmeyince retry/handoff bağlamı modele hiç ulaşmıyordu.
+      loadCausalMessages: async ({ taskId, taskBriefId, assignmentAttemptId, ordinal }) => {
+        const rows = await listTaskCausalEntriesThroughCursor(
+          input.ch, taskId, assignmentAttemptId, ordinal,
+        );
+        const messageIds: EntityId[] = [];
+        for (const row of rows) {
+          if (row.source_type === 'handoff') {
+            const handoff = await getTaskHandoff(input.ch, row.source_id);
+            if (handoff === null || handoff.projectId !== input.projectId ||
+                handoff.taskId !== taskId || handoff.taskBriefId !== taskBriefId ||
+                handoff.toAssignmentAttemptId !== assignmentAttemptId) continue;
+            messageIds.push(...handoff.pendingQuestionMessageIds);
+          } else if (['message', 'answer', 'rejection', 'gate', 'escalation'].includes(row.source_type)) {
+            messageIds.push(row.source_id as EntityId);
+          }
+        }
+        const messages: { role: 'system' | 'user' | 'assistant'; content: string }[] = [];
+        for (const messageId of messageIds) {
+          const message = await getMessage(input.ch, input.projectId, messageId);
+          if (message === null || !('envelope' in message) ||
+              message.envelope.taskId !== taskId ||
+              message.envelope.taskBriefId !== taskBriefId) continue;
+          const sender = message.envelope.senderPrincipalId;
+          messages.push({
+            role: sender === SYSTEM_SENTINEL ? 'system' : sender === USER_SENTINEL ? 'user' : 'assistant',
+            content: message.content,
+          });
+        }
+        return messages;
+      },
       // docs/05: "Hata → tam çıktı worker'a döner". Kapı ya da doğrulayıcı
       // reddi `tasks.reject_reason`'a yazılır; buradan okunup prompt'a
       // konmazsa yeniden denenen worker ilk denemeyle AYNI girdiyi görür ve
@@ -338,13 +371,19 @@ export async function createOrchestrationComposition(
       // kullanmamaktı — agent'lar sıfır proje bağlamıyla çalışıyordu.
       loadContextPack: async ({ brief }) => {
         const scope = brief as unknown as {
-          projectId: EntityId; taskId: EntityId; goal?: string; tokenBudget?: number;
+          projectId: EntityId;
+          taskId: EntityId;
+          goal?: string;
+          tokenBudget?: number;
+          baseContextCutoffAt?: string;
         };
         try {
           const pack = await memory.buildContextPack({
             projectId: scope.projectId,
             taskId: scope.taskId,
-            cutoffAt: new Date().toISOString(),
+          // The brief is already sealed. Using wall-clock time here made a
+          // retry observe knowledge and summaries created after that seal.
+          cutoffAt: scope.baseContextCutoffAt ?? new Date().toISOString(),
             // Bağlam bütçesi görevin toplam bütçesinin küçük bir dilimidir;
             // tamamını bağlama harcamak işe yer bırakmaz.
             tokenBudget: Math.max(500, Math.floor((scope.tokenBudget ?? 4_000) / 4)),

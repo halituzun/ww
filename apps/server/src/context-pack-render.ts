@@ -6,13 +6,14 @@
 // ilgili mesajlar modele girer. Boş dize dönmek, hafıza katmanını yazıp
 // kullanmamaktır.
 export interface RenderableChunk {
-  readonly sourceTable: 'knowledge' | 'summaries' | 'file_index' | 'messages';
+  readonly sourceTable: 'plans' | 'knowledge' | 'summaries' | 'file_index' | 'messages';
   readonly sourceId: string;
   readonly text: string;
   readonly label: string;
 }
 
 const SECTION_TITLE: Record<RenderableChunk['sourceTable'], string> = {
+  plans: 'Mühürlü plan',
   knowledge: 'Proje kararları ve kısıtları',
   summaries: 'Önceki iş özetleri',
   file_index: 'Dosya fihristi',
@@ -20,7 +21,7 @@ const SECTION_TITLE: Record<RenderableChunk['sourceTable'], string> = {
 };
 
 const ORDER: readonly RenderableChunk['sourceTable'][] = [
-  'knowledge', 'summaries', 'file_index', 'messages',
+  'plans', 'knowledge', 'summaries', 'file_index', 'messages',
 ];
 
 export function renderContextPack(chunks: readonly RenderableChunk[]): string {
