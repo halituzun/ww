@@ -77,13 +77,17 @@ export class ProviderHealthScheduler implements OnModuleInit, OnModuleDestroy {
       return { ok: false, latencyMs: Date.now() - started, error: 'kayıt yok', fatal: true };
     }
 
-    const store = await Keystore.open(
-      process.env['WW_KEYSTORE_FILE'] ?? `${process.cwd()}/.ww/keys.json`,
-    );
+    const keystoreFile = process.env['WW_KEYSTORE_FILE'] ?? `${process.cwd()}/.ww/keys.json`;
+    const store = await Keystore.open(keystoreFile);
     const registry = await buildProviderRegistry([record], store);
     const provider = registry.providers.get(providerId);
     if (provider === undefined) {
       const skipped = registry.skipped.find((entry) => entry.providerId === providerId);
+      // no_key'in en sık sebebi anahtarın silinmesi değil, cwd'ye bağlı
+      // göreli yolun yanlış çözülmesidir; sessiz kalmaması için tam yolu log'la.
+      if (skipped?.reason === 'no_key') {
+        this.#logger.warn(`sağlayıcı ${providerId} için anahtar okunamadı; keystore yolu: ${keystoreFile}`);
+      }
       return {
         ok: false, latencyMs: Date.now() - started,
         error: skipped?.reason ?? 'adaptör kurulamadı', fatal: true,
