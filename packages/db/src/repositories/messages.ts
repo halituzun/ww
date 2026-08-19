@@ -826,6 +826,7 @@ export async function listRecentMessages(
   ch: ClickHouseClient,
   projectId: string,
   limit = 100,
+  cutoffAt?: string,
 ): Promise<MessageRecord[]> {
   const project = concreteEntityId(projectId, 'projectId');
   if (!Number.isSafeInteger(limit) || limit < 1 || limit > 1_000) {
@@ -834,9 +835,14 @@ export async function listRecentMessages(
   const result = await ch.query({
     query: `SELECT ${MESSAGE_COLUMNS} FROM messages
       WHERE project_id = {projectId:UUID}
+      ${cutoffAt === undefined ? '' : 'AND created_at <= parseDateTime64BestEffort({cutoff:String}, 3)'}
       ORDER BY created_at DESC, message_id
       LIMIT {limit:UInt32}`,
-    query_params: { projectId: project, limit },
+    query_params: {
+      projectId: project,
+      limit,
+      ...(cutoffAt === undefined ? {} : { cutoff: cutoffAt }),
+    },
     format: 'JSONEachRow',
   });
   const grouped = new Map<string, MessageRecord[]>();

@@ -271,6 +271,48 @@ export async function listLatestKnowledgeByStatus(
   return logical.filter((row) => row.status === state);
 }
 
+/**
+ * Kesit anında (cutoff) geçerli en güncel mantıksal sürümü döndürür. Önce
+ * güncel sürümü filtrelemek replay için yanlıştır: sonradan gelen ve eski
+ * kaydı geçersiz kılan sürüm, görev mühürlendiğinde geçerli olan satırı
+ * gizlerdi.
+ */
+export async function listLatestKnowledgeByStatusAsOf(
+  ch: ClickHouseClient,
+  projectId: string,
+  status: KnowledgeStatus,
+  cutoffAt: string,
+): Promise<KnowledgeRow[]> {
+  const project = concreteEntityId(projectId, 'projectId');
+  const state = storedEnum(status, KNOWLEDGE_STATUSES, 'knowledgeStatus');
+  const cutoff = storedDateTime(cutoffAt, 'cutoffAt').replace('T', ' ').replace('Z', '');
+  const result = await ch.query({
+    query: `SELECT ${KNOWLEDGE_COLUMNS} FROM knowledge
+      WHERE project_id = {projectId:UUID}
+        AND if(observed_at = toDateTime64(0, 3, 'UTC'), created_at, observed_at)
+          <= {cutoffAt:DateTime64(3, 'UTC')}
+      ORDER BY knowledge_id ASC, version DESC`,
+    query_params: { projectId: project, cutoffAt: cutoff },
+    format: 'JSONEachRow',
+  });
+  const physical = (await result.json<unknown>()).map(parseKnowledge);
+  const grouped = new Map<string, KnowledgeRow[]>();
+  for (const row of physical) {
+    const rows = grouped.get(row.knowledge_id) ?? [];
+    rows.push(row);
+    grouped.set(row.knowledge_id, rows);
+  }
+  const logical: KnowledgeRow[] = [];
+  for (const rows of grouped.values()) {
+    const maximum = rows[0]!.version;
+    logical.push(reconcileKnowledgeVersion(
+      `knowledge:${rows[0]!.knowledge_id}@asOf`,
+      rows.filter((row) => row.version === maximum),
+    ));
+  }
+  return logical.filter((row) => row.status === state);
+}
+
 export async function appendKnowledgeVersion(
   ch: ClickHouseClient,
   input: AppendKnowledgeVersionInput,

@@ -41,6 +41,32 @@ export async function listFileIndex(ch: ClickHouseClient, projectId: string, lim
   return (await result.json<unknown>()).map(parse);
 }
 
+/** Verilen bağlam kesitinde (cutoff) var olan en güncel file_index sürümü. */
+export async function listFileIndexAsOf(
+  ch: ClickHouseClient,
+  projectId: string,
+  cutoffAt: string,
+  limit = 1_000,
+): Promise<readonly FileIndexRow[]> {
+  if (!Number.isSafeInteger(limit) || limit < 1 || limit > 1_000) throw new Error('file_index limiti gecersiz');
+  const id = concreteEntityId(projectId, 'projectId');
+  const result = await ch.query({
+    query: `SELECT ${COLUMNS} FROM file_index
+      WHERE project_id = {projectId:UUID}
+        AND updated_at <= parseDateTime64BestEffort({cutoff:String}, 3)
+        AND (project_id,file_path,version) IN (
+          SELECT project_id,file_path,max(version) FROM file_index
+          WHERE project_id = {projectId:UUID}
+            AND updated_at <= parseDateTime64BestEffort({cutoff:String}, 3)
+          GROUP BY project_id,file_path
+        )
+      ORDER BY file_path LIMIT {limit:UInt32}`,
+    query_params: { projectId: id, cutoff: cutoffAt, limit },
+    format: 'JSONEachRow',
+  });
+  return (await result.json<unknown>()).map(parse);
+}
+
 export async function upsertFileIndex(ch: ClickHouseClient, input: UpsertFileIndexInput): Promise<FileIndexRow> {
   const projectId = concreteEntityId(input.project_id, 'projectId');
   const path = input.file_path.trim();

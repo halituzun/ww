@@ -11,6 +11,7 @@ import {
   getLatestKnowledge,
   listKnowledgeIdsBySourceTask,
   listLatestKnowledgeByStatus,
+  listLatestKnowledgeByStatusAsOf,
   type AppendKnowledgeVersionInput,
   type KnowledgeRow,
 } from './knowledge.js';
@@ -110,6 +111,12 @@ describe.skipIf(!up)('knowledge repository', () => {
       next.observed_at,
     ))?.content).toBe(next.content);
     expect(await listLatestKnowledgeByStatus(ch, initial.project_id, 'active')).toEqual([]);
+    expect((await listLatestKnowledgeByStatusAsOf(
+      ch,
+      initial.project_id,
+      'active',
+      equalTimestamp.observed_at,
+    )).map((row) => row.content)).toEqual([equalTimestamp.content]);
     expect((await getKnowledgeSourceRefAsOf(
       ch,
       initial.project_id,
