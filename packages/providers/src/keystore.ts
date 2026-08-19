@@ -54,8 +54,11 @@ export class Keystore {
     let raw: string;
     try {
       raw = await readFile(this.file, 'utf8');
-    } catch {
-      return {}; // henüz anahtar girilmemiş
+    } catch (err) {
+      // Yalnızca "dosya yok" boş depo sayılır (henüz anahtar girilmemiş).
+      // EACCES/EISDIR gibi hatalar sessizce no_key'e dönüşmemeli.
+      if ((err as NodeJS.ErrnoException).code === 'ENOENT') return {};
+      throw err;
     }
     const parsed = JSON.parse(raw) as KeyfileV1;
     if (parsed.v !== 1) throw new Error(`desteklenmeyen anahtar dosyası sürümü: ${parsed.v}`);
@@ -97,10 +100,20 @@ async function resolveMasterKey(): Promise<Buffer> {
   try {
     const { stdout } = await exec('security', ['find-generic-password', '-s', KEYCHAIN_SERVICE, '-w']);
     return Buffer.from(stdout.trim(), 'hex');
-  } catch {
+  } catch (err) {
+    // security: 44 = errSecItemNotFound (girdi gerçekten yok). Diğer hatalar
+    // geçici olabilir (keychain kilitli, headless oturum); bu durumda yeni
+    // rastgele anahtar üretip mevcut girdinin üstüne yazmak depodaki tüm
+    // anahtarları kalıcı olarak çözülemez yapar — hatayı fırlat, üretme.
+    if ((err as { code?: unknown }).code !== 44) {
+      throw new Error(
+        'Keychain okunamadı; mevcut ana anahtar korundu (geçici hata olabilir)',
+        { cause: err },
+      );
+    }
     const key = randomBytes(32);
     await exec('security', [
-      'add-generic-password', '-s', KEYCHAIN_SERVICE, '-a', 'ww', '-w', key.toString('hex'), '-U',
+      'add-generic-password', '-s', KEYCHAIN_SERVICE, '-a', 'ww', '-w', key.toString('hex'),
     ]);
     return key;
   }

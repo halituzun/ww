@@ -1,9 +1,28 @@
+import { execFile } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
-import { mkdtemp, readFile, stat } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, stat } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Keystore, maskKey } from './keystore.js';
+
+vi.mock('node:child_process', () => ({ execFile: vi.fn() }));
+
+type ExecCb = (err: unknown, result?: { stdout: string; stderr: string }) => void;
+
+// keystore.ts modül düzeyinde promisify(execFile) kullanır; mock vi.fn()
+// callback-kipinde sarmalanır ve son argüman her zaman callback'tir.
+function stubSecurity(impl: (args: string[], cb: ExecCb) => void): void {
+  vi.mocked(execFile).mockImplementation(((...callArgs: unknown[]) => {
+    impl(callArgs[1] as string[], callArgs[callArgs.length - 1] as ExecCb);
+  }) as never);
+}
+
+function securityError(code: number, message: string): Error & { code: number } {
+  const err = new Error(message) as Error & { code: number };
+  err.code = code;
+  return err;
+}
 
 async function tempFile(): Promise<string> {
   const dir = await mkdtemp(join(tmpdir(), 'ww-keystore-'));
@@ -41,6 +60,47 @@ describe('Keystore', () => {
     await ks.set('openai', 'a');
     await ks.set('deepseek', 'b');
     expect((await ks.listProviders()).sort()).toEqual(['deepseek', 'openai']);
+  });
+
+  it('dosya hiç yoksa (ENOENT) boş depo sayar', async () => {
+    const ks = new Keystore(await tempFile(), randomBytes(32));
+    expect(await ks.get('openai')).toBeUndefined();
+  });
+
+  it('ENOENT dışı okuma hatasını sessizce boş depo SAYMAZ, fırlatır', async () => {
+    const file = await tempFile();
+    await mkdir(file, { recursive: true }); // yol bir dizin → readFile EISDIR verir
+    await expect(new Keystore(file, randomBytes(32)).get('openai')).rejects.toThrow();
+  });
+});
+
+describe('Keystore.open — Keychain dalı', () => {
+  beforeEach(() => {
+    vi.stubEnv('WW_MASTER_KEY', ''); // env yokmuş gibi: Keychain yoluna düşür
+    vi.mocked(execFile).mockReset();
+  });
+
+  afterEach(() => vi.unstubAllEnvs());
+
+  it('girdi gerçekten yoksa (kod 44) yeni anahtar üretip Keychain’e saklar', async () => {
+    stubSecurity((args, cb) => {
+      if (args[0] === 'find-generic-password') cb(securityError(44, 'item not found'));
+      else cb(null, { stdout: '', stderr: '' });
+    });
+    const ks = await Keystore.open(await tempFile());
+    await ks.set('openai', 'sk-x'); // üretilen anahtarla yazıp okuyabilmeli
+    expect(await ks.get('openai')).toBe('sk-x');
+    expect(
+      vi.mocked(execFile).mock.calls.some((c) => (c[1] as string[])[0] === 'add-generic-password'),
+    ).toBe(true);
+  });
+
+  it('geçici Keychain hatasında mevcut girdinin üstüne YAZMAZ, hatayı fırlatır', async () => {
+    stubSecurity((_args, cb) => cb(securityError(128, 'User interaction is not allowed')));
+    await expect(Keystore.open(await tempFile())).rejects.toThrow(/Keychain okunamadı/);
+    expect(
+      vi.mocked(execFile).mock.calls.some((c) => (c[1] as string[])[0] === 'add-generic-password'),
+    ).toBe(false);
   });
 });
 
