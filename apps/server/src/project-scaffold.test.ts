@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { parseGateConfig } from '@ww/executor';
+import { PROJECT_TYPES } from '@ww/shared';
 import { defaultGateConfig, starterFiles } from './project-scaffold.js';
 
 describe('defaultGateConfig', () => {
@@ -15,6 +16,16 @@ describe('defaultGateConfig', () => {
 
   it('mobil projesi için de geçerlidir', () => {
     expect(() => parseGateConfig(defaultGateConfig('mobile'))).not.toThrow();
+  });
+
+  // `flutter analyze` sandbox imajında YOKTUR ve ağ kapalıdır: kapı her
+  // koşuda "command not found" ile düşer, yani mobil projede hiçbir iş
+  // kabul edilemez. Web tarafında aynı gerekçeyle `npx tsc` çıkarılmıştı;
+  // mobil unutulmuştu.
+  it('mobil kapısı sandboxta bulunmayan komut çağırmaz', () => {
+    const commands = defaultGateConfig('mobile').steps.map((step) => step.command);
+    expect(commands).not.toContain('flutter');
+    expect(commands).toContain('node');
   });
 
   // npx tsc sandbox'ta node_modules olmadan HER ZAMAN düşer; varsayılan kapı
@@ -72,6 +83,26 @@ describe('starterFiles', () => {
   });
 
   it('mobil projesi için node dosyası üretmez', () => {
-    expect(starterFiles('mobile', 'x').size).toBe(0);
+    const files = starterFiles('mobile', 'x');
+    expect(files.has('package.json')).toBe(false);
+    expect(files.has('tsconfig.json')).toBe(false);
+  });
+
+  // ASIL KUSUR: bu test eskiden `size === 0` diyordu, yani MOBİL PROJENİN
+  // HİÇ İSKELETİ OLMAMASINI doğruluyordu — oysa mobil kapı girdi olarak
+  // `pubspec.yaml` istiyor. Yani mobil proje doğduğu anda hiçbir işi kabul
+  // edemez durumdaydı: kapı "Dosya bulunamadı: pubspec.yaml" ile düşerdi.
+  // Bu, modülün başındaki yorumun web için düzelttiği kusurun ta kendisi —
+  // yan kapıda unutulmuş hâli.
+  it.each(PROJECT_TYPES)('%s: kapı girdilerinin tamamı iskelette vardır', (type) => {
+    const files = starterFiles(type, 'satranc');
+    for (const input of defaultGateConfig(type).inputs) {
+      expect(files.has(input), `${type} için ${input} üretilmiyor`).toBe(true);
+    }
+  });
+
+  it('mobil iskelet gecerli bir pubspec uretir', () => {
+    const raw = starterFiles('mobile', 'satranc').get('pubspec.yaml')!;
+    expect(raw).toContain('name: satranc');
   });
 });

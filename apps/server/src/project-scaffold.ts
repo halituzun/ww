@@ -37,10 +37,21 @@ export function defaultGateConfig(projectType: string): GateConfigLike {
   if (projectType === 'mobile') {
     return {
       version: 1,
-      inputs: ['pubspec.yaml'],
+      inputs: ['pubspec.yaml', GATE_CHECK_FILENAME],
       discardedOutputs: ['build', '.dart_tool'],
+      // `flutter analyze` sandbox imajında YOKTUR ve ağ kapalıdır: kapı her
+      // koşuda "command not found" ile düşer, yani mobil projede hiçbir iş
+      // KABUL EDİLEMEZ. Web tarafında aynı gerekçeyle `npx tsc` çıkarılmıştı;
+      // mobil yan kapıda unutulmuştu. Bağımlılıksız kapı gerçekten denetler
+      // (markdown çiti sızması, çakışma artığı, boş dosya, bozuk JSON) ve
+      // proje kendi araç zincirini kurunca ww.gate.json zenginleştirilebilir.
       steps: [
-        { name: 'analyze', command: 'flutter', args: ['analyze'], timeoutSec: 300 },
+        {
+          name: 'gate_check',
+          command: 'node',
+          args: [GATE_CHECK_FILENAME],
+          timeoutSec: 60,
+        },
       ],
     };
   }
@@ -79,6 +90,34 @@ export function starterFiles(projectType: string, projectName: string): Readonly
       },
       include: ['src'],
     }, null, 2)}\n`);
+  }
+  if (projectType === 'mobile') {
+    // Kapı betiği bir GİRDİDİR; üretilmezse mühürlü kapı zincirinde dosya
+    // bulunamaz ve kapı hiç çalıştırılamaz.
+    files.set(GATE_CHECK_FILENAME, GATE_CHECK_SCRIPT);
+    // Flutter manifestosu: kapı girdisi olduğu için VAR OLMAK ZORUNDA.
+    // Olmadığında mobil proje doğduğu anda hiçbir işi kabul edemiyordu.
+    files.set('pubspec.yaml', [
+      `name: ${projectName}`,
+      'description: ww tarafından üretilen mobil uygulama',
+      'publish_to: none',
+      'version: 0.0.1',
+      '',
+      'environment:',
+      "  sdk: '>=3.4.0 <4.0.0'",
+      '',
+      'dependencies:',
+      '  flutter:',
+      '    sdk: flutter',
+      '',
+      'dev_dependencies:',
+      '  flutter_test:',
+      '    sdk: flutter',
+      '',
+      'flutter:',
+      '  uses-material-design: true',
+      '',
+    ].join('\n'));
   }
   return files;
 }
