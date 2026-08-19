@@ -106,6 +106,21 @@ anında kuruluyor ve panelde ham kimlikle değil BAŞLIKLA gösteriliyor.)*
 
 ## API Yönetimi ve Kontör
 
+### AI gateway (CLIProxyAPI)
+
+Sağlayıcı ekranının birincil kurulumu, tek tek ham `base_url` ve model alanlarını
+doldurmak değildir. Kullanıcı önce yerel CLIProxyAPI gateway'inin durumunu görür;
+bağlı değil, yönetim anahtarı eksik, ulaşılamıyor ve bağlı durumları ayrı gösterilir.
+Paneldeki **Gateway yönetimini aç** bağlantısı CLIProxyAPI'nin kendi yönetim
+merkezine gider. WW server yalnızca gateway'in sağlık durumunu ve sır olmayan
+özetini probeler; yönetim anahtarı tarayıcıya veya ClickHouse'a gönderilmez.
+
+Server bağlantısı için `WW_CLIPROXY_ENABLED=1`, `WW_CLIPROXY_BASE_URL` (varsayılan
+`http://127.0.0.1:8317`) ve `WW_CLIPROXY_MANAGEMENT_KEY` gerekir. CLIProxyAPI
+kurulmadıysa ekran bunu açıkça **Bağlanmadı** olarak gösterir; sahte model veya
+hesap listesi çizmez. Doğrudan API sağlayıcısı ekleme formu yalnız gateway dışında
+çalışan OpenAI-uyumlu uçlar için gelişmiş bölümde tutulur.
+
 *(2026-08-18: `/usage`, `/provider-health` ve `/artifacts` uçları panelde
 hatayı YUTUYORDU. Sağlayıcı sağlığı alınamadığında hiç rozet çizilmiyor ve
 rozetin YOKLUĞU "her şey yolunda" diye okunuyordu — oysa docs/04 düşen
