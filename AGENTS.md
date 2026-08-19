@@ -1,42 +1,182 @@
-# Repository Guidelines
+# ww — Depo Kılavuzu (AI Agent'ları için)
 
-## Proje Yapısı ve Modül Düzeni
+> Bu dosya, depoda çalışan kodlama agent'ları içindir ve depo hakkında hiçbir
+> şey bilmediği varsayılarak yazılmıştır. Mimarinin tamamı için önce
+> `docs/00-genel-bakis.md` ve `docs/01-mimari.md` dosyalarını okuyun;
+> `docs/` altındaki dokümanlar (00–13 + KURULUM) tek tek her alt sistemi
+> anlatır. Proje dokümantasyonu ve kod yorumları **Türkçe**'dir.
 
-Bu depo, pnpm ve Turborepo kullanan bir TypeScript monorepo'sudur. Çalıştırılabilir uygulamalar `apps/` altında bulunur; mevcut NestJS API'sinin kaynakları `apps/server/src` dizinindedir. Panel `apps/panel` altındadır. Yeniden kullanılabilir çalışma alanları `packages/` altındadır: `shared` ortak tip ve sabitleri, `db` ClickHouse/Redis erişimi ile sıralı SQL migration'larını, `providers` LLM adaptörlerini/yönlendirmeyi/fiyatlandırmayı ve anahtar saklamayı, `agents` agent döngüleri ile iletişim servisini, `scheduler` görev durum makinesi ve güvenlik frenlerini, `memory` bağlam/özet/narrator katmanını, `executor` ise sandbox'lı tool çalıştırmayı ve kapı koşucusunu içerir. Testleri kaynak dosyanın yanında `*.test.ts` adıyla tutun. Mimari kararlar ve yol haritası `docs/` altındadır; önce `docs/00-genel-bakis.md` ve `docs/01-mimari.md` dosyalarını okuyun.
+## Proje Özeti
+
+**ww**, birden çok LLM API'sini (OpenAI, Anthropic/Claude, DeepSeek, …)
+orkestre ederek kendi kendine yazılım projeleri üreten, **ClickHouse merkezli**
+çok-agent'lı bir platformdur. Temel ilke: **her şey veritabanı üzerinden
+yürür** — planlar, görevler, her tool çağrısı ve her karar ClickHouse'a
+işlenir; agent'lar işlerini oradan alır, bağlamlarını oradan kurar, sonuçlarını
+oraya yazar. Redis yalnızca hız tamponudur (kuyruk, kilit, heartbeat); Redis
+kaybı veri kaybı değildir.
+
+Agent modeli: her iş için *yapan* (worker) + *denetleyen* (verifier) çifti;
+en üstte PM agent; planlar 3-4 modelin konsey tartışmasıyla oluşur.
+Üretilen projeler `workspace/` altında tutulur ve her biri otomatik git
+deposudur. Çalışma ortamı lokal, tek kullanıcılıdır.
+
+## Teknoloji Yığını
+
+- **Dil/derleme**: TypeScript 5.7 (strict, `noUncheckedIndexedAccess`,
+  `exactOptionalPropertyTypes` — `tsconfig.base.json`), Node.js 22+,
+  ESM (`"type": "module"`), NodeNext modül çözümü — göreli import'larda
+  `.js` uzantısı **zorunlu** (ör. `import { x } from './client.js'`).
+- **Monorepo**: pnpm 11.1.3 workspace + Turborepo 2 (`apps/*`, `packages/*`).
+- **Server**: NestJS 11 (Express + WebSocket, `@nestjs/platform-ws`),
+  `apps/server`.
+- **Panel**: React 18 + Vite 5, `apps/panel` (Türkçe UI). Monaco editor
+  (`@monaco-editor/react`) ve `@xyflow/react` (tuval) kullanır.
+- **Veri**: ClickHouse 24.8 (tek gerçek kaynak, `@clickhouse/client`) +
+  Redis 7 (kuyruk/kilit/pub-sub, `redis` istemcisi).
+- **Test**: Vitest 2; kökte `vitest.workspace.ts` ile paket config'leri
+  birleşir (`packages/*/vitest.config.ts`, `apps/*/vitest.config.ts`).
+- **Diğer**: `zod` 4 (şema doğrulama), `openai` + `@anthropic-ai/sdk`
+  (LLM adaptörleri), `ajv` (executor'da JSON şema), `tsx` (server dev
+  modunda izleyici).
+
+## Dizin Düzeni ve Modüller
+
+```
+apps/
+├── server/        # NestJS API (varsayılan localhost:4000, WW_PORT) — HTTP/WS
+│                  #   uçları (controller'lar, gateway, servis kablolaması)
+└── panel/         # React+Vite paneli (localhost:5173) — components/ (view),
+                   #   viewmodels/ (useXxxViewModel hook'ları), services/ (API/IO)
+packages/
+├── shared/        # Ortak tipler ve sabitler (Task, WsEvent, enum'lar — tek kaynak)
+├── db/            # ClickHouse client + migration'lar + sorgu katmanı
+│                  #   (repositories/); Redis yardımcıları (lease, wakeup, cleanup)
+├── providers/     # LLM adaptörleri, yönlendirme/fallback, fiyatlandırma, keystore
+├── agents/        # Agent döngüleri: PM, konsey, worker/verifier, mesaj protokolü
+├── scheduler/     # Kuyruk tüketimi, eşzamanlılık, kilitler, frenler, tırmandırma
+├── memory/        # Context Builder, özetleyici, anlatıcı (narrator), kurtarma
+├── executor/      # Tool-use araçları, sandbox (Docker), git, çalıştırma/test kapısı
+└── wiring-check/  # "Bağlantısız kod" denetçisi (aşağıya bakın)
+workspace/         # Platformun ürettiği projeler (gitignore'lu; elle dokunmayın)
+docs/              # Mimari dokümanlar (00–13) + KURULUM.md
+scripts/           # gate.sh (tam kapı), audit-self.mjs (öz-denetim)
+```
+
+**Bağımlılık yönü (döngü yasak; package.json'lardan doğrulanmış):**
+
+- `shared` tabandadır; `db` yalnızca `shared`'e bağlıdır.
+- `providers`, `memory` ve `executor`, `db` (+`shared`) üzerine kuruludur.
+- `agents`; `db`, `memory` ve `providers`'ı kullanır.
+- `scheduler`; `db` ve `memory`'yi kullanır (LLM çağırmaz, `agents`'a
+  paket bağımlılığı yoktur — agent işlerini DB/kuyruk üzerinden yürütür).
+- `apps/server` tüm paketleri kablolar; `apps/panel` yalnızca `shared`'i
+  kullanır.
+
+Sorumluluk sınırları kesindir: `apps/server` iş mantığı barındırmaz (paketlere
+delege eder); `packages/scheduler` LLM çağırmaz; `packages/agents` doğrudan
+dosya yazmaz (executor kullanır); `packages/db` iş kuralı içermez.
 
 ## Derleme, Test ve Geliştirme Komutları
 
-- `pnpm install`: Tüm çalışma alanlarının bağımlılıklarını kurar. Node.js 22+ ve manifestte belirtilen pnpm `11.1.3` sürümünü kullanın.
-- `docker compose up -d`: Yerel geliştirme ve entegrasyon testleri için ClickHouse'u `8124`, Redis'i `6380` portunda başlatır.
-- `pnpm dev`: Kalıcı geliştirme görevlerini çalıştırır; şu anda sunucuyu izleme modunda başlatır.
-- `pnpm build`: Çalışma alanlarını bağımlılık sırasına göre `dist/` dizinine derler.
-- `pnpm test`: Tüm Vitest projelerini bir kez çalıştırır. Tek paket için `pnpm --filter @ww/providers test` kullanın.
-- `pnpm lint`: ESLint kurallarını tüm kaynak dizinlerine uygular.
+- `pnpm install` — bağımlılıkları kurar.
+- `docker compose up -d` — yerel ClickHouse (`localhost:8124`) ve Redis
+  (`localhost:6380`) servislerini başlatır. **Portlar bilinçli olarak standart
+  dışıdır** (8123/6379 değil; makinede başka projelerin container'ları var);
+  `WW_CH_URL` ve `WW_REDIS_URL` ile değiştirilebilir.
+- `pnpm dev` — tüm paketleri ve uygulamaları izleme modunda çalıştırır.
+- `pnpm build` — tüm workspace paketlerini derler (`tsc`).
+- `pnpm test` — Vitest testlerini seri çalıştırır (`turbo test
+  --concurrency=1`). Tek paket için: `pnpm --filter @ww/providers test`.
+  Paralel koşu: `pnpm test:parallel`.
+- `pnpm lint` — ESLint (`typescript-eslint` recommended).
+- `pnpm gate` (`./scripts/gate.sh`) — **tam kapı**: sızmış test verisi
+  temizliği + build + entegrasyonlu test (`WW_REQUIRE_INTEGRATION=1`) +
+  lint + wiring-check + öz-denetim. Commit/push öncesi tek komut olarak
+  çalıştırın: `pnpm gate && git commit ... && git push`. Kapı adımlarını
+  ayrı ayrı koşturmayın — bu depoda kapı düşerken push atılmışlığı vardır.
+- `pnpm wiring:check` — testi olan ama hiçbir üretim kodunun çağırmadığı
+  ("bağlantısız") sembolleri yakalar; yeni bulgular kapıyı düşürür. Bilinçli
+  istisnalar **gerekçeli** olarak `wiring-baseline.json`'a eklenir — gerekçesiz
+  girdi eklemek kusuru gizlemektir.
+- `pnpm db:clean-tests` — sızmış test veritabanlarını ve Redis anahtarlarını
+  temizler (testler `ww_test_*` adlı ayrı veritabanları kullanır).
 
-İnceleme istemeden önce derleme, test ve lint kontrollerini çalıştırın.
+### Entegrasyon ve canlı testler
 
-- `pnpm db:clean-tests`: Sızan `ww_test_*` veritabanlarını VE `ww:*` Redis
-  anahtarlarını temizler. Entegrasyon testi ORTASINDA düşerse `afterAll`
-  çalışmaz ve artıklar kalır; birikince ClickHouse/Redis kaynak baskısı
-  altında İLGİSİZ testler düşmeye başlar (ölçülen: 84 veritabanı / 12.2k
-  anahtar, `plans` ve `redis-leases` testlerini kırıyordu). Açıklanamayan
-  bağlantı veya zamanlama hatalarında ÖNCE bunu koşun.
-- `pnpm wiring:check`: "yazılmış ama hiç bağlanmamış kod" kapısı. Testte
-  kullanılan ama hiçbir üretim kodundan çağrılmayan sembolleri bulur. Mevcut
-  durum `wiring-baseline.json` içinde dondurulmuştur; kapı yalnız YENİ
-  ihlallerde düşer. Bir sembolü bağladığınızda temel listeden düşürün.
-  Yeni istisna eklerken GEREKÇE zorunludur:
-  `{"symbol": "path.ts:name", "reason": "neden"}`. Gerekçesiz giriş yok
-  sayılır ve kapı yine düşer — çıplak liste sessizce büyür.
+- Entegrasyon testleri (`*.integration.test.ts`, `apps/server`'daki e2e),
+  servisler kapalıysa `describe.skipIf` ile **sessizce atlanır**. Atlamayı
+  hataya çevirmek için: `WW_REQUIRE_INTEGRATION=1 pnpm test` (Docker
+  servisleri çalışıyor olmalı). Atlanan test kapı sayılmaz.
+- Executor'ın canlı Docker sandbox testleri (`src/sandbox.live.test.ts`,
+  `src/durable-audit.live.test.ts`) varsayılan koşuda atlanır; ayrıca
+  çalıştırın:
+  `pnpm --filter @ww/executor runtime:build` (imajı kurar) ve
+  `pnpm --filter @ww/executor test:live`.
+- Bazı entegrasyon testleri yalnız tam kapı yükü altında dalgalanır (flake);
+  tek başına geçiyorsa değişikliğinizden şüphelenmeden önce kapıyı yeniden
+  koşturun.
 
 ## Kod Stili ve Adlandırma
 
-TypeScript yapılandırması strict mod, unchecked-index ve exact-optional kontrollerini etkinleştirir. Mevcut biçimi izleyin: iki boşluk girinti, tek tırnak, noktalı virgül ve çok satırlı yapılarda son virgül. Depo NodeNext ESM kullanır; göreli TypeScript import'larında `.js` uzantısı yazın. Sınıf ve tiplerde `PascalCase`, fonksiyon, değişken ve yardımcı dosyalarda `camelCase`, sabitlerde `SCREAMING_SNAKE_CASE` kullanın. Controller'ları ince tutun, iş mantığını servislerde, veri erişimini `packages/db` içinde konumlandırın. Paketlerin herkese açık API'lerini `src/index.ts` üzerinden dışa aktarın. Kod sembolleri ve API adları İngilizce olmalıdır.
+- İki boşluk girinti, tek tırnak, noktalı virgül, çok satırlı yapılarda son
+  virgül.
+- TypeScript strict ayarlarına uyun; `any` yerine `unknown`/zod doğrulaması.
+- Tipler/sınıflar `PascalCase`, fonksiyon/değişkenler `camelCase`, sabitler
+  `SCREAMING_SNAKE_CASE`. Dosyalar genellikle `kebab-case.ts`.
+- Testler kaynak dosyanın yanında colocated `*.test.ts` (veya
+  `*.integration.test.ts`, `*.live.test.ts`) olarak yazılır.
+- İş mantığı servislerde, veri erişimi `packages/db`'de durur; public API'ler
+  her pakette `src/index.ts` üzerinden dışa aktarılır.
+- Panelde MVVM: `components/` yalnız görsel JSX çizer; durum ve kullanıcı
+  eylemleri `viewmodels/` içindeki hook'larda; tüm API/IO `services/` üzerinden
+  geçer. `scripts/audit-self.mjs` her kapıda ww'nin kendi panelini bu
+  standarda karşı denetler — ihlalde kapı kırmızıya düşer.
+- Dokümantasyon ve kod yorumları Türkçe yazılır; ayrıntılı kod standartları ve
+  üretilen projelerin şablonları `docs/09-kod-standartlari.md`'dedir.
 
 ## Test İlkeleri
 
-Vitest'in `describe`, `it` ve `expect` API'lerini kullanın; test adları gözlemlenebilir davranışı açıklamalıdır. Her davranış değişikliğine colocated bir `*.test.ts` ekleyin veya mevcut testi güncelleyin. Test açıklamaları mevcut pratikle uyumlu biçimde Türkçe olabilir. ClickHouse veya Redis kapalıyken entegrasyon testleri `describe.skipIf` ile atlanabilir; entegrasyon yollarını doğrularken Docker servislerini başlatın ve kapıyı `WW_REQUIRE_INTEGRATION=1 pnpm test` ile koşun (bu bayrak atlamayı hataya çevirir). Executor'ın canlı Docker sandbox testleri ayrıca `WW_DOCKER_LIVE=1` ister ve varsayılan koşuda sessizce atlanır; faz kapatırken `pnpm --filter @ww/executor runtime:build && pnpm --filter @ww/executor test:live` de koşulmalıdır. Yapılandırılmış bir coverage eşiği yoktur; başarı, hata, fallback ve idempotency senaryolarına öncelik verin.
+- Vitest'in `describe`, `it`, `expect` API'lerini kullanın.
+- Davranış değişikliklerinde başarı, hata, fallback ve idempotency
+  senaryolarını kapsayan test ekleyin.
+- Dikkat: bazı mevcut testler bug'ı doğruluyor olabilir — bir düzeltme testi
+  kırdığında önce testin hatayı mı doğruladığına bakın.
+- Entegrasyon testleri gerçek ClickHouse/Redis'e bağlanır;
+  `packages/db/src/testutil.ts` yardımcıları servis yoksa atlar,
+  `WW_REQUIRE_INTEGRATION=1` ile hata verir.
+
+## Ortam Değişkenleri ve Güvenlik
+
+- `.env`, `.env.*` ve `.ww/` gitignore kapsamındadır; **API anahtarları, token
+  ve yerel veri volume'leri asla commit'lenmez**. Tam kurulum adımları:
+  `docs/KURULUM.md`.
+- `WW_LOCAL_SESSION_TOKEN` (server) ile `VITE_SESSION_TOKEN` (panel) aynı
+  olmalıdır; aksi hâlde panelin yazma uçları çalışmaz.
+- `WW_MASTER_KEY` — anahtar deposunun 32 baytlık hex şifreleme anahtarı
+  (container kipinde zorunlu; verilmezse keystore macOS Keychain'e düşer).
+- `WW_CH_URL`, `WW_CH_USER`, `WW_CH_PASS`, `WW_CH_DB`, `WW_REDIS_URL`,
+  `WW_PORT`, `WW_PANEL_ORIGINS`, `VITE_API_PROXY_TARGET`, `VITE_API_BASE_URL` —
+  ilgili paketler için `turbo.json` içinde `passThroughEnv`/`env` ile
+  tanımlıdır.
+- Sağlayıcı API anahtarları koda/değişkene gömülmez; panelden girilir ve
+  şifreli keystore'da tutulur (`packages/providers/src/keystore.ts`).
+- Sandbox: agent'lar yalnızca kendi proje workspace'inde çalışır
+  (`packages/executor`); boş hedef-dosya listesiyle görev açmak `write_file`'ı
+  reddettirir — görev oluştururken her zaman `files` verin.
+- Çökme kurtarma: server açılışta `RecoverySweeperService`
+  (`apps/server/src/recovery-sweeper.service.ts`) yarım görevleri kuyruğa geri
+  alır; yazım sırası her zaman önce ClickHouse sonra Redis'tir.
 
 ## Commit ve Pull Request Kuralları
 
-Geçmiş, `feat(providers): ...`, `feat(db): ...` ve `chore: ...` gibi scoped Conventional Commit biçimini izler. Commit özetleri mevcut geçmişte olduğu gibi Türkçe olabilir; her commit tek bir amaca odaklanmalıdır. Pull request açıklamasında amacı, doğrulama komutlarını, ilgili issue veya planları ve migration/yapılandırma etkilerini belirtin. Kullanıcıya görünen UI değişikliklerine ekran görüntüsü ekleyin. API anahtarlarını, kimlik bilgilerini veya yerel veri volume'lerini commit etmeyin.
+- Scoped Conventional Commit: `feat(providers): ...`, `feat(db): ...`,
+  `chore: ...`. Her commit tek amaca odaklansın; küçük, sıralı ve geri
+  alınabilir tutun.
+- Yalnızca yeşil kapı sonrası commit/push: `pnpm gate && git commit ...
+  && git push`. `main`'e asla force-push yok.
+- PR açıklamasında amacı, doğrulama komutlarını ve ilgili issue/planı belirtin;
+  migration veya yapılandırma etkilerini yazın. UI değişikliklerinde ekran
+  görüntüsü ekleyin.
+- `docs/11-yol-haritasi.md`'deki bir fazı, belgelenen uçtan uca senaryosu
+  geçmeden "bitti" olarak işaretlemeyin.
