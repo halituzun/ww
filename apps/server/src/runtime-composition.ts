@@ -1,6 +1,6 @@
 import {
   CommunicationWakeupPublisher, appendArtifact, appendKnowledgeVersion, enqueueTask,
-  getFencedLease, getLatestTask, getTaskBrief, taskLockKey,
+  getFencedLease, getLatestTask, getTaskBrief, listLatestKnowledgeByStatus, taskLockKey,
 } from '@ww/db';
 import { NIL_UUID } from '@ww/shared';
 import type { EntityId } from '@ww/shared';
@@ -355,8 +355,21 @@ export function createPhase9RuntimeComposition(
       // Varsayılan politika allowedTools'u BOŞ bırakıyordu: worker dosya
       // yazamıyor, verifier diff okuyamıyordu.
       briefPolicy: {
-        resolve: (policyInput) =>
-          resolveBriefPolicy(policyInput.task as never, DEFAULT_TASK_RULE_REFS_V1) as never,
+        resolve: async (policyInput) => {
+          const knowledge = await listLatestKnowledgeByStatus(
+            input.ch,
+            policyInput.task.project_id,
+            'active',
+          );
+          const requirementIds = knowledge
+            .filter((entry) => entry.kind === 'requirement')
+            .map((entry) => entry.knowledge_id);
+          return resolveBriefPolicy(
+            policyInput.task as never,
+            DEFAULT_TASK_RULE_REFS_V1,
+            requirementIds,
+          ) as never;
+        },
       },
     },
   );

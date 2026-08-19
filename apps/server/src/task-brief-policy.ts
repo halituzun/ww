@@ -6,6 +6,7 @@
 // brief içinde izinli değil" ile düşüyordu. Araçsız bir worker, iş yapıyor
 // görünüp hiçbir şey üretmez.
 import type { TaskRowLike } from './task-brief-policy-types.js';
+import { STANDARD_KNOWLEDGE, standardKnowledgeIdFor } from './standard-knowledge.js';
 
 /**
  * Worker'ın asgari kümesi. `ask_question` ve `report_result` İLETİŞİM
@@ -37,6 +38,7 @@ export interface BriefPolicyResult {
 export function resolveBriefPolicy(
   task: TaskRowLike,
   ruleRefs: readonly unknown[],
+  requirementKnowledgeIds: readonly string[] = [],
 ): BriefPolicyResult {
   const criteria = task.acceptance_criteria.length > 0
     ? [...task.acceptance_criteria]
@@ -47,7 +49,13 @@ export function resolveBriefPolicy(
     acceptanceCriteria: Object.freeze(criteria),
     allowedTools: Object.freeze([...WORKER_TOOLS, ...VERIFIER_TOOLS]),
     ruleRefs,
-    standardKnowledgeIds: Object.freeze([]),
-    requirementKnowledgeIds: Object.freeze([]),
+    // Standartlar açılışta deterministik kimliklerle tohumlanır. Bunları
+    // policy'ye bağlamazsak seed edilmiş bilgi hiçbir brief'e ulaşmaz.
+    standardKnowledgeIds: Object.freeze(
+      task.project_id === undefined
+        ? []
+        : STANDARD_KNOWLEDGE.map((entry) => standardKnowledgeIdFor(task.project_id!, entry.ruleId)),
+    ),
+    requirementKnowledgeIds: Object.freeze([...requirementKnowledgeIds]),
   });
 }

@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { VERIFIER_TOOLS, WORKER_TOOLS, resolveBriefPolicy } from './task-brief-policy.js';
+import { STANDARD_KNOWLEDGE } from './standard-knowledge.js';
 
 const task = (over: Partial<{ title: string; description: string; acceptance_criteria: string[] }> = {}) => ({
+  project_id: '11111111-1111-4111-8111-111111111111',
   title: 'Satranç tahtası',
   description: '8x8 tahta çiz',
   acceptance_criteria: ['64 kare çizilir'],
@@ -40,6 +42,17 @@ describe('resolveBriefPolicy', () => {
   it('kural referanslarını olduğu gibi geçirir', () => {
     const rules = [{ id: 'r1' }];
     expect(resolveBriefPolicy(task(), rules).ruleRefs).toBe(rules);
+  });
+
+  it('mühürlenecek brief için proje standartlarının kimliklerini taşır', () => {
+    const policy = resolveBriefPolicy(task(), []);
+    expect(policy.standardKnowledgeIds).toHaveLength(STANDARD_KNOWLEDGE.length);
+    expect(new Set(policy.standardKnowledgeIds).size).toBe(STANDARD_KNOWLEDGE.length);
+  });
+
+  it('aktif gereksinim kimliklerini brief politikasına taşır', () => {
+    expect(resolveBriefPolicy(task(), [], ['req-1', 'req-2']).requirementKnowledgeIds)
+      .toEqual(['req-1', 'req-2']);
   });
 
   // Worker raporunu report_result ile bitirir; araç izinli değilse görev

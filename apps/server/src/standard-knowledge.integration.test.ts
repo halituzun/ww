@@ -26,6 +26,7 @@ describe.skipIf(!up)('standartlar bağlam paketine girer', () => {
     const projectId = randomUUID();
     const taskId = randomUUID();
     const at = '2026-08-18T09:00:00.000Z';
+    const cutoffAt = new Date(Date.now() + 1_000).toISOString();
     await createTask(ch, {
       task_id: taskId, project_id: projectId, plan_id: randomUUID(),
       parent_task_id: NIL_UUID, title: 'Tahta bileşeni', description: 'satranç tahtası',
@@ -46,7 +47,7 @@ describe.skipIf(!up)('standartlar bağlam paketine girer', () => {
 
     const pack = await new MemoryService(ch).buildContextPack({
       projectId: projectId as never, taskId: taskId as never,
-      cutoffAt: '2026-08-18T12:00:00.000Z', tokenBudget: 8_000,
+      cutoffAt, tokenBudget: 8_000,
     });
 
     const labels = pack.chunks.map((chunk) => chunk.label).join(' ');

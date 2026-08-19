@@ -4,7 +4,7 @@ import { WsAdapter } from '@nestjs/platform-ws';
 import { createCh, createRedis, runMigrations } from '@ww/db';
 import { RecoveryService } from '@ww/memory';
 import { CommandRunner, resetWorkingTree } from '@ww/executor';
-import { appendKnowledgeVersion, getLatestProject } from '@ww/db';
+import { appendKnowledgeVersion, getLatestKnowledge, getLatestProject } from '@ww/db';
 import { resolveWorkspaceRoot } from './runtime-context.js';
 import { resetRecoveredWorkspaces } from './workspace-recovery.js';
 import { seedStandardKnowledgeForProjects } from './standard-knowledge.js';
@@ -48,7 +48,12 @@ async function bootstrap(): Promise<void> {
     // standartlardan bulgu açıyordu. Tohumlama fikirsizce tekrarlanabilir
     // (deterministik kimlik; içerik aynıysa yeni sürüm yazılmaz).
     await seedStandardKnowledgeForProjects(
-      { appendKnowledgeVersion: (row) => appendKnowledgeVersion(recoveryCh, row as never) },
+      {
+        appendKnowledgeVersion: (row, expectedVersion) =>
+          appendKnowledgeVersion(recoveryCh, row as never, expectedVersion),
+        getLatestKnowledge: (projectId, knowledgeId) =>
+          getLatestKnowledge(recoveryCh, projectId, knowledgeId),
+      },
       recovered.map((item) => item.projectId),
       new Date().toISOString(),
       (projectId, reason) =>

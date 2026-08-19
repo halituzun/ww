@@ -49,6 +49,21 @@ describe('standart bilgi tohumlaması', () => {
     expect(await ids()).toEqual(await ids());
   });
 
+  it('mevcut bilgi sürümünü optimistic concurrency için append katmanına taşır', async () => {
+    const append = vi.fn(async () => undefined);
+    const getLatestKnowledge = vi.fn(async () => ({ version: '7' }));
+
+    await seedStandardKnowledge(
+      { appendKnowledgeVersion: append, getLatestKnowledge } as never,
+      '11111111-1111-4111-8111-111111111111' as never,
+      '2026-08-18T00:00:00.000Z',
+    );
+
+    expect(getLatestKnowledge).toHaveBeenCalledTimes(STANDARD_KNOWLEDGE.length);
+    expect(append).toHaveBeenCalledTimes(STANDARD_KNOWLEDGE.length);
+    expect(append.mock.calls.every(([, expectedVersion]) => expectedVersion === '7')).toBe(true);
+  });
+
   // Tohumlamayı yalnızca proje AÇILIŞINA bağlamak, hâlihazırda var olan 78
   // projeyi standartsız bırakırdı. Açılışta koşan projeler de tohumlanır;
   // işlem fikirsizce tekrarlanabilir (deterministik kimlik + içerik aynıysa

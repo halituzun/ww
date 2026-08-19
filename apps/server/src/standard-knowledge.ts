@@ -63,7 +63,7 @@ export const STANDARD_KNOWLEDGE: readonly StandardKnowledgeEntry[] = Object.free
 ]);
 
 /** Aynı proje + kural için HER ZAMAN aynı kimlik: tohumlama tekrarlanabilir. */
-function knowledgeIdFor(projectId: string, ruleId: string): EntityId {
+export function standardKnowledgeIdFor(projectId: string, ruleId: string): EntityId {
   const hex = canonicalSha256V1({ namespace: 'standard-knowledge-v1', projectId, ruleId });
   const variant = ((Number.parseInt(hex[16]!, 16) & 0x3) | 0x8).toString(16);
   return EntityIdSchema.parse(
@@ -72,7 +72,14 @@ function knowledgeIdFor(projectId: string, ruleId: string): EntityId {
 }
 
 export interface StandardKnowledgePorts {
-  appendKnowledgeVersion: (row: Record<string, unknown>) => Promise<unknown>;
+  appendKnowledgeVersion: (
+    row: Record<string, unknown>,
+    expectedVersion?: string,
+  ) => Promise<unknown>;
+  getLatestKnowledge?: (
+    projectId: EntityId,
+    knowledgeId: EntityId,
+  ) => Promise<Readonly<{ version: string }> | null>;
 }
 
 /**
@@ -86,8 +93,10 @@ export async function seedStandardKnowledge(
   now: string,
 ): Promise<void> {
   for (const entry of STANDARD_KNOWLEDGE) {
+    const knowledgeId = standardKnowledgeIdFor(projectId, entry.ruleId);
+    const current = await ports.getLatestKnowledge?.(projectId, knowledgeId);
     await ports.appendKnowledgeVersion({
-      knowledge_id: knowledgeIdFor(projectId, entry.ruleId),
+      knowledge_id: knowledgeId,
       project_id: projectId,
       kind: 'standard',
       title: `${entry.ruleId} — ${entry.title}`,
@@ -99,7 +108,7 @@ export async function seedStandardKnowledge(
       superseded_by: NIL_UUID,
       created_at: now,
       row_hash: '',
-    });
+    }, current?.version);
   }
 }
 
