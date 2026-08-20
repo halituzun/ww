@@ -23,6 +23,7 @@ export class ProviderHealthScheduler implements OnModuleInit, OnModuleDestroy {
   readonly #database: ServerDatabase;
   #timer: ReturnType<typeof setInterval> | undefined;
   #counters = new Map<string, number>();
+  #keyStorePromise: Promise<Keystore> | undefined;
 
   constructor(@Inject(SERVER_DATABASE) database: ServerDatabase) {
     this.#database = database;
@@ -68,6 +69,18 @@ export class ProviderHealthScheduler implements OnModuleInit, OnModuleDestroy {
     };
   }
 
+  // Keystore.get() dosyayı her çağrıda taze okur; önbelleğe alınan yalnızca
+  // master key çözümüdür (Keychain `security` çağrısı her ping'de
+  // tekrarlanmasın). Geçici çözüm hatası önbellekte ÖLÜMSÜZLEŞMEZ: reddedilen
+  // promise atılır, sonraki süpürme yeniden dener.
+  #keyStore(keystoreFile: string): Promise<Keystore> {
+    this.#keyStorePromise ??= Keystore.open(keystoreFile).catch((err: unknown) => {
+      this.#keyStorePromise = undefined;
+      throw err;
+    });
+    return this.#keyStorePromise;
+  }
+
   // Anahtarı/yapılandırması olmayan sağlayıcı "down" sayılır: eksik kurulum da
   // bir sağlık sorunudur ve panelde görünmelidir.
   async #pingProvider(providerId: string): Promise<PingResult> {
@@ -78,7 +91,7 @@ export class ProviderHealthScheduler implements OnModuleInit, OnModuleDestroy {
     }
 
     const keystoreFile = resolveKeystoreFile();
-    const store = await Keystore.open(keystoreFile);
+    const store = await this.#keyStore(keystoreFile);
     const registry = await buildProviderRegistry([record], store);
     const provider = registry.providers.get(providerId);
     if (provider === undefined) {
