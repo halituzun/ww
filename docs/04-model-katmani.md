@@ -148,19 +148,23 @@ Normalizasyon kuralları:
 
 - Anahtarlar **asla** ClickHouse'a yazılmaz; `api_providers.key_ref` yalnızca
   referanstır.
-- Depo: `WW_KEYSTORE_FILE` ile belirlenen şifreli dosya; varsayılan
-  `<cwd>/.ww/keys.json` — `node:crypto` AES-256-GCM (nonce + authTag), dosya izni
+- Depo: `WW_KEYSTORE_FILE` ile belirlenen şifreli dosya. Verilmediyse
+  `resolveKeystoreFile()` cwd'den yukarı doğru workspace kökünü
+  (`pnpm-workspace.yaml`) arar ve `<kök>/.ww/keys.json` kullanır; işaretçi
+  yoksa `<cwd>/.ww/keys.json`'a düşer. Böylece server turbo altında
+  `apps/server` cwd'siyle başlatılsa bile depo kökündeki dosya bulunur.
+  Şifreleme: `node:crypto` AES-256-GCM (nonce + authTag), dosya izni
   `0600`. Ana anahtar `WW_MASTER_KEY` (64 karakter hex) ortam değişkeninden gelir;
   verilmezse macOS Keychain'den okunur. Girdi gerçekten yoksa (`security` çıkış
   kodu 44) üretilip `security add-generic-password` ile `ww-master` servisine
   yazılır; **geçici okuma hatasında (keychain kilitli, headless oturum) yeni
   anahtar üretilip üstüne yazılmaz**, hata fırlatılır — aksi halde depodaki tüm
   anahtarlar kalıcı olarak çözülemez hale gelir.
-- Dikkat: varsayılan yol `process.cwd()`'ye bağlıdır. Server `.env` yüklü
-  olmayan bir shell'den veya farklı cwd ile başlatılırsa dosya bulunamaz ve
-  sağlayıcılar `no_key` ile `down` görünür (sağlık tarayıcısı çözülen tam yolu
-  log'lar). Dosya yalnızca `ENOENT`'ta "boş depo" sayılır; EACCES/EISDIR gibi
-  okuma hataları sessizce yutulmaz, fırlatılır.
+- Görünürlük: server açılışında keystore öz-denetimi hangi dosyanın
+  kullanıldığını ve kaç kaydın çözülebildiğini log'lar; sağlık tarayıcısı
+  `no_key` durumunda çözülen tam yolu yazar. Dosya yalnızca `ENOENT`'ta
+  "boş depo" sayılır; EACCES/EISDIR gibi okuma hataları sessizce yutulmaz,
+  fırlatılır.
 - Anahtar dosyasının ve `.env`'in **gitignore'da olması zorunludur** (`.ww/`, `.env`,
   `.env.*`). Depo public upstream'e bağlıdır; bu kural gevşetilemez.
 - Panelden anahtar girişi: HTTPS-localhost üzerinden POST → server bellekte çözer,
