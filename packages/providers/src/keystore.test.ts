@@ -1,10 +1,10 @@
 import { execFile } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
-import { mkdir, mkdtemp, readFile, stat } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, realpath, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { Keystore, maskKey } from './keystore.js';
+import { Keystore, maskKey, resolveKeystoreFile } from './keystore.js';
 
 vi.mock('node:child_process', () => ({ execFile: vi.fn() }));
 
@@ -71,6 +71,38 @@ describe('Keystore', () => {
     const file = await tempFile();
     await mkdir(file, { recursive: true }); // yol bir dizin → readFile EISDIR verir
     await expect(new Keystore(file, randomBytes(32)).get('openai')).rejects.toThrow();
+  });
+});
+
+describe('resolveKeystoreFile', () => {
+  const originalCwd = process.cwd();
+
+  afterEach(() => {
+    process.chdir(originalCwd);
+    vi.unstubAllEnvs();
+  });
+
+  it('WW_KEYSTORE_FILE verilmişse onu döner', () => {
+    vi.stubEnv('WW_KEYSTORE_FILE', '/tmp/onerilen-keys.json');
+    expect(resolveKeystoreFile()).toBe('/tmp/onerilen-keys.json');
+  });
+
+  it('env yoksa workspace kökünü (pnpm-workspace.yaml) yukarı arayarak bulur', async () => {
+    vi.stubEnv('WW_KEYSTORE_FILE', '');
+    const root = await mkdtemp(join(tmpdir(), 'ww-ws-'));
+    await writeFile(join(root, 'pnpm-workspace.yaml'), 'packages: []\n');
+    const nested = join(root, 'apps', 'server');
+    await mkdir(nested, { recursive: true });
+    process.chdir(nested); // turbo altındaki server cwd'sini taklit eder
+    // cwd symlink'ten arındırılmış döner (macOS: /var → /private/var)
+    expect(resolveKeystoreFile()).toBe(join(await realpath(root), '.ww', 'keys.json'));
+  });
+
+  it('işaretçi bulunamazsa <cwd>/.ww/keys.json yoluna düşer', async () => {
+    vi.stubEnv('WW_KEYSTORE_FILE', '');
+    const dir = await mkdtemp(join(tmpdir(), 'ww-nows-'));
+    process.chdir(dir);
+    expect(resolveKeystoreFile()).toBe(join(await realpath(dir), '.ww', 'keys.json'));
   });
 });
 

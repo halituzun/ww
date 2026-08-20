@@ -1,7 +1,8 @@
 import { execFile } from 'node:child_process';
 import { createCipheriv, createDecipheriv, randomBytes } from 'node:crypto';
+import { existsSync } from 'node:fs';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
-import { dirname } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import { promisify } from 'node:util';
 
 const exec = promisify(execFile);
@@ -17,6 +18,25 @@ interface KeyfileV1 {
 type KeyMap = Record<string, string>;
 
 const KEYCHAIN_SERVICE = 'ww-master';
+
+// Keystore dosya yolu: WW_KEYSTORE_FILE verilmişse o kullanılır. Verilmediyse
+// cwd'den yukarı doğru workspace kökü (pnpm-workspace.yaml) aranır ve
+// <kök>/.ww/keys.json döner; işaretçi bulunamazsa eski davranışa
+// (<cwd>/.ww/keys.json) düşülür. Böylece turbo altında apps/server cwd'siyle
+// başlatılan süreç de depo kökündeki dosyayı bulur — yanlış cwd eskiden
+// sessiz no_key'e yol açıyordu.
+export function resolveKeystoreFile(cwd = process.cwd()): string {
+  const fromEnv = process.env['WW_KEYSTORE_FILE'];
+  if (fromEnv) return fromEnv;
+  const start = resolve(cwd);
+  let dir = start;
+  for (;;) {
+    if (existsSync(join(dir, 'pnpm-workspace.yaml'))) return join(dir, '.ww', 'keys.json');
+    const parent = dirname(dir);
+    if (parent === dir) return join(start, '.ww', 'keys.json');
+    dir = parent;
+  }
+}
 
 export class Keystore {
   constructor(
