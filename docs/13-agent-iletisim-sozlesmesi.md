@@ -209,4 +209,4 @@ tablolarındaki canonical kayıtların yerine geçmez, onların timeline referan
   denetim izini uçtan uca doğrular.
 
 Araştırma ve birleşim gerekçesi:
-[`PATHFINDER-2026-08-14`](../PATHFINDER-2026-08-14/03-unified-proposal.md).
+[`2026-08-14-pathfinder-agent-iletisim`](superpowers/plans/2026-08-14-pathfinder-agent-iletisim/03-unified-proposal.md).
