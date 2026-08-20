@@ -26,6 +26,7 @@ import { CommunicationWakeupPublisher, createRedis } from '@ww/db';
 import { buildAgentCapabilities } from './agent-capabilities.js';
 import {
   Keystore, ModelRouter, ProviderRateLimiter, buildProviderRegistry, chUsageSink,
+  resolveKeystoreFile,
 } from '@ww/providers';
 import { providerRequestsPerMinute } from './provider-rate.js';
 import type { EntityId } from '@ww/shared';
@@ -153,9 +154,7 @@ export class CouncilApplicationService {
       this.#logger.warn(composition.diversityWarning);
     }
 
-    const store = await Keystore.open(
-      process.env['WW_KEYSTORE_FILE'] ?? `${process.cwd()}/.ww/keys.json`,
-    );
+    const store = await Keystore.open(resolveKeystoreFile());
     const registry = await buildProviderRegistry(providerRows.map((row) => ({
       provider_id: row.provider_id, base_url: row.base_url,
       enabled: row.enabled, models: row.models, key_ref: row.key_ref,

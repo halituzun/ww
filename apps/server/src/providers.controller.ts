@@ -1,7 +1,7 @@
 import { Body, Controller, Get, Inject, Param, Patch, Post, Req } from '@nestjs/common';
 import { z } from 'zod';
 import { listLatestApiProviders, getLatestApiProvider, upsertApiProvider } from '@ww/db';
-import { Keystore, maskKey } from '@ww/providers';
+import { Keystore, maskKey, resolveKeystoreFile } from '@ww/providers';
 import { parseLocalSession, type LocalSessionRequest } from './auth/local-session.js';
 import { SERVER_DATABASE, type ServerDatabase } from './orchestration.module.js';
 
@@ -14,7 +14,7 @@ export class ProvidersController {
   #keyStorePromise: Promise<Keystore> | undefined;
   constructor(@Inject(SERVER_DATABASE) database: ServerDatabase) { this.#database = database; }
   #keyStore(): Promise<Keystore> {
-    this.#keyStorePromise ??= Keystore.open(process.env['WW_KEYSTORE_FILE'] ?? `${process.cwd()}/.ww/keys.json`);
+    this.#keyStorePromise ??= Keystore.open(resolveKeystoreFile());
     return this.#keyStorePromise;
   }
 

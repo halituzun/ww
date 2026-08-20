@@ -101,7 +101,7 @@ async function tryStartOrchestration(): Promise<void> {
     { startOrchestrationRuntime },
     { bootstrapOrchestrationRuntime },
     { registerPhase9RuntimeConfig },
-    { buildProviderRegistry, Keystore },
+    { buildProviderRegistry, Keystore, resolveKeystoreFile },
     { loadRoutingIndex },
     db,
   ] = await Promise.all([
@@ -116,6 +116,17 @@ async function tryStartOrchestration(): Promise<void> {
   const { recordBootstrapReason } = await import('./runtime-status.js');
   const ch = db.createCh();
   const redis = await db.createRedis();
+  // Açılış öz-denetimi: yanlış çözülen keystore yolu eskiden ilk sağlık
+  // ping'ine kadar sessiz no_key olarak kalıyordu. Hangi dosyanın
+  // kullanıldığı ve kaç kaydın çözülebildiği açılışta görünür olsun.
+  // (Keychain geçici hatası sunucuyu düşürmemeli: yalnızca uyar.)
+  try {
+    const keystoreFile = resolveKeystoreFile();
+    const keyRefs = await (await Keystore.open(keystoreFile)).listProviders();
+    console.log(`[ww] keystore: ${keyRefs.length} kayıt (${keyRefs.join(', ') || 'yok'}) @ ${keystoreFile}`);
+  } catch (err) {
+    console.warn(`[ww] keystore açılışta okunamadı: ${err instanceof Error ? err.message : String(err)}`);
+  }
   // Bu bağlantılar kayıt BAŞARILIYSA composition'a devredilir ve sürecin
   // ömrü boyunca yaşamalıdır. Burada kapatmak, kayıtlı motoru kapalı
   // istemcilerle bırakır: her görev "The client is closed" ile düşer ve
@@ -140,9 +151,7 @@ async function tryStartOrchestration(): Promise<void> {
         localSessionToken: process.env['WW_LOCAL_SESSION_TOKEN'] ?? '',
         consumerId: `server-${process.pid}`,
         loadProviders: async () => {
-          const store = await Keystore.open(
-            process.env['WW_KEYSTORE_FILE'] ?? `${process.cwd()}/.ww/keys.json`,
-          );
+          const store = await Keystore.open(resolveKeystoreFile());
           const providers = await db.listLatestApiProviders(ch);
           const records = providers.map((row) => ({
             provider_id: row.provider_id, base_url: row.base_url,

@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { Inject, Injectable, Logger, type OnModuleDestroy, type OnModuleInit } from '@nestjs/common';
 import { NIL_UUID } from '@ww/shared';
 import { getLatestApiProvider, listLatestApiProviders, recordApiProviderHealth } from '@ww/db';
-import { Keystore, buildProviderRegistry } from '@ww/providers';
+import { Keystore, buildProviderRegistry, resolveKeystoreFile } from '@ww/providers';
 import { SERVER_DATABASE, type ServerDatabase } from './orchestration.module.js';
 import {
   HEALTH_SWEEP_INTERVAL_MS,
@@ -77,7 +77,7 @@ export class ProviderHealthScheduler implements OnModuleInit, OnModuleDestroy {
       return { ok: false, latencyMs: Date.now() - started, error: 'kayıt yok', fatal: true };
     }
 
-    const keystoreFile = process.env['WW_KEYSTORE_FILE'] ?? `${process.cwd()}/.ww/keys.json`;
+    const keystoreFile = resolveKeystoreFile();
     const store = await Keystore.open(keystoreFile);
     const registry = await buildProviderRegistry([record], store);
     const provider = registry.providers.get(providerId);
