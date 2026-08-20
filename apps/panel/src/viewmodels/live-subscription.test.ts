@@ -24,6 +24,7 @@ const harness = (initial: readonly TimelineEvent[] = []) => {
   const stop = createLiveEventSubscription({
     url: 'ws://x/events',
     projectId: 'p1',
+    sessionToken: 'test-token',
     initialEvents: initial,
     createSocket: () => { const socket = new FakeSocket(); sockets.push(socket); return socket; },
     setTimer: (fn, delay) => { timers.push({ fn, delay }); return timers.length; },
@@ -39,7 +40,7 @@ describe('createLiveEventSubscription', () => {
     const { sockets } = harness();
     sockets[0]!.onopen?.();
     expect(JSON.parse(sockets[0]!.sent[0]!)).toEqual({
-      event: 'subscribe', data: { projectId: 'p1', afterCursor: '' },
+      event: 'subscribe', data: { projectId: 'p1', afterCursor: '', token: 'test-token' },
     });
   });
 
@@ -137,7 +138,7 @@ describe('createLiveEventSubscription', () => {
 
   it('WebSocket kurulamıyorsa sessizce çökmez', () => {
     expect(() => createLiveEventSubscription({
-      url: 'ws://x/events', projectId: 'p1', initialEvents: [],
+      url: 'ws://x/events', projectId: 'p1', sessionToken: '', initialEvents: [],
       createSocket: () => { throw new Error('WebSocket yok'); },
       setTimer: () => 1, clearTimer: () => undefined,
       onState: () => undefined, onEvent: () => undefined,

@@ -26,6 +26,11 @@ function sessionToken(options: RequestOptions): string {
   return options.sessionToken ?? import.meta.env['VITE_SESSION_TOKEN'] ?? '';
 }
 
+/** WebSocket gibi Authorization başlığı taşıyamayan kanallar için oturum tokenı. */
+export function currentSessionToken(): string {
+  return import.meta.env['VITE_SESSION_TOKEN'] ?? '';
+}
+
 export function authHeaders(options: RequestOptions, withBody: boolean): Record<string, string> {
   const headers: Record<string, string> = { authorization: `Bearer ${sessionToken(options)}` };
   if (withBody) headers['content-type'] = 'application/json';

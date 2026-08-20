@@ -219,6 +219,13 @@ type WsEventName =
   *(2026-08-18: doğrulama istisnası sessizce yutuluyordu — soket açık kalıyor,
   panel "Canlı" yazıyor ve tek bir olay bile gelmiyordu. Panel bu zarfı olay
   saymaz, bağlantıyı canlı göstermez.)*
+- Abonelik oturum token'ı ister: tarayıcı WebSocket API'si yükseltmede özel
+  başlık taşıyamadığından token `subscribe` yükünde (`token` alanı) gider ve
+  server `WW_LOCAL_SESSION_TOKEN` ile karşılaştırır; uyuşmazlıkta ya da token
+  tanımsızsa abonelik fail-closed reddedilir (REST ile aynı sözleşme).
+  *(2026-08-20'den önce gateway'de hiç token kontrolü yoktu: localhost'a
+  erişen herhangi bir süreç, proje kimliğini bilerek olay akışını auth'suz
+  dinleyebiliyordu.)*
 - Abonelik: `{ subscribe: { projectId, events: [...] } }` — tuval yalnız
   ihtiyacını dinler; `event.created` yüksek hacimlidir, yalnız denetim/zaman
   çizelgesi açıkken abone olunur.

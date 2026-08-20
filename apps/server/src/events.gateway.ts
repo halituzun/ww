@@ -40,6 +40,15 @@ export class EventsGateway implements OnModuleDestroy {
   @SubscribeMessage('subscribe')
   async subscribe(client: WebSocket, payload: unknown): Promise<void> {
     const value = payload === null || typeof payload !== 'object' ? {} : payload as Record<string, unknown>;
+    // Tarayıcı WebSocket API'si yükseltmede özel başlık taşıyamaz; oturum
+    // token'ı subscribe yükünde gelir. REST ile aynı sözleşme (fail-closed):
+    // WW_LOCAL_SESSION_TOKEN tanımsızsa ya da token uyuşmuyorsa RET.
+    const expectedToken = process.env['WW_LOCAL_SESSION_TOKEN'];
+    const token = typeof value['token'] === 'string' ? value['token'] : '';
+    if (!expectedToken || token !== expectedToken) {
+      this.reject(client, new Error('Geçersiz veya eksik local session'));
+      return;
+    }
     let projectId: string;
     let rawAfter: string;
     try {

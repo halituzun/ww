@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { EventsGateway } from './events.gateway.js';
 
 // NEDEN VAR: bu ağ geçidinin HİÇ testi yoktu ve panelin canlı beslemesinin
@@ -36,13 +36,53 @@ const gateway = (rows: Record<string, unknown>[] = []) => {
 
 const projectId = '11111111-1111-4111-8111-111111111111';
 
+// Gateway artık REST ile aynı oturum token'ını ister (fail-closed).
+const TOKEN = 'gateway-test-token';
+
+beforeEach(() => vi.stubEnv('WW_LOCAL_SESSION_TOKEN', TOKEN));
+afterEach(() => vi.unstubAllEnvs());
+
 describe('EventsGateway.subscribe', () => {
+  it('tokensiz abonelik RET alir (yoklama da baslamaz)', async () => {
+    const { client, sent } = fakeClient();
+    const { instance: target } = gateway();
+    target.handleConnection(client);
+    const timer = vi.spyOn(globalThis, 'setInterval');
+
+    await target.subscribe(client, { projectId });
+
+    expect(JSON.parse(sent[0]!)).toMatchObject({ event: 'subscribe.rejected' });
+    expect(timer).not.toHaveBeenCalled();
+    timer.mockRestore();
+  });
+
+  it('yanlis token RET alir', async () => {
+    const { client, sent } = fakeClient();
+    const { instance: target } = gateway();
+    target.handleConnection(client);
+
+    await target.subscribe(client, { projectId, token: 'yanlis' });
+
+    expect(JSON.parse(sent[0]!)).toMatchObject({ event: 'subscribe.rejected' });
+  });
+
+  it('WW_LOCAL_SESSION_TOKEN tanimli degilse her abonelik RET alir (fail-closed)', async () => {
+    vi.stubEnv('WW_LOCAL_SESSION_TOKEN', '');
+    const { client, sent } = fakeClient();
+    const { instance: target } = gateway();
+    target.handleConnection(client);
+
+    await target.subscribe(client, { projectId, token: TOKEN });
+
+    expect(JSON.parse(sent[0]!)).toMatchObject({ event: 'subscribe.rejected' });
+  });
+
   it('gecersiz proje kimliginde istemciye RET bildirir', async () => {
     const { client, sent } = fakeClient();
     const { instance: target } = gateway();
     target.handleConnection(client);
 
-    await target.subscribe(client, { projectId: 'proje-degil' });
+    await target.subscribe(client, { projectId: 'proje-degil', token: TOKEN });
 
     expect(sent).toHaveLength(1);
     const envelope = JSON.parse(sent[0]!) as { event: string; data: { reason: string } };
@@ -55,7 +95,7 @@ describe('EventsGateway.subscribe', () => {
     const { instance: target } = gateway();
     target.handleConnection(client);
 
-    await target.subscribe(client, { projectId, afterCursor: 'bu-imleç-bozuk' });
+    await target.subscribe(client, { projectId, afterCursor: 'bu-imleç-bozuk', token: TOKEN });
 
     expect(JSON.parse(sent[0]!)).toMatchObject({ event: 'subscribe.rejected' });
   });
@@ -68,7 +108,7 @@ describe('EventsGateway.subscribe', () => {
     target.handleConnection(client);
     const timer = vi.spyOn(globalThis, 'setInterval');
 
-    await target.subscribe(client, { projectId: 'proje-degil' });
+    await target.subscribe(client, { projectId: 'proje-degil', token: TOKEN });
 
     expect(timer).not.toHaveBeenCalled();
     timer.mockRestore();
@@ -84,7 +124,7 @@ describe('EventsGateway.subscribe', () => {
     const { instance: target, queries } = gateway();
     target.handleConnection(client);
 
-    await target.subscribe(client, { projectId });
+    await target.subscribe(client, { projectId, token: TOKEN });
 
     // En yeni pencere DESC sıralamayla seçilir; eski uçtan taramak değil.
     expect(queries.join('\n')).toContain('DESC');
@@ -100,6 +140,7 @@ describe('EventsGateway.subscribe', () => {
     await target.subscribe(client, {
       projectId,
       afterCursor: '2026-08-18T00:00:00.000Z|11111111-1111-4111-8111-111111111111',
+      token: TOKEN,
     });
 
     expect(queries.join('\n')).toContain('afterCreatedAt');

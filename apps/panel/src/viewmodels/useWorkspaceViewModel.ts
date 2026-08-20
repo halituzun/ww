@@ -26,6 +26,7 @@ import {
   updateProjectStatus as updateProjectStatusService,
   type ApiArtifact, type FileIndex, type Project, type ProviderHealth, type Task, type Usage,
 } from '../services/projects.js';
+import { currentSessionToken } from '../services/http.js';
 
 const apiBase = import.meta.env.VITE_API_URL ?? 'http://localhost:4000';
 
@@ -140,6 +141,7 @@ export function useWorkspaceViewModel() {
     return createLiveEventSubscription({
       url: `${apiBase.replace(/^http/, 'ws')}/events`,
       projectId,
+      sessionToken: currentSessionToken(),
       initialEvents: eventsRef.current,
       createSocket: (url) => new WebSocket(url) as unknown as never,
       setTimer: (fn, delay) => window.setTimeout(fn, delay),

@@ -21,6 +21,8 @@ export interface LiveSocket {
 export interface LiveSubscriptionInput {
   readonly url: string;
   readonly projectId: string;
+  /** WS yükseltmesi başlık taşıyamaz; token subscribe yükünde gider. */
+  readonly sessionToken: string;
   /** Devam imleci bunlardan hesaplanır; baştan akıtmak çift kayıt üretir. */
   readonly initialEvents: readonly TimelineEvent[];
   createSocket(url: string): LiveSocket;
@@ -70,7 +72,7 @@ export function createLiveEventSubscription(input: LiveSubscriptionInput): () =>
         event: 'subscribe',
         // BigInt JSON'a doğrudan konamaz; imleç zaten METİN olarak taşınır
         // (docs/08: opak imleç).
-        data: { projectId: input.projectId, afterCursor: cursor },
+        data: { projectId: input.projectId, afterCursor: cursor, token: input.sessionToken },
       }));
     };
 
