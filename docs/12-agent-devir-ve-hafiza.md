@@ -53,27 +53,39 @@ checkpoint oluştur ve push edilmemiş commit bırakma nedenini açıkça yaz.
 > yerden başlar — 2026-08-12 → 2026-08-16 arasında tam olarak bu oldu: Codex 72
 > commit ekledi, bu bölüm "sıradaki iş Faz 1" demeye devam etti.
 
-**Son doğrulama: 2026-08-17, dal `agent/agent-communication-contract`
+**Son doğrulama: 2026-08-20, dal `agent/agent-communication-contract`
 (remote ile senkron).**
 
-- **Kapı durumu:** `WW_REQUIRE_INTEGRATION=1 pnpm test` → **912 test**, 10 paket,
-  hata yok. `pnpm --filter @ww/executor test:live` → 4/4 (opt-in canlı Docker
-  sandbox; varsayılan koşuda atlanır). `pnpm build`, `pnpm lint` ve
-  `pnpm wiring:check` yeşil. Çalışma ağacı temiz.
-- **Faz durumu:** Faz 0, 1 ve 2 tamamlandı ✅. Faz 3-6 kod tamam, kabul
-  senaryoları açık — ayrıntı `docs/11-yol-haritasi.md` "Durum Özeti".
-- **En kritik gerçek:** Platform hâlâ **hiç gerçek LLM API'sine bağlanmadı**;
-  `api_usage`'da gerçek çağrı yok. Sebebi yalnız anahtar eksikliği değil:
-  orkestrasyon runtime'ı çalışan sunucuda hiç başlamıyor (aşağı bakın).
-- **En kritik açık:** Orkestrasyon runtime'ı başlamıyor
-  (`WW_PHASE8_RUNTIME_ENABLED` ayarlanmıyor, `registerPhase9RuntimeConfig`
-  çağrılmıyor, `SchedulerWorker` kurulmuyor). Artık açılış logunda ve
-  `GET /runtime` ucunda görünür. Bağlamak için gereken parçalardan ikisi
-  2026-08-17 gecesinde tamamlandı: sağlayıcı adaptör kaydı
-  (`buildProviderRegistry`) ve rol→model yönlendirme indeksi
-  (`buildRoutingIndex` + `loadRoutingIndex`). Kalan: `schedulerOperations`
-  (gate/commit/transition/escalate/reassign üretim karşılıkları) ve executor
-  kompozisyonu.
+- **Kapı durumu:** `pnpm gate` (temizlik + build + entegrasyonlu test + lint +
+  wiring-check + öz-denetim) yeşil. Çalışma ağacı temiz, uzak dal güncel.
+- **Faz durumu:** Faz 0-3 tamamlandı ✅. Faz 4-6 kod tamam; kapanış dış girdi
+  bekliyor: DeepSeek bakiyesi + en az 2 yeni sağlayıcı anahtarı (Faz 4),
+  Chrome eklentisiyle gözle izleme (Faz 5), üç gerçek proje koşusu + Android
+  SDK (Faz 6). Ayrıntı ve kanıt tabloları `docs/11-yol-haritasi.md`.
+- **Gerçek API:** Platform 2026-08-17 akşamından beri gerçek LLM API'siyle
+  çalışıyor; orkestrasyon runtime'ı açılışta başlıyor, görevler gerçek
+  commit'ler üretti (`api_usage`'da 1000+ `ok` çağrı). DeepSeek bakiyesi
+  2026-08-18'de bitti (`402`); o zamandan beri canlı koşu yok.
+- **`no_key` olayı (2026-08-19/20, çözüldü):** Sağlık ping'leri `no_key`'e
+  dönmüştü; kök neden anahtar kaybı değil, server'ın `.env` yüklü olmayan
+  shell'den `apps/server` cwd'siyle başlaması ve `keystore.readAll()`'ın her
+  okuma hatasını sessizce "boş depo" saymasıydı. Sertleştirme: yalnız
+  `ENOENT` boş sayılıyor, Keychain geçici hatasında ana anahtarın üstüne
+  yazılmıyor, keystore yolu `resolveKeystoreFile()` ile workspace kökünden
+  çözülüyor (cwd bağımsız), `no_key`'de tam yol log'lanıyor ve açılışta
+  keystore öz-denetimi çalışıyor. Ayrıntı: `docs/04-model-katmani.md` →
+  Anahtar Güvenliği.
+- **Bu oturumda ayrıca:** Mühürlü brief bağlamının ve nedensel mesajların
+  prompt snapshot'ına bağlanması tamamlandı (önceden Context Builder
+  çalışıyor ama çıktısı modele ulaşmıyordu); brief politikası standart ve
+  gereksinim bilgi kimliklerini taşıyor; standart bilgi tohumlama
+  optimistic concurrency ile yazıyor. Hepsi scoped commit'lerle push'landı.
+- **Sıradaki iş:** Sağlayıcı anahtarları geldiğinde Faz 4 kapanış koşusu
+  (sıralama `docs/11-yol-haritasi.md` Durum Özeti'nde). Anahtar girerken
+  dikkat: `.env`'deki `WW_MASTER_KEY` ile Keychain'deki `ww-master` anahtarı
+  FARKLI — server'ı `WW_MASTER_KEY` yüklü başlatın ya da tek kaynağa karar
+  verin; aksi halde mevcut `keys.json` çözülemez (artık sessiz değil,
+  açılışta görünür).
 
 ### 2026-08-17 gecesinde yapılanlar (21 commit)
 
