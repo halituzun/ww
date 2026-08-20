@@ -4,7 +4,7 @@ import { mkdir, mkdtemp, readFile, realpath, stat, writeFile } from 'node:fs/pro
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { Keystore, maskKey, resolveKeystoreFile } from './keystore.js';
+import { Keystore, maskKey, readKeychainMasterKey, resolveKeystoreFile } from './keystore.js';
 
 vi.mock('node:child_process', () => ({ execFile: vi.fn() }));
 
@@ -133,6 +133,17 @@ describe('Keystore.open — Keychain dalı', () => {
     expect(
       vi.mocked(execFile).mock.calls.some((c) => (c[1] as string[])[0] === 'add-generic-password'),
     ).toBe(false);
+  });
+
+  it('readKeychainMasterKey kayıtlı anahtarı döner', async () => {
+    const key = randomBytes(32);
+    stubSecurity((_args, cb) => cb(null, { stdout: `${key.toString('hex')}\n`, stderr: '' }));
+    await expect(readKeychainMasterKey()).resolves.toEqual(key);
+  });
+
+  it('readKeychainMasterKey girdi yoksa/okunamazsa null döner (fırlatmaz)', async () => {
+    stubSecurity((_args, cb) => cb(securityError(44, 'item not found')));
+    await expect(readKeychainMasterKey()).resolves.toBeNull();
   });
 });
 

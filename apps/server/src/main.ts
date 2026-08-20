@@ -101,7 +101,7 @@ async function tryStartOrchestration(): Promise<void> {
     { startOrchestrationRuntime },
     { bootstrapOrchestrationRuntime },
     { registerPhase9RuntimeConfig },
-    { buildProviderRegistry, Keystore, resolveKeystoreFile },
+    { buildProviderRegistry, Keystore, resolveKeystoreFile, readKeychainMasterKey },
     { loadRoutingIndex },
     db,
   ] = await Promise.all([
@@ -126,6 +126,16 @@ async function tryStartOrchestration(): Promise<void> {
     console.log(`[ww] keystore: ${keyRefs.length} kayıt (${keyRefs.join(', ') || 'yok'}) @ ${keystoreFile}`);
   } catch (err) {
     console.warn(`[ww] keystore açılışta okunamadı: ${err instanceof Error ? err.message : String(err)}`);
+  }
+  // Bilinen tuzak (2026-08-20): WW_MASTER_KEY ile Keychain ww-master FARKLI
+  // anahtarlar tutabiliyor; keys.json yalnızca biriyle çözülür. Değerler
+  // log'lanmaz, yalnızca fark uyarısı verilir.
+  const envMaster = process.env['WW_MASTER_KEY'];
+  if (envMaster) {
+    const keychainMaster = await readKeychainMasterKey();
+    if (keychainMaster !== null && keychainMaster.toString('hex') !== envMaster) {
+      console.warn('[ww] uyarı: WW_MASTER_KEY ile Keychain ww-master farklı anahtarlar; tek kaynağa karar verin (docs/04 → Anahtar Güvenliği)');
+    }
   }
   // Bu bağlantılar kayıt BAŞARILIYSA composition'a devredilir ve sürecin
   // ömrü boyunca yaşamalıdır. Burada kapatmak, kayıtlı motoru kapalı

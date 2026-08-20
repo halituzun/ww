@@ -116,7 +116,6 @@ export class Keystore {
 async function resolveMasterKey(): Promise<Buffer> {
   const fromEnv = process.env['WW_MASTER_KEY'];
   if (fromEnv) return Buffer.from(fromEnv, 'hex');
-
   try {
     const { stdout } = await exec('security', ['find-generic-password', '-s', KEYCHAIN_SERVICE, '-w']);
     return Buffer.from(stdout.trim(), 'hex');
@@ -140,6 +139,18 @@ async function resolveMasterKey(): Promise<Buffer> {
 }
 
 export const maskKey = (k: string): string => (k.length <= 4 ? '…' : `${k.slice(0, 3)}…${k.slice(-4)}`);
+
+// Teşhis amaçlı: Keychain'de kayıtlı ana anahtarı döner; yoksa ya da
+// okunamazsa null. WW_MASTER_KEY ile Keychain'in FARKLI anahtarlar tutması
+// bilinen bir tuzaktır — keys.json yalnızca biriyle çözülür (bkz. docs/04).
+export async function readKeychainMasterKey(): Promise<Buffer | null> {
+  try {
+    const { stdout } = await exec('security', ['find-generic-password', '-s', KEYCHAIN_SERVICE, '-w']);
+    return Buffer.from(stdout.trim(), 'hex');
+  } catch {
+    return null;
+  }
+}
 
 // Loglara anahtar sızmasını engeller (docs/04 → sızma koruması).
 export function redactKeys(text: string): string {
