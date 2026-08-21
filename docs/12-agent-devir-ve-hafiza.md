@@ -53,15 +53,22 @@ checkpoint oluştur ve push edilmemiş commit bırakma nedenini açıkça yaz.
 > yerden başlar — 2026-08-12 → 2026-08-16 arasında tam olarak bu oldu: Codex 72
 > commit ekledi, bu bölüm "sıradaki iş Faz 1" demeye devam etti.
 
-**Son doğrulama: 2026-08-20, dal `agent/agent-communication-contract`
+**Son doğrulama: 2026-08-21, dal `agent/agent-communication-contract`
 (remote ile senkron).**
 
 - **Kapı durumu:** `pnpm gate` (temizlik + build + entegrasyonlu test + lint +
-  wiring-check + öz-denetim) yeşil. Çalışma ağacı temiz, uzak dal güncel.
+  wiring-check + öz-denetim) yeşil (2047+3 yeni test). Çalışma ağacı temiz,
+  uzak dal güncel.
+- **Sağlayıcılar (2026-08-21):** `mistral` bakiyeli ve **çalışıyor** (sağlık
+  `ok`); `openai` ve `deepseek` anahtarları geçerli ama bakiyesiz (429/402).
+  Roller mistral'e yönlendirildi; mistral için fiyat satırı eklendi.
+  Mistral ile canlı görev koşusu başarılı (`mistral-entegrasyon-2` projesi,
+  commit `85dd01e`). Konsey ≥3 sağlayıcı gereği hâlâ açık: bakiye yüklenince
+  ya da yeni sağlayıcı gelince Faz 4 kapanış koşusu yapılabilir.
 - **Faz durumu:** Faz 0-3 tamamlandı ✅. Faz 4-6 kod tamam; kapanış dış girdi
-  bekliyor: DeepSeek bakiyesi + en az 2 yeni sağlayıcı anahtarı (Faz 4),
-  Chrome eklentisiyle gözle izleme (Faz 5), üç gerçek proje koşusu + Android
-  SDK (Faz 6). Ayrıntı ve kanıt tabloları `docs/11-yol-haritasi.md`.
+  bekliyor: konsey için bakiyeli 2. ve 3. sağlayıcı (Faz 4), Chrome
+  eklentisiyle gözle izleme (Faz 5), üç gerçek proje koşusu + Android SDK
+  (Faz 6). Ayrıntı ve kanıt tabloları `docs/11-yol-haritasi.md`.
 - **Gerçek API:** Platform 2026-08-17 akşamından beri gerçek LLM API'siyle
   çalışıyor; orkestrasyon runtime'ı açılışta başlıyor, görevler gerçek
   commit'ler üretti (`api_usage`'da 1000+ `ok` çağrı). DeepSeek bakiyesi

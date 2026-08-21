@@ -32,11 +32,23 @@
 
 ## Durum Özeti (2026-08-18 doğrulaması)
 
-> **Faz 4-6'yı kapatan tek şey artık kod değildir.** Üçünün de kabul senaryosu
-> dış girdi bekliyor: DeepSeek bakiyesi bitti (`402`), ikinci/üçüncü sağlayıcı
-> anahtarı yok, Chrome eklentisi bağlı değil, Android SDK kurulu değil.
+> **Faz 4-6'yı kapatan tek şey artık kod değildir.** Kabul senaryoları dış
+> girdi bekliyor: Chrome eklentisi bağlı değil, Android SDK kurulu değil.
 > Bu girdiler geldiğinde koşulacak adımlar her fazın kendi bölümünde tabloyla
 > yazılıdır.
+>
+> **Not (2026-08-21):** OpenAI ve Mistral sağlayıcıları kaydedildi ve canlı
+> doğrulandı. Mistral bakiyeli ve çalışıyor: "hello modülü yaz" görevi
+> Mistral ile `done` + gerçek commit (`85dd01e`) üretti; worker/verifier/
+> summarizer rolleri `mistral:mistral-large-latest`'e yönlendirildi (yedek:
+> deepseek, openai). OpenAI (`429 credit_balance_exhausted`) ve DeepSeek
+> (`402`) anahtarları geçerli ama **bakiyesiz** — yüklenince fallback
+> zinciri onları kendiliğinden kullanır. Konseyin ≥3 sağlayıcı gereği için
+> hâlâ en az iki bakiyeli sağlayıcı daha gerekli (şu an tek çalışan Mistral).
+> Bu koşu iki kusuru da kapattı: boş `base_url`'lu sağlayıcı "taklit"
+> sanılıp hiç ping'lenmiyordu (açık baseUrl zorunlu) ve `WW_WORKSPACE_ROOT`
+> fallback'i cwd'ye bağlıydı — üretim çıktısı `apps/server/workspace`'e
+> sızıyordu; `resolveWorkspaceBase()` ile düzeltildi.
 >
 > **Not (2026-08-20):** `api_usage`'daki `no_key` hatalarının kök nedeni
 > bulundu ve düzeltildi: anahtar kaybolmamıştı; server `.env` yüklü olmayan
