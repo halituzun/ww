@@ -14,6 +14,7 @@ export const PRICING: Record<string, Price> = {
   'anthropic:claude-haiku-4-5-20251001': { inPerMTok: 1, outPerMTok: 5 },
   'deepseek:deepseek-chat': { inPerMTok: 0.27, outPerMTok: 1.1 },
   'deepseek:deepseek-reasoner': { inPerMTok: 0.55, outPerMTok: 2.19 },
+  'mistral:mistral-large-latest': { inPerMTok: 2, outPerMTok: 6 },
   'mock:mock-model': { inPerMTok: 0, outPerMTok: 0 },
 };
 
