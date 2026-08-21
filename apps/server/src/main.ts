@@ -5,7 +5,7 @@ import { createCh, createRedis, runMigrations } from '@ww/db';
 import { RecoveryService } from '@ww/memory';
 import { CommandRunner, resetWorkingTree } from '@ww/executor';
 import { appendKnowledgeVersion, getLatestKnowledge, getLatestProject } from '@ww/db';
-import { resolveWorkspaceRoot } from './runtime-context.js';
+import { resolveWorkspaceBase, resolveWorkspaceRoot } from './runtime-context.js';
 import { resetRecoveredWorkspaces } from './workspace-recovery.js';
 import { seedStandardKnowledgeForProjects } from './standard-knowledge.js';
 import { panelOrigins } from './cors.js';
@@ -33,7 +33,7 @@ async function bootstrap(): Promise<void> {
       loadProject: (projectId) => getLatestProject(recoveryCh, projectId),
       reset: async (projectKey, slug) => {
         const root = resolveWorkspaceRoot(
-          process.env['WW_WORKSPACE_ROOT'] ?? `${process.cwd()}/workspace`,
+          resolveWorkspaceBase(),
           slug,
         );
         await resetWorkingTree(new CommandRunner(), projectKey, root);
@@ -157,7 +157,7 @@ async function tryStartOrchestration(): Promise<void> {
         ch, redis,
         projectId: project.project_id as never,
         projectSlug: project.slug,
-        workspaceRoot: process.env['WW_WORKSPACE_ROOT'] ?? `${process.cwd()}/workspace`,
+        workspaceRoot: resolveWorkspaceBase(),
         localSessionToken: process.env['WW_LOCAL_SESSION_TOKEN'] ?? '',
         consumerId: `server-${process.pid}`,
         loadProviders: async () => {

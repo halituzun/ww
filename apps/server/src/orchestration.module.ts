@@ -43,7 +43,7 @@ import {
 import { CommunicationWakeupPublisher, appendPromptVersion, createRedis, getActivePrompt } from '@ww/db';
 import { BOOTSTRAP_AGENTS, planBootstrapPrompts } from './agent-bootstrap.js';
 import { writeProjectScaffold } from './project-scaffold-writer.js';
-import { resolveWorkspaceRoot } from './runtime-context.js';
+import { resolveWorkspaceBase, resolveWorkspaceRoot } from './runtime-context.js';
 import { isResumableStatus, resumeAnsweredTask } from './resume-answered-task.js';
 import { buildBootstrapPlan } from './bootstrap-plan.js';
 import { seedStandardKnowledge } from './standard-knowledge.js';
@@ -121,7 +121,7 @@ export class ProjectApplicationService implements ProjectApplication {
     // yoksa iş üretilebiliyor ama KABUL EDİLEMİYOR ("Dosya bulunamadı").
     await writeProjectScaffold(
       resolveWorkspaceRoot(
-        process.env['WW_WORKSPACE_ROOT'] ?? `${process.cwd()}/workspace`,
+        resolveWorkspaceBase(),
         project.slug,
       ),
       project.type,

@@ -4,7 +4,7 @@ import { EntityIdSchema } from '@ww/shared';
 import { listFileIndex } from '@ww/db';
 import { SERVER_DATABASE, type ServerDatabase } from './orchestration.module.js';
 import { getLatestProject } from '@ww/db';
-import { resolveWorkspaceRoot } from './runtime-context.js';
+import { resolveWorkspaceBase, resolveWorkspaceRoot } from './runtime-context.js';
 import { resolveWorkspaceFile } from './workspace-file-path.js';
 
 /** Panelde okunabilir üst sınır; büyük dosya tarayıcıyı kilitler. */
@@ -41,7 +41,7 @@ export class FilesController {
     if (project === null) throw new Error('proje bulunamadı');
 
     const root = resolveWorkspaceRoot(
-      process.env['WW_WORKSPACE_ROOT'] ?? `${process.cwd()}/workspace`,
+      resolveWorkspaceBase(),
       project.slug,
     );
     const absolute = resolveWorkspaceFile(root, filePath);

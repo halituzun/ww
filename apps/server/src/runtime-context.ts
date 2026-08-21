@@ -3,7 +3,8 @@
 // `Phase1RuntimeContextPort` göreve mühürlü prompt girdisi + workspace yolu +
 // model referansları verir. Bu modül ikinci ve üçüncü parçayı sağlar; mühürlü
 // prompt girdisi ayrı bir adımdır.
-import { isAbsolute, join } from 'node:path';
+import { existsSync } from 'node:fs';
+import { dirname, isAbsolute, join, resolve } from 'node:path';
 import type { RoutingIndex } from '@ww/providers';
 
 export interface RuntimeModels {
@@ -51,4 +52,25 @@ export function resolveWorkspaceRoot(workspaceRoot: string, slug: string): strin
     throw new Error(`geçersiz proje slug'ı: '${slug}' — yalnız harf, rakam, tire ve alt çizgi`);
   }
   return join(workspaceRoot, slug);
+}
+
+// Workspace taban dizini: WW_WORKSPACE_ROOT verilmişse o; yoksa cwd'den
+// yukarı doğru depo kökü (pnpm-workspace.yaml) aranır ve <kök>/workspace
+// döner; işaretçi yoksa <cwd>/workspace'e düşülür.
+//
+// NEDEN: keystore yoluyla aynı tuzak — turbo server'ı apps/server cwd'siyle
+// başlatır; `${process.cwd()}/workspace` fallback'i üretilen projeleri
+// apps/server/workspace altına sızdırıyordu (2026-08-21 canlı koşuda
+// gözlendi: görev "done" + commit üretti ama çıktı yanlış ağaçtaydı).
+export function resolveWorkspaceBase(cwd = process.cwd()): string {
+  const fromEnv = process.env['WW_WORKSPACE_ROOT'];
+  if (fromEnv) return fromEnv;
+  const start = resolve(cwd);
+  let dir = start;
+  for (;;) {
+    if (existsSync(join(dir, 'pnpm-workspace.yaml'))) return join(dir, 'workspace');
+    const parent = dirname(dir);
+    if (parent === dir) return join(start, 'workspace');
+    dir = parent;
+  }
 }

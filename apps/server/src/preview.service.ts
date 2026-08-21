@@ -17,7 +17,7 @@ import { Inject, Injectable, Logger, OnModuleDestroy } from '@nestjs/common';
 import { appendEvent, appendProjectVersion, getLatestProject } from '@ww/db';
 import { OutputRing, PORT_POOL_END, PORT_POOL_START, PortPool } from './process-pool.js';
 import { readDevPort, withDevPort, withoutDevPort } from './preview-port-store.js';
-import { resolveWorkspaceRoot } from './runtime-context.js';
+import { resolveWorkspaceBase, resolveWorkspaceRoot } from './runtime-context.js';
 import { SERVER_DATABASE, type ServerDatabase } from './orchestration.module.js';
 import { processLifecycleEvent } from './process-event.js';
 import { previewCrashed, previewMustStop } from './preview-lifecycle.js';
@@ -89,7 +89,7 @@ export class PreviewApplicationService implements OnModuleDestroy {
     const project = await getLatestProject(this.#database.ch, projectId);
     if (project === null) throw new PreviewError('proje bulunamadi');
     return resolveWorkspaceRoot(
-      process.env['WW_WORKSPACE_ROOT'] ?? `${process.cwd()}/workspace`,
+      resolveWorkspaceBase(),
       project.slug,
     );
   }

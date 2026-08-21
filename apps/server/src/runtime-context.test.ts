@@ -1,5 +1,8 @@
-import { describe, expect, it } from 'vitest';
-import { resolveRuntimeModels, resolveWorkspaceRoot } from './runtime-context.js';
+import { mkdir, mkdtemp, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { resolveRuntimeModels, resolveWorkspaceBase, resolveWorkspaceRoot } from './runtime-context.js';
 import type { RoutingIndex } from '@ww/providers';
 
 const routing = (map: Record<string, string>): RoutingIndex => ({
@@ -65,5 +68,30 @@ describe('resolveWorkspaceRoot', () => {
 
   it('mutlak olmayan kökü reddeder', () => {
     expect(() => resolveWorkspaceRoot('workspace', 'satranc')).toThrow(/mutlak/i);
+  });
+});
+
+describe('resolveWorkspaceBase', () => {
+  afterEach(() => vi.unstubAllEnvs());
+
+  it('WW_WORKSPACE_ROOT verilmişse onu döner', () => {
+    vi.stubEnv('WW_WORKSPACE_ROOT', '/srv/onerilen');
+    expect(resolveWorkspaceBase()).toBe('/srv/onerilen');
+  });
+
+  it('env yoksa depo kökünü (pnpm-workspace.yaml) yukarı arayarak bulur', async () => {
+    vi.stubEnv('WW_WORKSPACE_ROOT', '');
+    const root = await mkdtemp(join(tmpdir(), 'ww-base-'));
+    await writeFile(join(root, 'pnpm-workspace.yaml'), 'packages: []\n');
+    const nested = join(root, 'apps', 'server');
+    await mkdir(nested, { recursive: true });
+    // resolve() symlink çözmez; verilen cwd olduğu gibi normalize edilir
+    expect(resolveWorkspaceBase(nested)).toBe(join(root, 'workspace'));
+  });
+
+  it('işaretçi bulunamazsa <cwd>/workspace yoluna düşer', async () => {
+    vi.stubEnv('WW_WORKSPACE_ROOT', '');
+    const dir = await mkdtemp(join(tmpdir(), 'ww-nobase-'));
+    expect(resolveWorkspaceBase(dir)).toBe(join(dir, 'workspace'));
   });
 });
