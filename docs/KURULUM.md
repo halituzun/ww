@@ -21,7 +21,7 @@ Servisler bilinçli olarak standart dışı portlarda: ClickHouse `8124`, Redis 
 ```bash
 pnpm build
 pnpm lint
-WW_REQUIRE_INTEGRATION=1 pnpm test          # 709 test — skip'i hataya çevirir
+WW_REQUIRE_INTEGRATION=1 pnpm test          # 2047 test — skip'i hataya çevirir
 pnpm --filter @ww/executor runtime:build    # canlı sandbox imajı
 pnpm --filter @ww/executor test:live        # +4 canlı Docker sandbox testi
 ```

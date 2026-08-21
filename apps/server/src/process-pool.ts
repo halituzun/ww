@@ -1,9 +1,10 @@
 // Dev-server yaşam döngüsünün saf parçaları (docs/05 → Dev-Server Yaşam Döngüsü).
 //
-// NEDEN VAR: docs/05 `ProcessManager`'ı port havuzu ve halka tamponuyla
-// tanımlıyor, docs/11 Faz 6 da önizlemeyi buna dayandırıyor. Hiçbiri
-// yazılmamıştı: panelin önizleme sekmesi sabit bir env değişkenine bakıyor,
-// yoksa `about:blank` gösteriyordu — yani "canlı önizleme" diye bir şey yoktu.
+// NEDEN VAR: docs/05 dev-server yaşam döngüsünü port havuzu ve halka
+// tamponuyla tanımlıyor, docs/11 Faz 6 da önizlemeyi buna dayandırıyor.
+// Hiçbiri yazılmamıştı: panelin önizleme sekmesi sabit bir env değişkenine
+// bakıyor, yoksa `about:blank` gösteriyordu — yani "canlı önizleme" diye bir
+// şey yoktu.
 
 export class PortPoolError extends Error {}
 

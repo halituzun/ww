@@ -76,26 +76,16 @@ shared ← db ← {providers, memory, executor} ← agents ← scheduler ← app
 ## Docker Compose Topolojisi
 
 ```yaml
-# docker-compose.yml (özet)
+# docker-compose.yml (özet) — yalnızca veri servisleri; server/panel host'ta
 services:
   clickhouse:
-    image: clickhouse/clickhouse-server:24.8   # vektör arama destekli sürüm
-    ports: ["8123:8123", "9000:9000"]
+    image: clickhouse/clickhouse-server:24.8
+    ports: ["8124:8123", "9001:9000"]   # host portu bilinçli standart dışı
     volumes: ["ch-data:/var/lib/clickhouse"]
   redis:
     image: redis:7-alpine
-    ports: ["6379:6379"]
+    ports: ["6380:6379"]                # host portu bilinçli standart dışı
     command: ["redis-server", "--appendonly", "yes"]
-  server:
-    build: apps/server
-    depends_on: [clickhouse, redis]
-    ports: ["4000:4000"]                        # REST + WS
-    volumes:
-      - ./workspace:/workspace                  # üretilen projeler
-      - ./secrets:/secrets:ro                   # şifreli API anahtarları
-  panel:
-    build: apps/panel
-    ports: ["3000:80"]
 ```
 
 Notlar:

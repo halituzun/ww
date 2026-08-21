@@ -91,7 +91,8 @@ checkpoint oluştur ve push edilmemiş commit bırakma nedenini açıkça yaz.
 
 Tekrar eden hata deseni: **yazılmış, testli, ama hiçbir üretim kodu çağırmıyor.**
 Bir gecede beş ayrı yerde bulundu ve artık `pnpm wiring:check` kapısıyla
-korunuyor (`wiring-baseline.json` mevcut 43 ihlali dondurur, yenileri düşer).
+korunuyor (o gece `wiring-baseline.json` 43 ihlali dondurdu; güncel sayı —
+2026-08-20'de 30 — için kapı çıktısına bakın).
 
 - Güvenlik frenleri (token/maliyet/duvar-saati/kaçak döngü) hiç çağrılmıyordu;
   mekanizma, ClickHouse portları ve üretim yolu bağlandı. Varsayılan AÇIK,

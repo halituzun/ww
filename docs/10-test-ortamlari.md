@@ -16,8 +16,9 @@
 
 ## Genel Yaklaşım
 
-Test ortamları panelin **Test** sayfasında yaşar; hepsi executor'ın
-`ProcessManager`'ına dayanır ([05](05-executor.md#dev-server-yaşam-döngüsü)).
+Test ortamları panelin **Test** sayfasında yaşar; hepsi dev-server yaşam
+döngüsüne (`PreviewApplicationService` + `process-pool.ts`,
+[05](05-executor.md#dev-server-yaşam-döngüsü)) dayanır.
 Kullanıcı "çalışırken gör" der; sistem ilgili süreci başlatır, panel bağlanır.
 Süreç durumu ve logları her ortamda ortaktır.
 
@@ -26,8 +27,8 @@ kolay olandan zora ([11 — Yol Haritası, Faz 6](11-yol-haritasi.md#faz-6)).
 
 ## Web Önizleme
 
-- "Önizlemeyi başlat" → `ProcessManager` `dev` sürecini başlatır (`vite` vb.),
-  port havuzundan port alır (42000-42999).
+- "Önizlemeyi başlat" → `PreviewApplicationService` `dev` sürecini başlatır
+  (`vite` vb.), port havuzundan port alır (42000-42999).
 - Panel içinde `iframe` ile `http://localhost:<port>` gösterilir; üst şeritte:
   - cihaz çerçeveleri (masaüstü / tablet / telefon genişlikleri),
   - yenile, yeni sekmede aç,

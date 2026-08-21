@@ -103,7 +103,7 @@ Girdi: agent rolü, immutable `TaskBriefV1`, token bütçesi (rol başına ayar;
 varsayılanı 24k token). Global kaynak seçimleri `baseContextCutoffAt` anına göre
 yapılır. Retry/replay daha sonra oluşmuş proje bilgisini göremez; yalnız aynı
 task brief'in verifier reddi, gate çıktısı, soru cevabı ve escalation kayıtları
-`taskCausalCursor` üzerinden eklenir.
+`TaskCausalCursorV1` üzerinden eklenir.
 
 Katmanlı doldurma (öncelik sırasıyla, bütçe dolunca kesilir):
 

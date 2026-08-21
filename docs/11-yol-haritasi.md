@@ -170,8 +170,8 @@ dolayısıyla otomatik kapı bu fazı kapatmaya yeter. Kanıt eşlemesi:
 |---|---|
 | Senaryo: proje → görev → kuyruk → worker → verifier → kapı → commit | `apps/server/src/phase9.runtime.integration.test.ts`, `apps/server/src/rest.integration.test.ts` |
 | Ping-pong freni (3. denemede `escalated`) | `packages/scheduler/src/phase1-orchestrator.test.ts` — "üçüncü kalıcı ret sonrası escalated olur" |
-| Ret → düzeltme → temiz terminal; gate hatası → yeni attempt | `packages/scheduler/src/phase1-orchestrator.test.ts` (8 test) |
-| İletişim: exact `replyToMessageId`, yinelenen teslim, Redis'siz inbox replay, sahte principal fail-closed | `packages/agents/src/communication.integration.test.ts` (28 test) |
+| Ret → düzeltme → temiz terminal; gate hatası → yeni attempt | `packages/scheduler/src/phase1-orchestrator.test.ts` (19 test) |
+| İletişim: exact `replyToMessageId`, yinelenen teslim, Redis'siz inbox replay, sahte principal fail-closed | `packages/agents/src/communication.integration.test.ts` (27 test) |
 | Restart: durable provider effect'i tekrar çağrılmaz | `communication.integration.test.ts` — "non-replay-safe effect ... tek callback calistirir"; `phase9.runtime.integration.test.ts` |
 | Zaman: brief mühürleme, stale brief/attempt reddi, causal high-water | `communication.integration.test.ts`, `packages/shared/src/task-contracts.test.ts` |
 
@@ -330,7 +330,7 @@ için belgelenmiş eşzamanlılık hiç devreye girmiyordu.
 
 Deterministik dilim geçiyor: `packages/agents/src/phase4-acceptance.test.ts`
 ("interview → council → audit produces one approved deterministic result") ve
-`packages/scheduler/src/phase4.integration.test.ts` (76 testin çoğu; konsey turu,
+`packages/scheduler/src/phase4.integration.test.ts` (39 test; konsey turu,
 delegasyon derinliği, klon limiti, tırmandırma). Ancak belgelenmiş kabul senaryosu
 **gerçek** bir uçtan uca koşu istiyor: "küçük bir web uygulaması sihirbazdan girilir
 → konsey planlar → kullanıcı onaylar → çoklu worker/verifier üretir → denetçiler en

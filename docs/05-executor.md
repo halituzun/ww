@@ -118,7 +118,10 @@ Görev `verifying → testing` geçtiğinde proje türüne göre kapı komutlar�
 
 ## Dev-Server Yaşam Döngüsü
 
-Test ortamlarının ([10](10-test-ortamlari.md)) temeli — `ProcessManager`:
+Test ortamlarının ([10](10-test-ortamlari.md)) temeli — dev-server yaşam
+döngüsü. Kod karşılığı: `apps/server/src/preview.service.ts`
+(`PreviewApplicationService`) + saf parçalar `apps/server/src/process-pool.ts`
+(`PortPool`, `OutputRing`):
 
 - Proje başına adlandırılmış süreçler: `dev` (vite/flutter run/nest start),
   `emulator`, vb. Kayıtları bellekte + `events`'te (`process_started/stopped`).
