@@ -46,15 +46,17 @@ describe('buildProviderRegistry', () => {
     expect(withoutUrl.skipped[0]).toMatchObject({ reason: 'no_base_url' });
   });
 
-  it('anthropic ve openai için doğru adaptörü seçer', async () => {
+  it('anthropic, openai ve google/gemini için doğru adaptörü seçer', async () => {
     const registry = await buildProviderRegistry([
       record({ provider_id: 'anthropic', base_url: '', models: ['claude-sonnet-5'], key_ref: 'anthropic' }),
       record({ provider_id: 'openai', base_url: '', models: ['gpt-5-mini'], key_ref: 'openai' }),
-    ], keys({ anthropic: 'sk-ant-123456', openai: 'sk-oai-123456' }));
+      record({ provider_id: 'google', base_url: '', models: ['gemini-2.5-flash'], key_ref: 'google' }),
+    ], keys({ anthropic: 'sk-ant-123456', openai: 'sk-oai-123456', google: 'sk-goog-123456' }));
 
     expect(registry.providers.get('anthropic')?.id).toBe('anthropic');
     expect(registry.providers.get('openai')?.id).toBe('openai');
-    expect(registry.providers.get('openai')?.listModels()).toContain('gpt-5-mini');
+    expect(registry.providers.get('google')?.id).toBe('google');
+    expect(registry.providers.get('google')?.listModels()).toContain('gemini-2.5-flash');
   });
 
   it('bir sağlayıcının kurulum hatası diğerlerini düşürmez', async () => {

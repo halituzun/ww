@@ -6,6 +6,7 @@
 import { AnthropicAdapter } from './adapters/anthropic.js';
 import { OpenAiAdapter } from './adapters/openai.js';
 import { createDeepseekAdapter } from './adapters/deepseek.js';
+import { createGeminiAdapter } from './adapters/gemini.js';
 import type { LlmProvider } from './types.js';
 
 /** api_providers satırının bu modülün ihtiyaç duyduğu alt kümesi. */
@@ -58,6 +59,12 @@ function createAdapter(record: ProviderRecord, apiKey: string): LlmProvider | { 
     return record.base_url === ''
       ? createDeepseekAdapter(apiKey)
       : createDeepseekAdapter(apiKey, record.base_url);
+  }
+
+  if (record.provider_id === 'google' || record.provider_id === 'gemini') {
+    return record.base_url === ''
+      ? createGeminiAdapter(apiKey, undefined, models.length === 0 ? undefined : models)
+      : createGeminiAdapter(apiKey, record.base_url, models.length === 0 ? undefined : models);
   }
 
   // Bilinmeyen sağlayıcı OpenAI-uyumlu varsayılır; ama nereye bağlanacağını

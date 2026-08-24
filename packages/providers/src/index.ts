@@ -13,3 +13,4 @@ export * from './adapters/errors.js';
 export * from './adapters/openai.js';
 export * from './adapters/anthropic.js';
 export * from './adapters/deepseek.js';
+export * from './adapters/gemini.js';
