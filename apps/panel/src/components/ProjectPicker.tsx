@@ -46,6 +46,11 @@ export function ProjectPicker({
               placeholder="Örn: Modern karanlık temalı bir yapılacaklar (Todo) listesi web uygulaması"
               value={expressPrompt ?? ''}
               onChange={(event) => onExpressPrompt(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter' && expressPrompt && expressPrompt.trim() !== '') {
+                  onExpressCreate();
+                }
+              }}
               style={{ flex: '1 1 300px' }}
             />
             <input
@@ -53,6 +58,11 @@ export function ProjectPicker({
               placeholder="Proje adı (isteğe bağlı)"
               value={expressName ?? ''}
               onChange={(event) => onExpressName ? onExpressName(event.target.value) : undefined}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter' && expressPrompt && expressPrompt.trim() !== '') {
+                  onExpressCreate();
+                }
+              }}
               style={{ width: '180px' }}
             />
             <button type="button" onClick={onExpressCreate} disabled={!expressPrompt || expressPrompt.trim() === ''}>
