@@ -181,6 +181,27 @@ export async function createProject(
   }, 'Proje oluşturulamadı');
 }
 
+export interface CreateExpressProjectInput {
+  name: string;
+  prompt: string;
+  type?: string;
+}
+
+export async function createExpressProject(
+  input: CreateExpressProjectInput,
+  options: RequestOptions = {},
+): Promise<Project> {
+  const name = input.name.trim();
+  const prompt = input.prompt.trim();
+  if (name.length === 0) throw new Error('Proje adı zorunludur');
+  if (prompt.length === 0) throw new Error('Uygulama açıklaması zorunludur');
+  return requestJson<Project>('/projects/express', {
+    ...options,
+    method: 'POST',
+    body: { name, prompt, type: input.type ?? 'web' },
+  }, 'Express proje oluşturulamadı');
+}
+
 export const askNarrator = (
   projectId: string,
   question: string,

@@ -1,6 +1,6 @@
 import { Body, Controller, Get, Inject, Param, Patch, Post, Req } from '@nestjs/common';
 import { parseLocalSession, type LocalSessionRequest } from './auth/local-session.js';
-import { parseProjectInput, parseProjectStatusInput, PROJECT_APPLICATION, type ProjectApplication } from './orchestration.module.js';
+import { parseExpressProjectInput, parseProjectInput, parseProjectStatusInput, PROJECT_APPLICATION, type ProjectApplication } from './orchestration.module.js';
 
 @Controller('projects')
 export class ProjectsController {
@@ -9,6 +9,11 @@ export class ProjectsController {
   create(@Req() request: LocalSessionRequest, @Body() body: unknown) {
     parseLocalSession(request);
     return this.projects.create(parseProjectInput(body));
+  }
+  @Post('express')
+  expressCreate(@Req() request: LocalSessionRequest, @Body() body: unknown) {
+    parseLocalSession(request);
+    return this.projects.expressCreate(parseExpressProjectInput(body));
   }
   @Get()
   list() { return this.projects.list(); }

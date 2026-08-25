@@ -21,6 +21,7 @@ import { fetchProviders, type Provider } from '../services/providers.js';
 import {
   askNarrator as askNarratorService,
   createProject as createProjectService,
+  createExpressProject as createExpressProjectService,
   fetchApiArtifacts, fetchFiles, fetchProject, fetchProjects, fetchProviderHealth,
   fetchTasks, fetchUsage, sendUserCommand,
   updateProjectStatus as updateProjectStatusService,
@@ -219,6 +220,26 @@ export function useWorkspaceViewModel() {
     }
   }, [projectId]);
 
+  const [expressPrompt, setExpressPrompt] = useState('');
+  const [expressName, setExpressName] = useState('');
+
+  const createExpressProject = useCallback(async () => {
+    if (expressPrompt.trim() === '') return;
+    try {
+      const name = expressName.trim() || expressPrompt.trim().slice(0, 30);
+      const project = await createExpressProjectService({
+        name, prompt: expressPrompt, type: 'web',
+      });
+      setProjects((current) => [...current, project]);
+      setProjectId(project.project_id);
+      setProjectStatusMessage('Express proje başlatıldı.');
+      setExpressPrompt('');
+      setExpressName('');
+    } catch (reason) {
+      setProjectStatusMessage(errorText(reason, 'Express proje başlatılamadı'));
+    }
+  }, [expressPrompt, expressName]);
+
   const createProject = useCallback(async () => {
     try {
       const project = await createProjectService({
@@ -247,6 +268,7 @@ export function useWorkspaceViewModel() {
     message, setMessage, messageStatus,
     narratorQuestion, setNarratorQuestion, narratorResult,
     tab, setTab,
+    expressPrompt, setExpressPrompt, expressName, setExpressName, createExpressProject,
     sendCommand, askNarrator, updateProjectStatus, createProject,
   };
 }

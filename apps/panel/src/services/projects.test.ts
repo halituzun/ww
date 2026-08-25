@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   askNarrator,
   createProject,
+  createExpressProject,
   fetchApiArtifacts,
   fetchFiles,
   fetchProjects,
@@ -124,6 +125,24 @@ describe('yazma uçları', () => {
     const fetchImpl = vi.fn() as unknown as typeof fetch;
     await expect(createProject({ name: ' ', type: 'web', budgetUsd: '1' }, { fetchImpl }))
       .rejects.toThrow(/ad/i);
+    expect(fetchImpl).not.toHaveBeenCalled();
+  });
+
+  it('express proje oluşturur', async () => {
+    const mock = vi.fn(async () => jsonResponse({ project_id: 'exp-1' }));
+    await createExpressProject({ name: 'Hava Durumu', prompt: 'web app' }, {
+      fetchImpl: mock as unknown as typeof fetch, sessionToken: 'tok',
+    });
+    expect(urlOf(mock)).toBe(`${DEFAULT_API_BASE}/projects/express`);
+    expect(JSON.parse(String(initOf(mock).body))).toEqual({
+      name: 'Hava Durumu', prompt: 'web app', type: 'web',
+    });
+  });
+
+  it('boş prompt ile express proje oluşturmayı reddeder', async () => {
+    const fetchImpl = vi.fn() as unknown as typeof fetch;
+    await expect(createExpressProject({ name: 'demo', prompt: '   ' }, { fetchImpl }))
+      .rejects.toThrow(/açıklama/i);
     expect(fetchImpl).not.toHaveBeenCalled();
   });
 

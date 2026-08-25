@@ -14,6 +14,7 @@ export interface ProjectDraft {
 
 export function ProjectPicker({
   projects, draft, onDraft, onCreate, statusMessage, onSelect, loadError,
+  expressPrompt, onExpressPrompt, expressName, onExpressName, onExpressCreate,
 }: {
   readonly projects: readonly Project[];
   readonly draft: ProjectDraft;
@@ -25,11 +26,43 @@ export function ProjectPicker({
    * kullanıcıya projelerini kaybettiğini düşündürür. */
   readonly loadError?: string | undefined;
   readonly onSelect: (projectId: string) => void;
+  readonly expressPrompt?: string | undefined;
+  readonly onExpressPrompt?: ((prompt: string) => void) | undefined;
+  readonly expressName?: string | undefined;
+  readonly onExpressName?: ((name: string) => void) | undefined;
+  readonly onExpressCreate?: (() => void) | undefined;
 }) {
   return (
     <section className="workspace-card project-picker">
       <h2>Projeler</h2>
-      <p className="hint">Yeni proje oluştur veya mevcut bir projeyi seç.</p>
+
+      {onExpressCreate && onExpressPrompt ? (
+        <div className="express-create" style={{ marginBottom: '1.5rem', padding: '1rem', background: 'rgba(255,255,255,0.03)', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.1)' }}>
+          <h3 style={{ margin: '0 0 0.5rem 0', fontSize: '1rem' }}>⚡ Tek Cümleyle Hızlı Başlat (Express Modu)</h3>
+          <p className="hint" style={{ margin: '0 0 0.75rem 0' }}>Ne tür bir uygulama istediğinizi tek cümleyle yazın, sistem gereksinimleri ve planı anında hazırlasın.</p>
+          <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+            <input
+              aria-label="Uygulama açıklaması"
+              placeholder="Örn: Modern karanlık temalı bir yapılacaklar (Todo) listesi web uygulaması"
+              value={expressPrompt ?? ''}
+              onChange={(event) => onExpressPrompt(event.target.value)}
+              style={{ flex: '1 1 300px' }}
+            />
+            <input
+              aria-label="Proje adı (isteğe bağlı)"
+              placeholder="Proje adı (isteğe bağlı)"
+              value={expressName ?? ''}
+              onChange={(event) => onExpressName ? onExpressName(event.target.value) : undefined}
+              style={{ width: '180px' }}
+            />
+            <button type="button" onClick={onExpressCreate} disabled={!expressPrompt || expressPrompt.trim() === ''}>
+              Hızlı Başlat
+            </button>
+          </div>
+        </div>
+      ) : null}
+
+      <p className="hint">Veya standart ayarlarla proje oluştur / mevcut bir projeyi seç:</p>
 
       <div className="project-create">
         <input

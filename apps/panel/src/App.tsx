@@ -34,6 +34,7 @@ export default function App() {
     message, setMessage, messageStatus,
     narratorQuestion, setNarratorQuestion, narratorResult,
     tab, setTab,
+    expressPrompt, setExpressPrompt, expressName, setExpressName, createExpressProject,
     sendCommand, askNarrator, updateProjectStatus, createProject,
   } = useWorkspaceViewModel();
 
@@ -125,7 +126,22 @@ export default function App() {
           onActiveUrl={screen.setActiveUrl}
           onActiveSession={screen.setActiveSession}
         />
-      </section> : <ProjectPicker projects={projects} draft={projectDraft} onDraft={(patch) => setProjectDraft((current) => ({ ...current, ...patch }))} onCreate={() => void createProject()} statusMessage={projectStatusMessage} onSelect={setProjectId} loadError={projectsError} />}
+      </section> : (
+        <ProjectPicker
+          projects={projects}
+          draft={projectDraft}
+          onDraft={(patch) => setProjectDraft((current) => ({ ...current, ...patch }))}
+          onCreate={() => void createProject()}
+          statusMessage={projectStatusMessage}
+          onSelect={setProjectId}
+          loadError={projectsError}
+          expressPrompt={expressPrompt}
+          onExpressPrompt={setExpressPrompt}
+          expressName={expressName}
+          onExpressName={setExpressName}
+          onExpressCreate={() => void createExpressProject()}
+        />
+      )}
     </main>
   );
 }

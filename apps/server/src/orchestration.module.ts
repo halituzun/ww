@@ -87,9 +87,11 @@ export const MESSAGE_APPLICATION = Symbol('MESSAGE_APPLICATION');
 export const SERVER_DATABASE = Symbol('SERVER_DATABASE');
 
 const ProjectInput = z.strictObject({ name: z.string().trim().min(1), slug: z.string().trim().min(1).optional(), type: z.enum(PROJECT_TYPES).optional(), description: z.string().default(''), budgetUsdLimit: z.number().finite().nonnegative().default(0), bootstrapAgents: z.boolean().default(false) });
+const ExpressProjectInput = z.strictObject({ name: z.string().trim().min(1), prompt: z.string().trim().min(1), slug: z.string().trim().min(1).optional(), type: z.enum(PROJECT_TYPES).optional() });
 const ProjectStatusInput = z.strictObject({ status: z.enum(PROJECT_STATUSES) });
 const TaskInput = z.strictObject({ title: z.string().trim().min(1), description: z.string().default(''), acceptanceCriteria: z.array(z.string().trim().min(1)).default([]), dependencies: z.array(EntityIdSchema).default([]), files: z.array(z.string().trim().min(1)).default([]), budget: z.number().int().nonnegative().default(0), maxAttempts: z.number().int().min(1).max(3).default(3), planId: EntityIdSchema.optional() });
 export const parseProjectInput = (value: unknown) => ProjectInput.parse(value);
+export const parseExpressProjectInput = (value: unknown) => ExpressProjectInput.parse(value);
 export const parseProjectStatusInput = (value: unknown) => ProjectStatusInput.parse(value);
 export const parseTaskInput = (value: unknown) => TaskInput.parse(value);
 export type MessageApplicationInput = Readonly<{ projectId: EntityId; principal: AuthenticatedPrincipalV1; taskId?: EntityId; kind: 'user_command' | 'answer'; text: string; replyToMessageId?: EntityId }>;
@@ -103,7 +105,13 @@ export class MessageInputError extends Error {
 }
 
 export interface ServerDatabase { readonly ch: ClickHouseClient; readonly redis?: WwRedis; }
-export interface ProjectApplication { create(input: ReturnType<typeof parseProjectInput>): Promise<ProjectRow>; get(projectId: string): Promise<ProjectRow | null>; list(): Promise<ProjectRow[]>; updateStatus(projectId: string, status: ReturnType<typeof parseProjectStatusInput>['status']): Promise<ProjectRow>; }
+export interface ProjectApplication {
+  create(input: ReturnType<typeof parseProjectInput>): Promise<ProjectRow>;
+  expressCreate(input: ReturnType<typeof parseExpressProjectInput>): Promise<ProjectRow>;
+  get(projectId: string): Promise<ProjectRow | null>;
+  list(): Promise<ProjectRow[]>;
+  updateStatus(projectId: string, status: ReturnType<typeof parseProjectStatusInput>['status']): Promise<ProjectRow>;
+}
 export interface TaskApplication { create(projectId: string, input: ReturnType<typeof parseTaskInput>): Promise<TaskRow>; get(projectId: string, taskId: string): Promise<TaskRow | null>; list(projectId: string): Promise<TaskRow[]>; }
 export interface MessageApplication { send(input: MessageApplicationInput): Promise<unknown>; get(projectId: string, messageId: string): Promise<unknown>; }
 
@@ -155,6 +163,33 @@ export class ProjectApplicationService implements ProjectApplication {
     }
 
     return project;
+  }
+
+  async expressCreate(input: ReturnType<typeof parseExpressProjectInput>): Promise<ProjectRow> {
+    const project = await this.create({
+      name: input.name,
+      slug: input.slug,
+      type: input.type ?? 'web',
+      description: input.prompt,
+      bootstrapAgents: true,
+      budgetUsdLimit: 0,
+    });
+    const now = new Date().toISOString();
+    const knowledgeId = randomUUID() as EntityId;
+    await appendKnowledgeVersion(this.database.ch, {
+      knowledge_id: knowledgeId,
+      project_id: project.project_id,
+      kind: 'requirement',
+      title: `${project.name} — gereksinimler`,
+      content: `# ${project.name}\n\n${input.prompt}`,
+      tags: ['express', 'requirement'],
+      source_task_id: NIL_UUID,
+      source_message_id: NIL_UUID,
+      status: 'active',
+      superseded_by: NIL_UUID,
+      created_at: now,
+    } as never);
+    return this.updateStatus(project.project_id, 'planning');
   }
   get(projectId: string): Promise<ProjectRow | null> { return getLatestProject(this.database.ch, projectId); }
   list(): Promise<ProjectRow[]> { return listLatestProjects(this.database.ch); }
