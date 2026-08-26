@@ -238,6 +238,13 @@ body {
   border-radius: var(--radius-pill);
   font-size: 11px;
   font-weight: 700;
+  min-width: unset;
+  width: auto;
+  line-height: 1.2;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  white-space: nowrap;
 }
 
 .nav-badge--warning {
@@ -3625,4 +3632,29 @@ input:focus, select:focus, textarea:focus {
   background: rgba(16, 185, 129, 0.12);
   color: #34d399;
   border: 1px solid rgba(16, 185, 129, 0.25);
+}
+
+.role-model-table button {
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  color: #f8fafc;
+  font-size: 12px;
+  font-weight: 500;
+  padding: 5px 12px;
+  border-radius: var(--radius-sm, 6px);
+  cursor: pointer;
+  transition: background var(--transition, 0.15s ease), border-color var(--transition, 0.15s ease), opacity var(--transition, 0.15s ease);
+}
+.role-model-table button:not(:disabled) {
+  background: rgba(16, 185, 129, 0.15);
+  border-color: rgba(16, 185, 129, 0.4);
+  color: #34d399;
+}
+.role-model-table button:not(:disabled):hover {
+  background: rgba(16, 185, 129, 0.25);
+  border-color: rgba(16, 185, 129, 0.6);
+}
+.role-model-table button:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
 }

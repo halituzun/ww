@@ -1,3 +1,9 @@
+function stripThinkingBlocks(text: string | null | undefined): string | null {
+  if (text === null || text === undefined) return null;
+  // <think>...</think> veya <thought>...</thought> bloklarını temizler
+  const cleaned = text.replace(/<think>[\s\S]*?<\/think>/gi, '').replace(/<thought>[\s\S]*?<\/thought>/gi, '').trim();
+  return cleaned.length > 0 ? cleaned : null;
+}
 import OpenAI from 'openai';
 import { mapError } from './errors.js';
 import {
@@ -46,7 +52,7 @@ export class OpenAiAdapter implements LlmProvider {
       });
       const choice = res.choices[0];
       return {
-        content: choice?.message.content ?? null,
+        content: stripThinkingBlocks(choice?.message.content),
         toolCalls: fromOpenAiToolCalls(
           choice?.message.tool_calls as { id: string; function: { name: string; arguments: string } }[] | undefined,
         ),

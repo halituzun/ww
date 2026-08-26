@@ -12,7 +12,7 @@ export interface RoleModel {
 }
 
 // Sunucu tarafındaki kuralın aynısı; hatalı biçim ağa çıkmadan yakalanır.
-const MODEL_REF = /^[a-z0-9_-]+:[A-Za-z0-9._-]+$/;
+const MODEL_REF = /^[a-z0-9_-]+:[A-Za-z0-9._:-]+$/;
 
 function assertModelRef(value: string): string {
   const ref = value.trim();
@@ -52,17 +52,40 @@ const providerOf = (modelRef: string): string => modelRef.split(':')[0] ?? '';
  * önyargıyı kırar. Konsey üyeleri için hedef en az 3 farklı sağlayıcıdır.
  * Bunlar engelleyici değil uyarıdır; kullanıcı bilerek aksini seçebilir.
  */
-export function crossCheckWarnings(rows: readonly RoleModel[]): string[] {
+export function modelFamilyOf(modelRef: string, familyMap?: Record<string, string>): string {
+  if (familyMap && familyMap[modelRef]) return familyMap[modelRef];
+  const parts = modelRef.split(':');
+  const provider = parts[0] ?? '';
+  const model = parts[1] ?? '';
+  if (provider !== 'ollama') return provider;
+  // Ollama yerel model aileleri
+  if (model.startsWith('qwen3.6') || model.startsWith('qwen3.5')) return 'qwen35moe';
+  if (model.startsWith('qwen3-coder')) return 'qwen3moe';
+  if (model.startsWith('qwen2.5')) return 'qwen2';
+  if (model.startsWith('deepseek') || model.startsWith('llama')) return 'llama';
+  if (model.startsWith('gemma')) return 'gemma4';
+  if (model.startsWith('glm') || model.startsWith('viking')) return 'glm4moelite';
+  return model;
+}
+
+export function crossCheckWarnings(
+  rows: readonly RoleModel[],
+  familyMap?: Record<string, string>,
+): string[] {
   const configured = rows.filter((row) => row.configured && row.modelRef.trim().length > 0);
   const byRole = new Map(configured.map((row) => [row.role, row]));
   const warnings: string[] = [];
 
   const worker = byRole.get('worker');
   const verifier = byRole.get('verifier');
-  if (worker && verifier && providerOf(worker.modelRef) === providerOf(verifier.modelRef)) {
-    warnings.push(
-      `verifier ile worker aynı sağlayıcıda (${providerOf(worker.modelRef)}) — çapraz kontrol için farklı sağlayıcı önerilir.`,
-    );
+  if (worker && verifier) {
+    const workerFam = modelFamilyOf(worker.modelRef, familyMap);
+    const verifierFam = modelFamilyOf(verifier.modelRef, familyMap);
+    if (workerFam === verifierFam) {
+      warnings.push(
+        `verifier ile worker aynı model ailesinde/sağlayıcıda (${workerFam}) — çapraz kontrol için farklı model ailesi veya sağlayıcı önerilir.`,
+      );
+    }
   }
 
   // Yazılan yedek fiilen kullanılmıyorsa sessizce kaybolur: sağlayıcı kayıtlı
@@ -79,10 +102,10 @@ export function crossCheckWarnings(rows: readonly RoleModel[]): string[] {
 
   const council = configured.filter((row) => row.role === 'council_member');
   if (council.length > 0) {
-    const providers = new Set(council.map((row) => providerOf(row.modelRef)));
-    if (providers.size < 3) {
+    const families = new Set(council.map((row) => modelFamilyOf(row.modelRef, familyMap)));
+    if (families.size < 3) {
       warnings.push(
-        `konsey ${providers.size} farklı sağlayıcı kullanıyor — hedef en az 3; tartışmanın değeri çeşitlilikten gelir.`,
+        `konsey ${families.size} farklı model ailesi/sağlayıcı kullanıyor — hedef en az 3; tartışmanın değeri çeşitlilikten gelir.`,
       );
     }
   }
