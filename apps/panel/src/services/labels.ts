@@ -41,6 +41,19 @@ const AGENT_ROLE: Readonly<Record<string, string>> = Object.freeze({
   narrator: 'anlatıcı',
 });
 
+const AGENT_GROUP: Readonly<Record<string, string>> = Object.freeze({
+  management: 'yönetim',
+  analysis: 'analiz',
+  design: 'tasarım',
+  db: 'veritabanı',
+  coding: 'kodlama',
+  research: 'araştırma',
+  reasoning: 'çıkarım',
+  ui_audit: 'arayüz denetimi',
+  mvvm_audit: 'mvvm denetimi',
+  db_write_audit: 'yazma denetimi',
+});
+
 const HEALTH: Readonly<Record<string, string>> = Object.freeze({
   ok: 'sağlıklı',
   degraded: 'zayıf',
@@ -48,21 +61,10 @@ const HEALTH: Readonly<Record<string, string>> = Object.freeze({
   unknown: 'bilinmiyor',
 });
 
-/** Bilinmeyen değerde ad KORUNUR; uydurma çeviri olmayan bir anlam verir. */
-const lookup = (table: Readonly<Record<string, string>>, value: string): string =>
-  table[value] ?? value;
-
-export const projectStatusLabel = (value: string): string => lookup(PROJECT, value);
-export const agentStatusLabel = (value: string): string => lookup(AGENT_STATUS, value);
-export const agentRoleLabel = (value: string): string => lookup(AGENT_ROLE, value);
-export const healthStatusLabel = (value: string): string => lookup(HEALTH, value);
-
 const AUDIT_PROFILE: Readonly<Record<string, string>> = Object.freeze({
   verifier: 'doğrulayıcı',
   communication_audit: 'iletişim denetimi',
 });
-
-export const auditProfileLabel = (value: string): string => lookup(AUDIT_PROFILE, value);
 
 const MESSAGE_KIND: Readonly<Record<string, string>> = Object.freeze({
   question: 'soru',
@@ -77,4 +79,15 @@ const MESSAGE_KIND: Readonly<Record<string, string>> = Object.freeze({
   verdict: 'karar',
 });
 
+/** Bilinmeyen değerde ad KORUNUR; uydurma çeviri olmayan bir anlam verir. */
+const lookup = (table: Readonly<Record<string, string>>, value: string): string =>
+  table[value] ?? value;
+
+export const projectStatusLabel = (value: string): string => lookup(PROJECT, value);
+export const agentStatusLabel = (value: string): string => lookup(AGENT_STATUS, value);
+export const agentRoleLabel = (value: string): string => lookup(AGENT_ROLE, value);
+export const agentGroupLabel = (value: string): string => lookup(AGENT_GROUP, value);
+export const taskGroupLabel = (value: string): string => lookup(AGENT_GROUP, value);
+export const healthStatusLabel = (value: string): string => lookup(HEALTH, value);
+export const auditProfileLabel = (value: string): string => lookup(AUDIT_PROFILE, value);
 export const messageKindLabel = (value: string): string => lookup(MESSAGE_KIND, value);

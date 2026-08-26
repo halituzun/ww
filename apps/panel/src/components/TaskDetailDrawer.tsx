@@ -1,10 +1,11 @@
 import React from "react";
 import { taskStatusLabel, isTaskRunning, isTaskDone } from "../services/task-status.js";
-import { agentRoleLabel } from "../services/labels.js";
+import { agentRoleLabel, agentGroupLabel, taskGroupLabel, messageKindLabel } from "../services/labels.js";
 import type { Task } from "../services/projects.js";
 import type { AuditFinding } from "../services/audit.js";
 import type { ChatMessage } from "../services/questions.js";
 import type { Artifact } from "../services/files.js";
+import type { CanvasNode } from "../services/canvas.js";
 
 export function TaskDetailDrawer({
   task,
@@ -12,6 +13,7 @@ export function TaskDetailDrawer({
   findings = [],
   messages = [],
   artifacts = [],
+  agents = [],
   onSelectFile,
 }: {
   readonly task: Task | undefined;
@@ -19,6 +21,7 @@ export function TaskDetailDrawer({
   readonly findings?: readonly AuditFinding[];
   readonly messages?: readonly ChatMessage[];
   readonly artifacts?: readonly Artifact[];
+  readonly agents?: readonly CanvasNode[];
   readonly onSelectFile?: (path: string) => void;
 }) {
   if (!task) return null;
@@ -30,6 +33,29 @@ export function TaskDetailDrawer({
   const targetFiles = Array.isArray(task.target_files) ? task.target_files : [];
   const acceptanceCriteria = Array.isArray(task.acceptance_criteria) ? task.acceptance_criteria : [];
 
+  function formatAgentInfo(agentId: string | undefined, defaultRole: string, defaultGroup?: string) {
+    if (!agentId) return { title: "Atanmadı", sub: "—" };
+    const agent = agents.find((a) => a.id === agentId);
+    if (agent) {
+      const roleText = agentRoleLabel(agent.role);
+      const groupText = agent.group ? agentGroupLabel(agent.group) : "";
+      const title = agent.label || (groupText ? `${roleText} · ${groupText}` : roleText);
+      return {
+        title,
+        sub: `${agentId.slice(0, 8)} · ${agent.modelRef || agent.role}`,
+      };
+    }
+    const roleTitle = defaultRole + (defaultGroup ? ` · ${defaultGroup}` : "");
+    return {
+      title: roleTitle,
+      sub: agentId.slice(0, 8),
+    };
+  }
+
+  const issuerInfo = formatAgentInfo(task.issuer_agent_id, "Proje Yöneticisi", "Yönetim");
+  const workerInfo = formatAgentInfo(task.worker_agent_id, "Yapan Agent", task.group ? taskGroupLabel(task.group) : "Geliştirme");
+  const verifierInfo = formatAgentInfo(task.verifier_agent_id, "Denetleyen Agent", "Doğrulama");
+
   return (
     <div className="drawer-overlay" onClick={onClose} role="dialog" aria-modal="true" aria-label="Görev detayları">
       <aside className="drawer-panel" onClick={(e) => e.stopPropagation()}>
@@ -40,7 +66,7 @@ export function TaskDetailDrawer({
                 {taskStatusLabel(task.status)}
               </span>
               <span className="pill pill--mini">Öncelik {task.priority ?? 5}</span>
-              {task.group ? <span className="pill pill--mini">{task.group}</span> : null}
+              {task.group ? <span className="pill pill--mini">{taskGroupLabel(task.group)}</span> : null}
             </div>
             <h2 className="drawer-title">{task.title}</h2>
             <code className="drawer-id">ID: {task.task_id}</code>
@@ -74,15 +100,18 @@ export function TaskDetailDrawer({
             <div className="drawer-meta-grid">
               <div>
                 <span className="drawer-meta-label">Atayan (Issuer)</span>
-                <strong className="drawer-meta-val">{task.issuer_agent_id ? task.issuer_agent_id.slice(0, 8) : "PM Agent"}</strong>
+                <strong className="drawer-meta-val">{issuerInfo.title}</strong>
+                <code className="drawer-meta-sub">{issuerInfo.sub}</code>
               </div>
               <div>
                 <span className="drawer-meta-label">Yapan (Worker)</span>
-                <strong className="drawer-meta-val">{task.worker_agent_id ? task.worker_agent_id.slice(0, 8) : "Atanmadı"}</strong>
+                <strong className="drawer-meta-val">{workerInfo.title}</strong>
+                <code className="drawer-meta-sub">{workerInfo.sub}</code>
               </div>
               <div>
                 <span className="drawer-meta-label">Denetleyen (Verifier)</span>
-                <strong className="drawer-meta-val">{task.verifier_agent_id ? task.verifier_agent_id.slice(0, 8) : "—"}</strong>
+                <strong className="drawer-meta-val">{verifierInfo.title}</strong>
+                <code className="drawer-meta-sub">{verifierInfo.sub}</code>
               </div>
             </div>
           </section>
@@ -143,7 +172,7 @@ export function TaskDetailDrawer({
               <div className="drawer-messages">
                 {taskMessages.map((m) => (
                   <div key={m.messageId} className="drawer-message-row">
-                    <span className="pill pill--mini">{m.kind}</span>
+                    <span className="pill pill--mini">{messageKindLabel(m.kind)}</span>
                     <p className="drawer-msg-text">{m.payload?.text ?? "(içerik yok)"}</p>
                     <small className="chat-time">{new Date(m.createdAt || Date.now()).toLocaleTimeString("tr-TR")}</small>
                   </div>

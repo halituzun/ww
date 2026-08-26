@@ -230,6 +230,7 @@ function AppContent() {
         onClose={() => vm.setSelectedTaskId(undefined)}
         findings={vm.auditReport.recordFindings}
         artifacts={vm.apiArtifacts}
+        agents={vm.replay.nodes}
         onSelectFile={(path) => {
           vm.setSelectedFile(path);
           navigate("files");

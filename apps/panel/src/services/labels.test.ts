@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import {
-  AGENT_ROLES, AGENT_STATUSES, AUDIT_FINDING_PROFILES, HEALTH_STATUSES, MESSAGE_KINDS,
+  AGENT_GROUPS, AGENT_ROLES, AGENT_STATUSES, AUDIT_FINDING_PROFILES, HEALTH_STATUSES, MESSAGE_KINDS,
   PROJECT_STATUSES,
 } from '@ww/shared';
 import {
-  agentRoleLabel, agentStatusLabel, auditProfileLabel, healthStatusLabel, messageKindLabel,
-  projectStatusLabel,
+  agentGroupLabel, agentRoleLabel, agentStatusLabel, auditProfileLabel, healthStatusLabel,
+  messageKindLabel, projectStatusLabel, taskGroupLabel,
 } from './labels.js';
 
 // Karar K6: panel dili Türkçe. Ham iç kimliğin kullanıcı yüzeyine sızması,
@@ -19,6 +19,7 @@ describe('etiket kapsamı', () => {
     ['proje durumu', PROJECT_STATUSES, projectStatusLabel],
     ['agent durumu', AGENT_STATUSES, agentStatusLabel],
     ['agent rolü', AGENT_ROLES, agentRoleLabel],
+    ['agent grubu', AGENT_GROUPS, agentGroupLabel],
     ['sağlık durumu', HEALTH_STATUSES, healthStatusLabel],
     ['denetim profili', AUDIT_FINDING_PROFILES, auditProfileLabel],
     ['mesaj türü', MESSAGE_KINDS, messageKindLabel],
@@ -32,6 +33,8 @@ describe('etiketler', () => {
     expect(projectStatusLabel('running')).toBe('çalışıyor');
     expect(agentStatusLabel('waiting_answer')).toBe('cevap bekliyor');
     expect(agentRoleLabel('standards_auditor')).toBe('standart denetçisi');
+    expect(agentGroupLabel('coding')).toBe('kodlama');
+    expect(taskGroupLabel('coding')).toBe('kodlama');
     expect(healthStatusLabel('down')).toBe('düştü');
   });
 

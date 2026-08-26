@@ -3022,8 +3022,8 @@ input:focus, select:focus, textarea:focus {
 .drawer-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.65);
-  backdrop-filter: blur(4px);
+  background: rgba(0, 0, 0, 0.15);
+  backdrop-filter: none;
   z-index: 1000;
   display: flex;
   justify-content: flex-end;
@@ -3138,6 +3138,14 @@ input:focus, select:focus, textarea:focus {
   font-size: 10.5px;
   color: #64748b;
   margin-bottom: 2px;
+}
+
+.drawer-meta-sub {
+  display: block;
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 11px;
+  color: #64748b;
+  margin-top: 2px;
 }
 
 .drawer-meta-val {
