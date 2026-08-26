@@ -10,3 +10,6 @@ secrets/
 !.env.example
 *.log
 .DS_Store
+
+ww-panel-tasarim/
+*.zip
