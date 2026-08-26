@@ -58,6 +58,9 @@ Agent kodu hiçbir zaman adaptörü doğrudan çağırmaz — daima router.
 | OpenAI | `openai` | `tools[].function` + `tool_calls` | Codex-tarzı kod modelleri dahil |
 | Anthropic | `@anthropic-ai/sdk` | `tools[]` + `tool_use`/`tool_result` blokları | System prompt ayrı parametre |
 | DeepSeek | `openai` (uyumlu uç) | OpenAI biçimi | `base_url` değişir |
+| Google Gemini | `openai` (uyumlu GenAI ucu) | OpenAI biçimi | `generativelanguage.googleapis.com/v1beta/openai/` |
+| Mistral | `openai` (uyumlu uç) | OpenAI biçimi | `api.mistral.ai/v1` |
+| Ollama | `openai` (yerel uç) | OpenAI biçimi | `localhost:11434/v1` |
 | (yeni) | — | — | Adaptör ekle + `api_providers` satırı; başka değişiklik gerekmez |
 
 Normalizasyon kuralları:

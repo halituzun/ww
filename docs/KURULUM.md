@@ -89,6 +89,8 @@ alanı. Anahtar tarayıcıdan server'a gider, AES-256-GCM ile şifrelenip keysto
 dosyasına yazılır; ClickHouse'a veya loglara düşmez, API yanıtlarında yalnız
 `sk-…1234` maskesi döner. Anahtarı kabuk geçmişine veya bir sohbete yapıştırma.
 
+Desteklenen sağlayıcılar: OpenAI, Anthropic, DeepSeek, Google Gemini (`gemini-2.5-flash`, `gemini-2.5-pro`, `gemini-1.5-flash`, `gemini-1.5-pro`), Mistral (`mistral-large-latest`, `mistral-medium-latest`, vb.) ve yerel Ollama.
+
 Konsey (Faz 4) en az üç farklı sağlayıcı ister; tek anahtar Faz 3 için yeterlidir.
 
 ## Küçük uçtan uca denemeler
