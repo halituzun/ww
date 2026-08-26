@@ -17,6 +17,7 @@ import { describeLoadFailures } from './workspace-load.js';
 import type { ConnectionState } from './live-connection.js';
 import { fetchBudgetReport, EMPTY_BUDGET_REPORT, type BudgetReport } from '../services/budget.js';
 import { fetchPendingQuestions } from '../services/questions.js';
+import { fetchPlans, approvePlan, requestReplan, type Plan } from '../services/plans.js';
 import { fetchAuditReport, EMPTY_AUDIT_REPORT, type AuditReport } from '../services/audit.js';
 import { fetchProviders, type Provider } from '../services/providers.js';
 import {
@@ -48,6 +49,8 @@ export function useWorkspaceViewModel() {
   const [projectId, setProjectId] = useState(() => queryParam('project') ?? '');
   const [budgetReport, setBudgetReport] = useState<BudgetReport>(EMPTY_BUDGET_REPORT);
   const [pendingQuestionsCount, setPendingQuestionsCount] = useState<number>(0);
+  const [plans, setPlans] = useState<readonly Plan[]>([]);
+  const [selectedTaskId, setSelectedTaskId] = useState<string | undefined>(undefined);
   const [auditReport, setAuditReport] = useState<AuditReport>(EMPTY_AUDIT_REPORT);
   const [providerList, setProviderList] = useState<Provider[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
@@ -183,6 +186,12 @@ export function useWorkspaceViewModel() {
         () => active,
         warn('bekleyen sorular'),
       );
+      void loadSignal(
+        () => fetchPlans(projectId),
+        setPlans,
+        () => active,
+        warn('planlar'),
+      );
     };
     load();
     const timer = window.setInterval(load, SIGNAL_POLL_MS);
@@ -260,10 +269,39 @@ export function useWorkspaceViewModel() {
     }
   }, [projectDraft]);
 
+
+  const activePlan = useMemo(() => {
+    return plans.find((p) => p.status === "proposed") ?? plans.find((p) => p.status === "approved") ?? plans[0];
+  }, [plans]);
+
+  const approveCurrentPlan = useCallback(async (note?: string) => {
+    if (!projectId || !activePlan) return;
+    try {
+      await approvePlan(projectId, activePlan.plan_id, note);
+      const updated = await fetchPlans(projectId);
+      setPlans(updated);
+    } catch (err) {
+      console.error("Plan onaylanamadı:", err);
+      throw err;
+    }
+  }, [projectId, activePlan]);
+
+  const replanCurrentProject = useCallback(async (reason: string, summary: string) => {
+    if (!projectId) return;
+    try {
+      await requestReplan(projectId, reason, summary);
+      const updated = await fetchPlans(projectId);
+      setPlans(updated);
+    } catch (err) {
+      console.error("Yeniden planlama talebi gönderilemedi:", err);
+      throw err;
+    }
+  }, [projectId]);
+
   return {
     page, setPage,
     projectId, setProjectId,
-    budgetReport, auditReport, providerList, pendingQuestionsCount,
+    budgetReport, auditReport, providerList, pendingQuestionsCount, plans, activePlan, approveCurrentPlan, replanCurrentProject, selectedTaskId, setSelectedTaskId,
     tasks, projects, projectsError, workspaceError, projectDraft, setProjectDraft,
     projectStatusMessage, projectStatus,
     usage, files, providerHealth, apiArtifacts,

@@ -113,16 +113,19 @@ export function ProjectPicker({
       ) : (
         <ul className="task-list project-list">
           {projects.map((project) => (
-            <li
-              key={project.project_id}
-              className="project-item"
-              onClick={() => onSelect(project.project_id)}
-            >
-              <div className="project-item__info">
-                <strong>{project.name}</strong>
-                <small>{project.type} · {project.project_id}</small>
-              </div>
-              <span className={`pill pill--${project.status}`}>{projectStatusLabel(project.status)}</span>
+            <li key={project.project_id} className="project-item-container">
+              <button
+                type="button"
+                className="project-item"
+                onClick={() => onSelect(project.project_id)}
+                aria-label={`${project.name} projesini aç`}
+              >
+                <div className="project-item__info">
+                  <strong>{project.name}</strong>
+                  <small>{project.type} · {project.project_id}</small>
+                </div>
+                <span className={`pill pill--${project.status}`}>{projectStatusLabel(project.status)}</span>
+              </button>
             </li>
           ))}
         </ul>

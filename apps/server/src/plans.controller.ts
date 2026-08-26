@@ -73,8 +73,12 @@ export class PlanApplicationService {
   }
 
   async list(projectId: string) {
-    const approved = await listLatestPlansByStatus(this.database.ch, projectId as EntityId, 'approved');
-    return approved;
+    const [proposed, approved, rejected] = await Promise.all([
+      listLatestPlansByStatus(this.database.ch, projectId as EntityId, 'proposed'),
+      listLatestPlansByStatus(this.database.ch, projectId as EntityId, 'approved'),
+      listLatestPlansByStatus(this.database.ch, projectId as EntityId, 'rejected'),
+    ]);
+    return [...proposed, ...approved, ...rejected];
   }
 }
 

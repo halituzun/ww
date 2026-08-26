@@ -1,4 +1,5 @@
-import { messageKindLabel } from "../services/labels.js";
+import React from "react";
+import { messageKindLabel, agentRoleLabel } from "../services/labels.js";
 import { PendingQuestions } from "./PendingQuestions.js";
 import { ChatComposer } from "./ChatComposer.js";
 import { useChatViewModel } from "../viewmodels/useChatViewModel.js";
@@ -26,7 +27,7 @@ export function ChatPage({
 
           <div className="chat-messages-container">
             {loading && messages.length === 0 ? (
-              <div style={{ display: "grid", gap: "10px", padding: "12px 0" }}>
+              <div className="chat-skeletons">
                 <Skeleton height="56px" />
                 <Skeleton height="56px" />
                 <Skeleton height="56px" />
@@ -38,13 +39,22 @@ export function ChatPage({
               />
             ) : (
               messages.map((m) => {
-                const isUser = m.kind === "user_command" || m.kind === "answer";
+                const isUser =
+                  m.kind === "user_command" ||
+                  (m.kind === "answer" && (!m.from || m.from === "user" || m.from === "human" || m.from === "local-user"));
+                const senderName = isUser
+                  ? "Siz"
+                  : m.from
+                  ? agentRoleLabel(m.from)
+                  : "PM Agent";
+
                 return (
                   <div
                     key={m.messageId}
                     className={`chat-bubble-row ${isUser ? "chat-bubble-row--user" : "chat-bubble-row--agent"}`}
                   >
                     <div className="chat-bubble-meta">
+                      <strong className="chat-sender-name">{senderName}</strong>
                       <span className="pill pill--mini">{messageKindLabel(m.kind)}</span>
                       {m.taskId ? <code>{m.taskId.slice(0, 8)}</code> : null}
                       <span className="chat-time">

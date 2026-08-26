@@ -1,10 +1,14 @@
+import React from "react";
 import { taskStatusLabel, isTaskRunning, isTaskDone } from "../services/task-status.js";
 import { RequirementWizard } from "./RequirementWizard.js";
 import { ProjectControls } from "./ProjectControls.js";
+import { PlanApprovalCard } from "./PlanApprovalCard.js";
+import { PhaseProgressCard } from "./PhaseProgressCard.js";
 import type { Task, Project } from "../services/projects.js";
 import type { BudgetState } from "../services/budget.js";
 import type { PageId } from "../services/routes.js";
 import type { TimelineEvent } from "../viewmodels/workspace-logic.js";
+import type { Plan } from "../services/plans.js";
 
 export function OverviewPage({
   project,
@@ -16,9 +20,12 @@ export function OverviewPage({
   commandDraft,
   onCommandDraft,
   onApprovePlan,
+  onReplan,
+  plan,
   events,
   onStatusChange,
   screenContext,
+  onSelectTask,
 }: {
   readonly project: Project | undefined;
   readonly tasks: readonly Task[];
@@ -29,9 +36,12 @@ export function OverviewPage({
   readonly commandDraft?: string | undefined;
   readonly onCommandDraft?: ((val: string) => void) | undefined;
   readonly onApprovePlan?: (() => void) | undefined;
+  readonly onReplan?: ((reason: string, summary: string) => void) | undefined;
+  readonly plan?: Plan | undefined;
   readonly events?: readonly TimelineEvent[] | undefined;
   readonly onStatusChange?: ((status: "running" | "paused" | "archived") => void) | undefined;
   readonly screenContext?: string | undefined;
+  readonly onSelectTask?: ((taskId: string) => void) | undefined;
 }) {
   const completedTasks = tasks.filter((t) => isTaskDone(t.status)).length;
   const totalTasks = tasks.length;
@@ -43,42 +53,63 @@ export function OverviewPage({
   const questionsCount = pendingQuestionsCount ?? 0;
 
   const recentEvents = (events ?? []).slice(0, 5);
-  const isPlanningPhase = project?.status === "planning" || project?.status === "gathering";
+  const isPlanningPhase = project?.status === "planning" || project?.status === "gathering" || (plan && plan.status === "proposed");
 
   return (
     <div className="overview-page">
       <div className="overview-grid">
         <div className="overview-main">
           {project && onStatusChange ? (
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" }}>
-              <h2 style={{ margin: 0, fontSize: "18px", color: "#f1f5f9" }}>{project.name}</h2>
+            <div className="overview-project-header">
+              <h2 className="overview-project-title">{project.name}</h2>
               <ProjectControls status={project.status} onStatus={onStatusChange} />
             </div>
           ) : null}
+
+          {/* KPI Kartları - Tamamı klavyeyle odaklanabilir button */}
           <div className="kpi-grid">
-            <div className="kpi-card" onClick={() => onNavigate("tasks")}>
+            <button
+              type="button"
+              className="kpi-card"
+              onClick={() => onNavigate("tasks")}
+              aria-label="Tamamlanan görevler listesine git"
+            >
               <span className="kpi-label">TAMAMLANAN GÖREVLER</span>
               <div className="kpi-value">
-                <strong>{totalTasks > 0 ? `${completedTasks}/${totalTasks}` : "0"}</strong>
+                <strong>
+                  {completedTasks}/{totalTasks}
+                </strong>
                 <span className="kpi-sub">%{taskProgressPct}</span>
               </div>
               <div className="kpi-meter">
-                <div className="kpi-meter-fill" style={{ width: `${taskProgressPct}%` }} />
+                <div
+                  className="kpi-meter-fill"
+                  style={{ width: `${taskProgressPct}%` }}
+                />
               </div>
-            </div>
+            </button>
 
-            <div className="kpi-card" onClick={() => onNavigate("canvas")}>
-              <span className="kpi-label">AKTİF AGENT'LAR</span>
+            <button
+              type="button"
+              className="kpi-card"
+              onClick={() => onNavigate("tasks")}
+              aria-label="Çalışan görevler listesine git"
+            >
+              <span className="kpi-label">ÇALIŞAN GÖREVLER</span>
               <div className="kpi-value">
                 <strong>{runningTasks.length}</strong>
-                <span className="kpi-sub">görevde</span>
+                <span className="kpi-sub">görev</span>
               </div>
-              <p className="kpi-meta">{runningTasks.length > 0 ? `${runningTasks.length} görev yürütülüyor` : "Aktif görev yok"}</p>
-            </div>
+              <p className="kpi-meta">
+                {runningTasks.length > 0 ? `${runningTasks.length} görev icra ediliyor` : "Aktif görev yok"}
+              </p>
+            </button>
 
-            <div
+            <button
+              type="button"
               className={`kpi-card ${questionsCount > 0 ? "kpi-card--warning" : ""}`}
               onClick={() => onNavigate("chat")}
+              aria-label="Bekleyen sorulara git"
             >
               <span className="kpi-label">SENİ BEKLEYEN</span>
               <div className="kpi-value">
@@ -88,92 +119,102 @@ export function OverviewPage({
               <p className="kpi-meta">
                 {questionsCount > 0 ? "Cevap bekleyen sorular var" : "Bekleyen soru yok"}
               </p>
-            </div>
+            </button>
 
-            <div className="kpi-card" onClick={() => onNavigate("budget")}>
-              <span className="kpi-label">BUGÜN HARCANAN</span>
+            <button
+              type="button"
+              className="kpi-card"
+              onClick={() => onNavigate("budget")}
+              aria-label="Kontör panosuna git"
+            >
+              <span className="kpi-label">TOPLAM HARCAMA</span>
               <div className="kpi-value">
-                <strong>{cost !== undefined ? `$${cost.toFixed(4)}` : "Bilinmiyor"}</strong>
+                <strong>{cost !== undefined ? `$${cost.toFixed(4)}` : "—"}</strong>
               </div>
               <p className="kpi-meta">
-                {limit > 0 ? `Limit: $${limit.toFixed(2)}` : "Limit: Sınırsız"}
+                {limit > 0 ? `Limit: $${limit.toFixed(2)}` : "Limit tanımlanmadı"}
               </p>
-            </div>
+            </button>
           </div>
 
+          {/* Faz İlerlemesi */}
+          <PhaseProgressCard project={project} />
+
+          {/* Gereksinim Toplama Sihirbazı */}
           {project?.status === "gathering" ? (
-            <div className="card overview-card" style={{ marginBottom: "16px" }}>
+            <div className="card overview-card overview-wizard-card">
               <RequirementWizard projectId={project.project_id} />
-            </div>
-          ) : isPlanningPhase && onApprovePlan ? (
-            <div className="plan-approval-hero-card">
-              <div className="plan-approval-header">
-                <span className="plan-badge">PLAN ONAYI BEKLİYOR</span>
-                <h3>Mühendislik ve Görev Planı Hazır</h3>
-              </div>
-              <p className="hint">
-                Agent konseyi gereksinimleri analiz etti ve görev DAG planını oluşturdu.
-              </p>
-              <div className="plan-approval-actions">
-                <button type="button" className="btn btn--primary" onClick={onApprovePlan}>
-                  Planı Onayla ve Başlat
-                </button>
-                <button type="button" className="btn btn--secondary" onClick={() => onNavigate("tasks")}>
-                  Görev Planını İncele
-                </button>
-              </div>
             </div>
           ) : null}
 
+          {/* Plan Onay Kartı */}
+          {isPlanningPhase && plan ? (
+            <PlanApprovalCard
+              plan={plan}
+              onApprove={onApprovePlan}
+              onReplan={onReplan}
+            />
+          ) : null}
+
+          {/* Şu an çalışan görevler */}
           <div className="card overview-card">
             <div className="card-header">
               <h3>Şu An Çalışan Görevler</h3>
               <span className="badge badge--neutral">{runningTasks.length} Görev</span>
             </div>
-
             {runningTasks.length === 0 ? (
               <p className="hint">Şu anda çalışan aktif bir görev yok.</p>
             ) : (
               <div className="running-tasks-list">
                 {runningTasks.map((t) => (
-                  <div key={t.task_id} className="running-task-item">
-                    <div className="running-task-info">
-                      <span className="running-task-dot" />
-                      <strong>{t.title || t.task_id}</strong>
+                  <button
+                    key={t.task_id}
+                    type="button"
+                    className="running-task-item"
+                    onClick={() => onSelectTask?.(t.task_id)}
+                  >
+                    <div className="task-info">
+                      <strong>{t.title}</strong>
+                      <small className="mono-address">ID: {t.task_id.slice(0, 8)}</small>
                     </div>
-                    <span className={`pill pill--${t.status}`}>{taskStatusLabel(t.status)}</span>
-                  </div>
+                    <span className="pill pill--running">{taskStatusLabel(t.status)}</span>
+                  </button>
                 ))}
               </div>
             )}
           </div>
 
+          {/* Son Olaylar */}
           <div className="card overview-card">
             <div className="card-header">
               <h3>Son Olaylar (Canlı Akış)</h3>
-              <button type="button" className="linklike" onClick={() => onNavigate("canvas")}>
+              <button
+                type="button"
+                className="linklike"
+                onClick={() => onNavigate("canvas")}
+              >
                 Tüm zaman çizelgesi →
               </button>
             </div>
-
             {recentEvents.length === 0 ? (
               <p className="hint">Henüz kaydedilmiş bir olay yok.</p>
             ) : (
-              <div className="recent-events-list">
-                {recentEvents.map((e: TimelineEvent, idx: number) => (
-                  <div key={idx} className="event-item">
-                    <span className="event-time">
-                      {new Date(e.ts || Date.now()).toLocaleTimeString("tr-TR")}
-                    </span>
-                    <span className="event-type">{e.event}</span>
-                  </div>
+              <ul className="timeline-event-list">
+                {recentEvents.map((ev) => (
+                  <li key={ev.id} className="timeline-event-item">
+                    <span className="pill pill--mini">{ev.kind}</span>
+                    <span className="event-summary">{ev.summary}</span>
+                    <small className="chat-time">{new Date(ev.timestamp).toLocaleTimeString("tr-TR")}</small>
+                  </li>
                 ))}
-              </div>
+              </ul>
             )}
           </div>
         </div>
 
+        {/* Sağ Ray */}
         <aside className="overview-sidebar">
+          {/* Eylem Odaklı Soru Kutusu (Sayı tekrarı kaldırıldı - BULGU 10) */}
           {questionsCount > 0 ? (
             <div className="sidebar-warning-card">
               <div className="sidebar-warning-head">
@@ -181,30 +222,37 @@ export function OverviewPage({
                   <path d="M8 1.75l5.5 2.5v4c0 3-2.4 5.3-5.5 6-3.1-.7-5.5-3-5.5-6v-4z" />
                   <path d="M8 5.5v3M8 11.5h.01" />
                 </svg>
-                <strong>{questionsCount} Soru Seni Bekliyor</strong>
+                <strong>Bekleyen Soruları İncele</strong>
               </div>
-              <p className="hint">Cevaplanmayan sorular ilgili görevleri bloke ediyor.</p>
+              <p className="hint">
+                Agent soruları cevap bekliyor. Görevlerin durmaması için yanıtlayın.
+              </p>
               <button
                 type="button"
                 className="btn btn--secondary btn--full"
                 onClick={() => onNavigate("chat")}
               >
-                Soruları Cevapla →
+                Soruları Yanıtla →
               </button>
             </div>
           ) : null}
 
+          {/* PM Sohbet Rayı */}
           <div className="card chat-rail-card">
             <div className="card-header">
               <h3>PM Sohbeti</h3>
-              <button type="button" className="linklike" onClick={() => onNavigate("chat")}>
+              <button
+                type="button"
+                className="linklike"
+                onClick={() => onNavigate("chat")}
+              >
                 Tam ekran ↗
               </button>
             </div>
             <p className="hint">Projeyi yönlendirmek için PM agent'a doğrudan emir verin:</p>
             {screenContext ? (
-              <div style={{ marginBottom: "8px" }}>
-                <span className="pill pill--mini" style={{ background: "rgba(56, 189, 248, 0.1)", color: "#38bdf8", border: "1px solid rgba(56, 189, 248, 0.2)" }}>
+              <div className="chat-rail-context-container">
+                <span className="pill pill--mini pill--context">
                   Bağlam: {screenContext}
                 </span>
               </div>
@@ -212,11 +260,13 @@ export function OverviewPage({
             <div className="chat-rail-composer">
               <input
                 type="text"
-                aria-label="PM hızlı emir" placeholder="Örn: Butonun rengini zümrüt yeşili yap"
+                aria-label="PM hızlı emir"
+                placeholder="Örn: Butonun rengini zümrüt yeşili yap"
                 value={commandDraft ?? ""}
                 onChange={(e) => onCommandDraft?.(e.target.value)}
                 onKeyDown={(e) => {
-                  if (e.key === "Enter" && commandDraft && commandDraft.trim() !== "") {
+                  if (e.key === "Enter" && commandDraft?.trim()) {
+                    e.preventDefault();
                     onCommand?.();
                   }
                 }}
@@ -225,7 +275,7 @@ export function OverviewPage({
                 type="button"
                 className="btn btn--primary"
                 onClick={onCommand}
-                disabled={!commandDraft || commandDraft.trim() === ""}
+                disabled={!commandDraft?.trim()}
               >
                 Gönder
               </button>

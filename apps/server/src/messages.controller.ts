@@ -53,6 +53,8 @@ export class MessagesController {
         messageId: envelope['messageId'],
         kind: envelope['kind'],
         taskId: envelope['taskId'],
+        from: envelope['from'] ?? envelope['senderPrincipalId'] ?? (record as Record<string, unknown>)['sender_principal_id'] ?? 'agent',
+        to: envelope['to'] ?? envelope['recipientPrincipalId'],
         payload: envelope['payload'],
         createdAt: envelope['createdAt'],
       };

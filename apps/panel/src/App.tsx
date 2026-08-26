@@ -1,8 +1,10 @@
+import React, { useMemo, useCallback } from "react";
 import { useHealth } from "./viewmodels/useHealth.js";
 import { useWorkspaceViewModel } from "./viewmodels/useWorkspaceViewModel.js";
 import { useRouterViewModel } from "./viewmodels/useRouterViewModel.js";
 import { useCommandPaletteViewModel } from "./viewmodels/useCommandPaletteViewModel.js";
 import { useScreenContextViewModel } from "./viewmodels/useScreenContextViewModel.js";
+import { useKeyboardShortcuts } from "./viewmodels/useKeyboardShortcuts.js";
 import { AppShell } from "./components/AppShell.js";
 import { CommandPalette } from "./components/CommandPalette.js";
 import { NotificationBell } from "./components/NotificationBell.js";
@@ -17,15 +19,72 @@ import { ProvidersPage } from "./components/ProvidersPage.js";
 import { BudgetPanel } from "./components/BudgetPanel.js";
 import { AuditPanel } from "./components/AuditPanel.js";
 import { SettingsPage } from "./components/SettingsPage.js";
+import { TaskDetailDrawer } from "./components/TaskDetailDrawer.js";
+import { ToastProvider, useToast } from "./components/Toast.js";
 import { isTaskRunning } from "./services/task-status.js";
 
-export default function App() {
+function AppContent() {
   const { health } = useHealth();
   const { currentPage, navigate } = useRouterViewModel();
   const vm = useWorkspaceViewModel();
+  const toast = useToast();
   const screen = useScreenContextViewModel(currentPage);
-  const palette = useCommandPaletteViewModel({ onNavigate: navigate, projects: vm.projects, onSelectProject: vm.setProjectId });
+
   const activeProject = vm.projects.find((p) => p.project_id === vm.projectId);
+  const activeTask = useMemo(() => {
+    return vm.tasks.find((t) => t.task_id === vm.selectedTaskId);
+  }, [vm.tasks, vm.selectedTaskId]);
+
+  const handleApprovePlan = useCallback(async () => {
+    try {
+      await vm.approveCurrentPlan();
+      toast.success("Görev planı onaylandı. Görevler yürütmeye alındı.", "Plan Onaylandı");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Plan onaylanamadı", "Hata");
+    }
+  }, [vm, toast]);
+
+  const handleReplan = useCallback(async (reason: string, summary: string) => {
+    try {
+      await vm.replanCurrentProject(reason, summary);
+      toast.success("Yeniden planlama talebi PM agent'a iletildi.", "Revizyon Talebi");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Revizyon talebi iletilemedi", "Hata");
+    }
+  }, [vm, toast]);
+
+  const handleSendCommand = useCallback(async () => {
+    try {
+      await vm.sendCommand(screen.contextFor());
+      toast.success("Emir PM agent'a iletildi.", "Emir Gönderildi");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Emir gönderilemedi", "Hata");
+    }
+  }, [vm, screen, toast]);
+
+  const handleStatusChange = useCallback(async (status: "running" | "paused" | "archived") => {
+    try {
+      await vm.updateProjectStatus(status);
+      toast.info(`Proje durumu güncellendi: ${status}`, "Durum Güncellendi");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Durum güncellenemedi", "Hata");
+    }
+  }, [vm, toast]);
+
+  const palette = useCommandPaletteViewModel({
+    onNavigate: navigate,
+    projects: vm.projects,
+    onSelectProject: vm.setProjectId,
+    onApprovePlan: vm.activePlan?.status === "proposed" ? handleApprovePlan : undefined,
+  });
+
+  useKeyboardShortcuts({
+    onNavigate: navigate,
+    onCloseModals: () => {
+      palette.closePalette();
+      vm.setSelectedTaskId(undefined);
+    },
+  });
 
   const runningTasksCount = vm.tasks.filter((t) => isTaskRunning(t.status)).length;
   const auditWarningsCount = (vm.auditReport.counts.open ?? 0) + (vm.auditReport.counts.correction_pending ?? 0);
@@ -40,12 +99,16 @@ export default function App() {
             budget={vm.budgetReport.budget}
             pendingQuestionsCount={vm.pendingQuestionsCount}
             onNavigate={navigate}
-            onCommand={() => void vm.sendCommand(screen.contextFor())}
+            onCommand={handleSendCommand}
             commandDraft={vm.message}
             onCommandDraft={vm.setMessage}
+            onApprovePlan={handleApprovePlan}
+            onReplan={handleReplan}
+            plan={vm.activePlan}
             events={vm.events}
-            onStatusChange={vm.updateProjectStatus}
+            onStatusChange={handleStatusChange}
             screenContext={screen.contextFor()}
+            onSelectTask={vm.setSelectedTaskId}
           />
         );
       case "canvas":
@@ -63,7 +126,13 @@ export default function App() {
           />
         );
       case "tasks":
-        return <TaskListPanel tasks={vm.tasks} statusCounts={vm.statusCounts} />;
+        return (
+          <TaskListPanel
+            tasks={vm.tasks}
+            statusCounts={vm.statusCounts}
+            onSelectTask={vm.setSelectedTaskId}
+          />
+        );
       case "files":
         return (
           <FileBrowserPanel
@@ -75,6 +144,7 @@ export default function App() {
             onNarratorQuestion={vm.setNarratorQuestion}
             onAskNarrator={() => void vm.askNarrator()}
             narratorResult={vm.narratorResult ?? undefined}
+            onSelectTask={vm.setSelectedTaskId}
           />
         );
       case "chat":
@@ -154,7 +224,28 @@ export default function App() {
         selectedIndex={palette.selectedIndex}
         onSelectIndex={palette.setSelectedIndex}
       />
+
+      <TaskDetailDrawer
+        task={activeTask}
+        onClose={() => vm.setSelectedTaskId(undefined)}
+        findings={vm.auditReport.recordFindings}
+        artifacts={vm.apiArtifacts}
+        onSelectFile={(path) => {
+          vm.setSelectedFile(path);
+          navigate("files");
+          vm.setSelectedTaskId(undefined);
+        }}
+      />
+
       {renderPage()}
     </AppShell>
+  );
+}
+
+export default function App() {
+  return (
+    <ToastProvider>
+      <AppContent />
+    </ToastProvider>
   );
 }

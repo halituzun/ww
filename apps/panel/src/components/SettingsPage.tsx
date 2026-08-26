@@ -1,3 +1,4 @@
+import React from "react";
 import { useSettingsViewModel } from "../viewmodels/useSettingsViewModel.js";
 
 const cliproxyLabels: Record<string, string> = {
@@ -129,18 +130,50 @@ export function SettingsPage() {
         </div>
 
         <div className="card settings-card">
-          <h3>Klavye Kısayolları</h3>
+          <h3>Klavye Kısayolları (Aktif)</h3>
           <div className="shortcuts-table">
             <div className="shortcut-row">
               <span>Komut Paletini Aç</span>
               <kbd>⌘K</kbd>
             </div>
             <div className="shortcut-row">
-              <span>Hızlı Emir / PM Mesajı Gönder</span>
-              <kbd>Enter</kbd>
+              <span>Genel Bakış Sayfası</span>
+              <kbd>G + O</kbd>
             </div>
             <div className="shortcut-row">
-              <span>Açılır Pencereleri / Modalleri Kapat</span>
+              <span>Görevler Sayfası</span>
+              <kbd>G + G</kbd>
+            </div>
+            <div className="shortcut-row">
+              <span>PM & Agent Sohbeti</span>
+              <kbd>G + S</kbd>
+            </div>
+            <div className="shortcut-row">
+              <span>Dosyalar & Fihrist</span>
+              <kbd>G + D</kbd>
+            </div>
+            <div className="shortcut-row">
+              <span>Projeler Listesi</span>
+              <kbd>G + P</kbd>
+            </div>
+            <div className="shortcut-row">
+              <span>Kontör & Bütçe</span>
+              <kbd>G + B</kbd>
+            </div>
+            <div className="shortcut-row">
+              <span>Denetim Raporu</span>
+              <kbd>G + A</kbd>
+            </div>
+            <div className="shortcut-row">
+              <span>API Sağlayıcıları</span>
+              <kbd>G + M</kbd>
+            </div>
+            <div className="shortcut-row">
+              <span>Ayarlar</span>
+              <kbd>G + ,</kbd>
+            </div>
+            <div className="shortcut-row">
+              <span>Açılır Pencereleri / Çekmeceleri Kapat</span>
               <kbd>Esc</kbd>
             </div>
           </div>
