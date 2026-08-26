@@ -137,8 +137,9 @@ export function OverviewPage({
             </button>
           </div>
 
-          {/* Faz İlerlemesi */}
-          <PhaseProgressCard project={project} />
+          {/* Faz İlerlemesi — faz verisi için CH'de ayrı tablo/alan yok;
+              phases prop geldiğinde render edilir, şu an çizilmez. */}
+          <PhaseProgressCard />
 
           {/* Gereksinim Toplama Sihirbazı */}
           {project?.status === "gathering" ? (

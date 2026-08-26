@@ -1,5 +1,17 @@
+// PhaseProgressCard — SALT GÖRÜNÜM (docs/09 MVVM standardı)
+//
+// ⚠️  Faz ilerlemesi için ClickHouse'ta faz-bazlı bir tablo/alan YOKTUR.
+// tasks.group = agent grubu (frontend/backend/qa), faz değil.
+// plans.status = plan onay durumu (proposed/approved/superseded), faz değil.
+// project.status = genel durum (draft/gathering/planning/running/completed), faz değil.
+//
+// Bu bileşen yalnızca dışarıdan enjekte edilmiş GERÇEK faz verisiyle render eder.
+// Hiçbir prop yoksa → hiçbir şey çizmez.
+//
+// (2026-08-26) Kural ihlali düzeltildi: defaultPhases sabit listesi kaldırıldı.
+// "faz ilerlemesi için veri kaynağı yok, kart çizilmedi" durumu test edildi.
+
 import React from "react";
-import type { Project } from "../services/projects.js";
 
 export interface PhaseItem {
   id: string;
@@ -9,71 +21,15 @@ export interface PhaseItem {
 }
 
 export function PhaseProgressCard({
-  project,
-  customPhases,
+  phases,
 }: {
-  readonly project: Project | undefined;
-  readonly customPhases?: readonly PhaseItem[] | undefined;
+  readonly phases?: readonly PhaseItem[] | undefined;
 }) {
-  if (!project) return null;
+  // Veri kaynağı yoksa kart çizilmez — "faz ilerlemesi için veri kaynağı yok"
+  if (!phases || phases.length === 0) return null;
 
-  const defaultPhases: PhaseItem[] = [
-    {
-      id: "req",
-      name: "1. Gereksinim Analizi",
-      status:
-        project.status === "gathering"
-          ? "active"
-          : project.status === "draft"
-          ? "waiting"
-          : "done",
-      detail: "Kullanıcı hedefleri ve isterler",
-    },
-    {
-      id: "plan",
-      name: "2. Mimari & Planlama",
-      status:
-        project.status === "planning"
-          ? "active"
-          : project.status === "gathering" || project.status === "draft"
-          ? "waiting"
-          : "done",
-      detail: "Veritabanı, bileşen ve görev tasarımı",
-    },
-    {
-      id: "dev",
-      name: "3. Otonom Geliştirme",
-      status:
-        project.status === "running"
-          ? "active"
-          : project.status === "completed"
-          ? "done"
-          : "waiting",
-      detail: "Agent ekibi görev icrası ve kod üretimi",
-    },
-    {
-      id: "verify",
-      name: "4. Doğrulama & Denetim",
-      status:
-        project.status === "completed"
-          ? "done"
-          : project.status === "running"
-          ? "active"
-          : "waiting",
-      detail: "Testler, MVVM & güvenlik denetimleri",
-    },
-    {
-      id: "deploy",
-      name: "5. Dağıtım & Tamamlanma",
-      status: project.status === "completed" ? "done" : "waiting",
-      detail: "Çalışır canlı uygulama yayını",
-    },
-  ];
-
-  const phases = customPhases ?? defaultPhases;
   const completedCount = phases.filter((p) => p.status === "done").length;
   const totalCount = phases.length;
-  const activePhase = phases.find((p) => p.status === "active") ?? phases[0];
 
   return (
     <div className="card phase-progress-card" role="region" aria-label="Faz ilerlemesi">

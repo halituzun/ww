@@ -2577,9 +2577,17 @@ input:focus, select:focus, textarea:focus {
 .shortcut-row {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  gap: 8px;
   font-size: 13px;
   color: #cbd5e1;
+}
+.shortcut-row > span:first-child {
+  flex: 1;
+}
+.shortcut-alt {
+  font-size: 11px;
+  color: #64748b;
+  white-space: nowrap;
 }
 
 .toggles-list {
