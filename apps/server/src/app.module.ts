@@ -1,3 +1,5 @@
+import { AgentBridgeController } from "./erp-agent-bridge/agent-bridge.controller.js";
+import { AgentBridgeService } from "./erp-agent-bridge/agent-bridge.service.js";
 import { Module } from '@nestjs/common';
 import { PromptSnapshotsController } from './prompt-snapshots.controller.js';
 import { AgentsController } from './agents.controller.js';
@@ -74,7 +76,7 @@ import {
     InterviewController,
     CouncilController,
     StandardsAuditController,
-    PlansController,HealthController, ProjectsController, TasksController, MessagesController, OperationsController, FilesController, NarratorController, ProvidersController, CliproxyApiController, RoleModelsController, BudgetController, AuditController, RuntimeController],
+    PlansController,HealthController, ProjectsController, TasksController, MessagesController, OperationsController, FilesController, NarratorController, ProvidersController, CliproxyApiController, RoleModelsController, BudgetController, AuditController, RuntimeController, AgentBridgeController],
   providers: [
     EVENTS_GATEWAY_PROVIDER,
     ProviderHealthScheduler,
@@ -89,6 +91,7 @@ import {
     DelegationApplicationService,
     { provide: HEALTH_DEPENDENCIES, useValue: DEFAULT_HEALTH_DEPENDENCIES },
     HealthService,
+    AgentBridgeService,
     { provide: PROJECT_APPLICATION, useExisting: ProjectApplicationService },
     { provide: TASK_APPLICATION, useExisting: TaskApplicationService },
     { provide: MESSAGE_APPLICATION, useExisting: MessageApplicationService },
