@@ -53,3 +53,19 @@ export const answerQuestion = (
   requestJson(scope(projectId, '/messages'), {
     ...options, method: 'POST', body: { kind: 'answer', text, replyToMessageId },
   }, 'Cevap gönderilemedi');
+
+
+export interface ChatMessage {
+  messageId: string;
+  kind: string;
+  taskId?: string;
+  payload?: { text?: string; [key: string]: unknown };
+  createdAt: string;
+}
+
+export const fetchRecentMessages = (
+  projectId: string,
+  limit = 100,
+  options: RequestOptions = {},
+): Promise<ChatMessage[]> =>
+  getJson<ChatMessage[]>(scope(projectId, `/messages?limit=${limit}`), options, "Mesajlar alınamadı");
