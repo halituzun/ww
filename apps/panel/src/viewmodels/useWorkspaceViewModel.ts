@@ -16,6 +16,7 @@ import { replayAt } from './timeline-replay.js';
 import { describeLoadFailures } from './workspace-load.js';
 import type { ConnectionState } from './live-connection.js';
 import { fetchBudgetReport, EMPTY_BUDGET_REPORT, type BudgetReport } from '../services/budget.js';
+import { fetchPendingQuestions } from '../services/questions.js';
 import { fetchAuditReport, EMPTY_AUDIT_REPORT, type AuditReport } from '../services/audit.js';
 import { fetchProviders, type Provider } from '../services/providers.js';
 import {
@@ -46,6 +47,7 @@ export function useWorkspaceViewModel() {
   );
   const [projectId, setProjectId] = useState(() => queryParam('project') ?? '');
   const [budgetReport, setBudgetReport] = useState<BudgetReport>(EMPTY_BUDGET_REPORT);
+  const [pendingQuestionsCount, setPendingQuestionsCount] = useState<number>(0);
   const [auditReport, setAuditReport] = useState<AuditReport>(EMPTY_AUDIT_REPORT);
   const [providerList, setProviderList] = useState<Provider[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
@@ -175,6 +177,12 @@ export function useWorkspaceViewModel() {
       void loadSignal(
         () => fetchAuditReport(projectId), setAuditReport, () => active, warn('denetim'),
       );
+      void loadSignal(
+        () => fetchPendingQuestions(projectId),
+        (res) => setPendingQuestionsCount(res.count ?? res.messages?.length ?? 0),
+        () => active,
+        warn('bekleyen sorular'),
+      );
     };
     load();
     const timer = window.setInterval(load, SIGNAL_POLL_MS);
@@ -255,7 +263,7 @@ export function useWorkspaceViewModel() {
   return {
     page, setPage,
     projectId, setProjectId,
-    budgetReport, auditReport, providerList,
+    budgetReport, auditReport, providerList, pendingQuestionsCount,
     tasks, projects, projectsError, workspaceError, projectDraft, setProjectDraft,
     projectStatusMessage, projectStatus,
     usage, files, providerHealth, apiArtifacts,

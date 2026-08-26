@@ -114,10 +114,10 @@ export function SideNav({
   return (
     <aside className="sidenav">
       <div className="sidenav__brand">
-        <span className="brand-logo">WW</span>
+        <span className="brand-logo">ww</span>
         <div className="brand-info">
-          <strong>World Wide</strong>
-          <small>Otonom Mühendislik</small>
+          <strong>ww</strong>
+          <small>Orkestrasyon</small>
         </div>
       </div>
 

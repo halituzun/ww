@@ -1,4 +1,6 @@
 import { taskStatusLabel } from "../services/task-status.js";
+import { RequirementWizard } from "./RequirementWizard.js";
+import { ProjectControls } from "./ProjectControls.js";
 import type { Task, Project } from "../services/projects.js";
 import type { BudgetState } from "../services/budget.js";
 import type { PageId } from "../services/routes.js";
@@ -15,6 +17,8 @@ export function OverviewPage({
   onCommandDraft,
   onApprovePlan,
   events,
+  onStatusChange,
+  screenContext,
 }: {
   readonly project: Project | undefined;
   readonly tasks: readonly Task[];
@@ -26,6 +30,8 @@ export function OverviewPage({
   readonly onCommandDraft?: ((val: string) => void) | undefined;
   readonly onApprovePlan?: (() => void) | undefined;
   readonly events?: readonly TimelineEvent[] | undefined;
+  readonly onStatusChange?: ((status: "running" | "paused" | "archived") => void) | undefined;
+  readonly screenContext?: string | undefined;
 }) {
   const completedTasks = tasks.filter((t) => t.status === "done" || t.status === "completed").length;
   const totalTasks = tasks.length;
@@ -43,6 +49,12 @@ export function OverviewPage({
     <div className="overview-page">
       <div className="overview-grid">
         <div className="overview-main">
+          {project && onStatusChange ? (
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" }}>
+              <h2 style={{ margin: 0, fontSize: "18px", color: "#f1f5f9" }}>{project.name}</h2>
+              <ProjectControls status={project.status} onStatus={onStatusChange} />
+            </div>
+          ) : null}
           <div className="kpi-grid">
             <div className="kpi-card" onClick={() => onNavigate("tasks")}>
               <span className="kpi-label">TAMAMLANAN GÖREVLER</span>
@@ -89,7 +101,11 @@ export function OverviewPage({
             </div>
           </div>
 
-          {isPlanningPhase && onApprovePlan ? (
+          {project?.status === "gathering" ? (
+            <div className="card overview-card" style={{ marginBottom: "16px" }}>
+              <RequirementWizard projectId={project.project_id} />
+            </div>
+          ) : isPlanningPhase && onApprovePlan ? (
             <div className="plan-approval-hero-card">
               <div className="plan-approval-header">
                 <span className="plan-badge">PLAN ONAYI BEKLİYOR</span>
@@ -186,6 +202,13 @@ export function OverviewPage({
               </button>
             </div>
             <p className="hint">Projeyi yönlendirmek için PM agent'a doğrudan emir verin:</p>
+            {screenContext ? (
+              <div style={{ marginBottom: "8px" }}>
+                <span className="pill pill--mini" style={{ background: "rgba(56, 189, 248, 0.1)", color: "#38bdf8", border: "1px solid rgba(56, 189, 248, 0.2)" }}>
+                  Bağlam: {screenContext}
+                </span>
+              </div>
+            ) : null}
             <div className="chat-rail-composer">
               <input
                 type="text"
