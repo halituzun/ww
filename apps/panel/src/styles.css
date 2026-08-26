@@ -321,6 +321,7 @@ body {
 }
 .dot--ok { background: var(--accent); }
 .dot--err { background: var(--danger); }
+.dot--unknown { background: #64748b; }
 .dot--idle { background: #199e70; }
 .dot--busy { background: #3987e5; }
 .dot--waiting { background: #c98500; }

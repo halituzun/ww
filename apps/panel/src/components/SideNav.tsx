@@ -1,9 +1,16 @@
 import { NAV_ROUTES, type PageId } from "../services/routes.js";
 
 export interface HealthSummary {
-  readonly clickhouse: boolean;
-  readonly redis: boolean;
+  readonly clickhouse?: boolean | undefined;
+  readonly redis?: boolean | undefined;
   readonly api?: boolean | undefined;
+  readonly ok?: boolean | undefined;
+}
+
+function getDotClass(val: boolean | undefined): string {
+  if (val === true) return "dot--ok";
+  if (val === false) return "dot--err";
+  return "dot--unknown";
 }
 
 export function SideNav({
@@ -26,7 +33,25 @@ export function SideNav({
   const projectRoutes = NAV_ROUTES.filter((r) => r.group === "project");
   const systemRoutes = NAV_ROUTES.filter((r) => r.group === "system");
 
-  const isHealthy = health ? health.clickhouse && health.redis : true;
+  // Üç durum ayrımı: Sağlık verisi yoksa veya tanımsızsa bilinmiyor (gri nokta + durum alınıyor)
+  const chKnown = health?.clickhouse !== undefined;
+  const redisKnown = health?.redis !== undefined;
+  const apiKnown = health?.api !== undefined;
+  const allKnown = health !== undefined && chKnown && redisKnown && apiKnown;
+
+  let infraText = "Durum alınıyor…";
+  let infraTone: "ok" | "warn" | "unknown" = "unknown";
+
+  if (allKnown) {
+    const upCount = (health.clickhouse ? 1 : 0) + (health.redis ? 1 : 0) + (health.api ? 1 : 0);
+    infraText = `${upCount}/3 ayakta`;
+    infraTone = upCount === 3 ? "ok" : "warn";
+  } else if (health !== undefined) {
+    const knownValues = [health.clickhouse, health.redis, health.api].filter((v): v is boolean => v !== undefined);
+    const upCount = knownValues.filter((v) => v === true).length;
+    infraText = `${upCount}/${knownValues.length} ayakta`;
+    infraTone = knownValues.every((v) => v === true) ? "ok" : "warn";
+  }
 
   function renderIcon(icon: string) {
     switch (icon) {
@@ -184,27 +209,21 @@ export function SideNav({
         <div className="infra-mini-card">
           <div className="infra-mini-card__head">
             <span className="infra-label">ALTYAPI</span>
-            <span className={`infra-status ${isHealthy ? "ok" : "warn"}`}>
-              {(() => {
-                const chOk = health?.clickhouse ?? true;
-                const redisOk = health?.redis ?? true;
-                const apiOk = health?.api ?? true;
-                const upCount = (chOk ? 1 : 0) + (redisOk ? 1 : 0) + (apiOk ? 1 : 0);
-                return `${upCount}/3 ayakta`;
-              })()}
+            <span className={`infra-status ${infraTone}`}>
+              {infraText}
             </span>
           </div>
           <div className="infra-mini-card__items">
             <span className="infra-item">
-              <i className={`dot ${health?.clickhouse ?? true ? "dot--ok" : "dot--err"}`} />
+              <i className={`dot ${getDotClass(health?.clickhouse)}`} />
               ClickHouse
             </span>
             <span className="infra-item">
-              <i className={`dot ${health?.redis ?? true ? "dot--ok" : "dot--err"}`} />
+              <i className={`dot ${getDotClass(health?.redis)}`} />
               Redis
             </span>
             <span className="infra-item">
-              <i className={`dot ${health?.api ?? true ? "dot--ok" : "dot--err"}`} />
+              <i className={`dot ${getDotClass(health?.api)}`} />
               API
             </span>
           </div>
