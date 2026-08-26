@@ -5,6 +5,7 @@ import {
 import {
   useBudgetViewModel, type BudgetViewModelPorts,
 } from '../viewmodels/useBudgetViewModel.js';
+import { UsageMetrics } from './UsageMetrics.js';
 
 // Kategorik palet: dataviz referans paletinin koyu sütunu, panelin yüzeyine
 // (#0b1220) karşı validate_palette.js ile doğrulandı — 5 kontrolün beşi PASS.
@@ -66,6 +67,7 @@ export function BudgetPanel({ projectId, ports }: {
       {limitError !== '' ? <p className="budget-limit__error">{limitError}</p> : null}
       {limitNote !== '' ? <p className="hint">{limitNote}</p> : null}
 
+      <UsageMetrics usage={totals} />
       <div className="budget-tiles">
         <div className="budget-tile budget-tile--hero">
           <strong>{formatUsd(totals.costUsd)}</strong>

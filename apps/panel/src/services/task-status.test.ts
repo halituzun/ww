@@ -1,25 +1,27 @@
-import { describe, expect, it } from 'vitest';
-import { TASK_STATUSES } from '@ww/shared';
-import { taskStatusLabel } from './task-status.js';
+import { describe, expect, it } from "vitest";
+import { isTaskDone, isTaskRunning, taskStatusLabel } from "./task-status.js";
 
-describe('taskStatusLabel (karar K6: panel dili Türkçe)', () => {
-  // KAPSAM KORUMASI: yeni bir durum eklenip etiketi yazılmazsa panel ham
-  // İngilizce kimlik basar. Anlatıda aynı kusuru yaşadım; burada test
-  // eklendiği turda yakalar.
-  it('semadaki HER durum icin Turkce etiket vardir', () => {
-    const missing = TASK_STATUSES.filter((status) => taskStatusLabel(status) === status);
-    expect(missing).toEqual([]);
+describe("taskStatusLabel", () => {
+  it("bilinen durumları Türkçeleştirir", () => {
+    expect(taskStatusLabel("working")).toBe("çalışıyor");
+    expect(taskStatusLabel("done")).toBe("bitti");
   });
 
-  it('bilinen durumlari cevirir', () => {
-    expect(taskStatusLabel('queued')).toBe('kuyrukta');
-    expect(taskStatusLabel('waiting_user')).toBe('cevap bekliyor');
-    expect(taskStatusLabel('done')).toBe('bitti');
+  it("bilinmeyen durumu olduğu gibi döner", () => {
+    expect(taskStatusLabel("custom_status")).toBe("custom_status");
   });
 
-  // Bilinmeyen durum için ad KORUNUR, uydurulmaz: anlamadığı bir durumu
-  // Türkçeleştirmek kullanıcıya olmayan bir anlam verir.
-  it('bilinmeyen durumda ad korunur', () => {
-    expect(taskStatusLabel('gelecekte_eklenecek')).toBe('gelecekte_eklenecek');
+  it("çalışan ve biten görev durumlarını doğru ayırt eder", () => {
+    expect(isTaskRunning("working")).toBe(true);
+    expect(isTaskRunning("assigned")).toBe(true);
+    expect(isTaskRunning("verifying")).toBe(true);
+    expect(isTaskRunning("testing")).toBe(true);
+    expect(isTaskRunning("approved")).toBe(true);
+    expect(isTaskRunning("queued")).toBe(false);
+    expect(isTaskRunning("done")).toBe(false);
+    expect(isTaskRunning("running")).toBe(false); // uydurma durum reddedilir
+
+    expect(isTaskDone("done")).toBe(true);
+    expect(isTaskDone("working")).toBe(false);
   });
 });

@@ -20,8 +20,8 @@ describe("OverviewPage", () => {
       <OverviewPage
         project={dummyProject}
         tasks={[
-          { task_id: "t1", title: "Giris Yap", status: "completed", priority: 0, updated_at: "" },
-          { task_id: "t2", title: "Sepet", status: "running", priority: 0, updated_at: "" },
+          { task_id: "t1", title: "Giris Yap", status: "done", priority: 0, updated_at: "" },
+          { task_id: "t2", title: "Sepet", status: "working", priority: 0, updated_at: "" },
         ]}
         budget={{
           spentUsd: 12.44,

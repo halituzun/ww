@@ -17,6 +17,7 @@ import { ProvidersPage } from "./components/ProvidersPage.js";
 import { BudgetPanel } from "./components/BudgetPanel.js";
 import { AuditPanel } from "./components/AuditPanel.js";
 import { SettingsPage } from "./components/SettingsPage.js";
+import { isTaskRunning } from "./services/task-status.js";
 
 export default function App() {
   const { health } = useHealth();
@@ -26,7 +27,7 @@ export default function App() {
   const palette = useCommandPaletteViewModel({ onNavigate: navigate, projects: vm.projects, onSelectProject: vm.setProjectId });
   const activeProject = vm.projects.find((p) => p.project_id === vm.projectId);
 
-  const runningTasksCount = vm.tasks.filter((t) => t.status === "running" || t.status === "active" || t.status === "working").length;
+  const runningTasksCount = vm.tasks.filter((t) => isTaskRunning(t.status)).length;
   const auditWarningsCount = (vm.auditReport.counts.open ?? 0) + (vm.auditReport.counts.correction_pending ?? 0);
 
   function renderPage() {

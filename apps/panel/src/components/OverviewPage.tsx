@@ -1,4 +1,4 @@
-import { taskStatusLabel } from "../services/task-status.js";
+import { taskStatusLabel, isTaskRunning, isTaskDone } from "../services/task-status.js";
 import { RequirementWizard } from "./RequirementWizard.js";
 import { ProjectControls } from "./ProjectControls.js";
 import type { Task, Project } from "../services/projects.js";
@@ -33,11 +33,11 @@ export function OverviewPage({
   readonly onStatusChange?: ((status: "running" | "paused" | "archived") => void) | undefined;
   readonly screenContext?: string | undefined;
 }) {
-  const completedTasks = tasks.filter((t) => t.status === "done" || t.status === "completed").length;
+  const completedTasks = tasks.filter((t) => isTaskDone(t.status)).length;
   const totalTasks = tasks.length;
   const taskProgressPct = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
 
-  const runningTasks = tasks.filter((t) => t.status === "running" || t.status === "active");
+  const runningTasks = tasks.filter((t) => isTaskRunning(t.status));
   const cost = budget?.spentUsd;
   const limit = budget?.limitUsd ?? 0;
   const questionsCount = pendingQuestionsCount ?? 0;

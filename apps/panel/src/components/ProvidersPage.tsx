@@ -2,6 +2,7 @@ import { healthStatusLabel } from '../services/labels.js';
 import { useProviders } from '../viewmodels/useProviders.js';
 import { RoleModelTable } from './RoleModelTable.js';
 import { CliproxyGatewayCard } from './CliproxyGatewayCard.js';
+import { ProviderHealthBadges } from './UsageMetrics.js';
 
 // API sağlayıcı yönetimi — docs/08-panel.md'de tanımlı bağımsız "API'ler" sayfası.
 // Proje seçiminden bağımsızdır: sağlayıcılar proje-bağımsızdır (api_providers'ta
@@ -19,6 +20,7 @@ export function ProvidersPage() {
         <small>Hesaplarını gateway’den, doğrudan API anahtarlarını aşağıdan yönet.</small>
       </div>
 
+      <ProviderHealthBadges providers={vm.providers} />
       <CliproxyGatewayCard />
 
       {vm.status ? <p className="provider-status" role="status">{vm.status}</p> : null}
