@@ -48,7 +48,11 @@ export function ProvidersPage() {
               <div><dt>Fallback sırası</dt><dd>{provider.fallback_order}</dd></div>
               <div>
                 <dt>Anahtar</dt>
-                <dd>{provider.keyConfigured ? provider.maskedKey : 'girilmedi'}</dd>
+                <dd>
+                  {provider.provider_id === 'ollama' || provider.base_url.includes('127.0.0.1') || provider.base_url.includes('localhost')
+                    ? 'anahtar gerekmiyor (yerel)'
+                    : (provider.keyConfigured ? provider.maskedKey : 'girilmedi')}
+                </dd>
               </div>
             </dl>
 

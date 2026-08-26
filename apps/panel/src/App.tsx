@@ -197,7 +197,7 @@ function AppContent() {
       selectedProjectId={vm.projectId}
       onSelectProject={vm.setProjectId}
       budget={vm.budgetReport.budget}
-      health={health ? { clickhouse: health.clickhouse, redis: health.redis } : undefined}
+      health={health ? { clickhouse: health.clickhouse, redis: health.redis, api: true } : undefined}
       counts={{
         pendingQuestions: vm.pendingQuestionsCount,
         runningTasks: runningTasksCount,

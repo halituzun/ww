@@ -1,3 +1,19 @@
+export type RoleTier = 'heavy' | 'medium' | 'light';
+
+export const ROLE_TIERS: Record<string, { tier: RoleTier; label: string; tone: string }> = {
+  pm: { tier: 'heavy', label: 'Ağır', tone: 'heavy' },
+  council_member: { tier: 'heavy', label: 'Ağır', tone: 'heavy' },
+  professor: { tier: 'heavy', label: 'Ağır', tone: 'heavy' },
+  standards_auditor: { tier: 'heavy', label: 'Ağır', tone: 'heavy' },
+  group_lead: { tier: 'medium', label: 'Orta', tone: 'medium' },
+  worker: { tier: 'medium', label: 'Orta', tone: 'medium' },
+  verifier: { tier: 'medium', label: 'Orta', tone: 'medium' },
+  interviewer: { tier: 'medium', label: 'Orta', tone: 'medium' },
+  researcher: { tier: 'medium', label: 'Orta', tone: 'medium' },
+  creator: { tier: 'medium', label: 'Orta', tone: 'medium' },
+  summarizer: { tier: 'light', label: 'Hafif', tone: 'light' },
+  narrator: { tier: 'light', label: 'Hafif', tone: 'light' },
+};
 import { useRoleModels } from '../viewmodels/useRoleModels.js';
 import type { Provider } from '../services/providers.js';
 import { crossCheckWarnings } from '../services/role-models.js';
@@ -38,6 +54,7 @@ export function RoleModelTable({ providers }: { providers: readonly Provider[] }
         <thead>
           <tr>
             <th scope="col">Rol</th>
+            <th scope="col">Katman</th>
             <th scope="col">Birincil model</th>
             <th scope="col">Yedekler</th>
             <th scope="col"><span className="visually-hidden">İşlem</span></th>
@@ -54,6 +71,13 @@ export function RoleModelTable({ providers }: { providers: readonly Provider[] }
                   {row.role}
                   {row.configured ? null : <span className="pill pill--paused">eşlenmedi</span>}
                 </th>
+                <td>
+                  {ROLE_TIERS[row.role] ? (
+                    <span className={`role-tier-badge role-tier-badge--${ROLE_TIERS[row.role].tone}`}>
+                      {ROLE_TIERS[row.role].label}
+                    </span>
+                  ) : null}
+                </td>
                 <td>
                   <input
                     aria-label={`${row.role} birincil model`}

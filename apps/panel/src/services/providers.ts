@@ -35,10 +35,15 @@ export interface ProviderConfigInput {
   fallbackOrder: number;
 }
 
+export function isTestOrMockProvider(providerId: string): boolean {
+  const p = providerId.toLowerCase();
+  return p.includes('mock') || p.includes('bozuk') || p.startsWith('test-');
+}
+
 export async function fetchProviders(options: RequestOptions = {}): Promise<Provider[]> {
   const body = await getJson<unknown>('/providers', options, 'Sağlayıcılar okunamadı');
   if (!Array.isArray(body)) throw new Error('Sağlayıcı yanıtı geçersiz');
-  return body as Provider[];
+  return (body as Provider[]).filter((p) => !isTestOrMockProvider(p.provider_id));
 }
 
 export async function saveProviderKey(

@@ -2125,10 +2125,42 @@ input:focus, select:focus, textarea:focus {
   background: #ef4444;
 }
 
-.gateway-card__header, .gateway-card__actions, .gateway-card__copy, .gateway-card__details, .gateway-card__hint {
+.gateway-card__header, .gateway-card__copy, .gateway-card__details, .gateway-card__hint {
   display: flex;
   flex-direction: column;
   gap: 8px;
+}
+.gateway-card__actions {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 14px;
+  margin-top: 6px;
+}
+.gateway-card__actions a {
+  color: var(--accent, #34d399);
+  font-size: 13px;
+  font-weight: 500;
+}
+.gateway-card__actions a:hover {
+  color: var(--accent-light, #a7f3d0);
+  text-decoration: underline;
+}
+.gateway-card__actions button {
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  color: #f8fafc;
+  font-size: 12.5px;
+  font-weight: 500;
+  padding: 6px 14px;
+  border-radius: var(--radius-sm, 6px);
+  cursor: pointer;
+  width: auto;
+  transition: background var(--transition, 0.15s ease), border-color var(--transition, 0.15s ease);
+}
+.gateway-card__actions button:hover {
+  background: rgba(255, 255, 255, 0.05);
+  border-color: rgba(255, 255, 255, 0.25);
 }
 .gateway-state {
   display: inline-flex;
@@ -3568,4 +3600,29 @@ input:focus, select:focus, textarea:focus {
   flex: 1;
   font-size: 13px;
   color: #cbd5e1;
+}
+
+.role-tier-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+.role-tier-badge--heavy {
+  background: rgba(239, 68, 68, 0.12);
+  color: #f87171;
+  border: 1px solid rgba(239, 68, 68, 0.25);
+}
+.role-tier-badge--medium {
+  background: rgba(59, 130, 246, 0.12);
+  color: #60a5fa;
+  border: 1px solid rgba(59, 130, 246, 0.25);
+}
+.role-tier-badge--light {
+  background: rgba(16, 185, 129, 0.12);
+  color: #34d399;
+  border: 1px solid rgba(16, 185, 129, 0.25);
 }

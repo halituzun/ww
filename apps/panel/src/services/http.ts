@@ -59,7 +59,10 @@ async function parseJson(response: Response, what: string): Promise<unknown> {
 
 export async function getJson<T>(path: string, options: RequestOptions = {}, what = 'İstek başarısız'): Promise<T> {
   const fetchImpl = options.fetchImpl ?? fetch;
-  const init: RequestInit = options.signal ? { signal: options.signal } : {};
+  const init: RequestInit = {
+    headers: authHeaders(options, false),
+    ...(options.signal ? { signal: options.signal } : {}),
+  };
   const response = await fetchImpl(apiUrl(options.baseUrl, path), init);
   await ensureOk(response, what);
   return (await parseJson(response, what)) as T;

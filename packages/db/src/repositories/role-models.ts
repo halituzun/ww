@@ -27,7 +27,7 @@ export type UpsertRoleModelInput = Omit<RoleModelRow, 'version'>;
 const COLUMNS = 'role,model_ref,fallback_refs,updated_at,version';
 
 // docs/04: model_ref daima 'provider:model' biçimindedir.
-const MODEL_REF = /^[a-z0-9_-]+:[A-Za-z0-9._-]+$/;
+const MODEL_REF = /^[a-z0-9_-]+:[A-Za-z0-9._:-]+$/;
 
 function assertRole(role: string): string {
   const value = role.trim();
