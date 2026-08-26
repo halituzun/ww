@@ -80,7 +80,7 @@ export class PlanApplicationService {
 
 @Controller('projects/:projectId/plans')
 export class PlansController {
-  constructor(private readonly plans: PlanApplicationService) {}
+  constructor(@Inject(PlanApplicationService) private readonly plans: PlanApplicationService) {}
 
   @Post()
   create(

@@ -62,7 +62,7 @@ export class DelegationApplicationService {
 
 @Controller('projects/:projectId/tasks/:taskId/subtasks')
 export class DelegationController {
-  constructor(private readonly delegation: DelegationApplicationService) {}
+  constructor(@Inject(DelegationApplicationService) private readonly delegation: DelegationApplicationService) {}
 
   @Post()
   create(

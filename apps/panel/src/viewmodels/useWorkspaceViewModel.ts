@@ -81,7 +81,6 @@ export function useWorkspaceViewModel() {
   const [workspaceError, setWorkspaceError] = useState('');
 
   useEffect(() => {
-    if (projectId) return;
     // Hata YAKALANIR: bu uç artık hatayı yutmuyor. Yakalamazsak yakalanmamış
     // promise reddi oluşur (geçen turda tam bunu yaşadım).
     void loadSignal(

@@ -1,4 +1,4 @@
-import { BadRequestException, Body, Controller, Get, Param, Post, Req } from '@nestjs/common';
+import { Inject, BadRequestException, Body, Controller, Get, Param, Post, Req } from '@nestjs/common';
 import { z } from 'zod';
 import { parseLocalSession, type LocalSessionRequest } from './auth/local-session.js';
 import { InterviewApplicationService, InterviewError } from './interview.service.js';
@@ -9,7 +9,7 @@ const AnswersInput = z.strictObject({
 
 @Controller('projects/:projectId/interview')
 export class InterviewController {
-  constructor(private readonly interview: InterviewApplicationService) {}
+  constructor(@Inject(InterviewApplicationService) private readonly interview: InterviewApplicationService) {}
 
   @Get()
   questions(@Req() request: LocalSessionRequest, @Param('projectId') projectId: string) {

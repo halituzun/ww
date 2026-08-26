@@ -1,3 +1,35 @@
+import { existsSync, readFileSync } from "node:fs";
+import { join, dirname } from "node:path";
+
+function loadRootEnv(): void {
+  let dir = process.cwd();
+  for (;;) {
+    const candidate = join(dir, ".env");
+    if (existsSync(candidate)) {
+      try {
+        const content = readFileSync(candidate, "utf8");
+        for (const line of content.split("\n")) {
+          const trimmed = line.trim();
+          if (!trimmed || trimmed.startsWith("#")) continue;
+          const idx = trimmed.indexOf("=");
+          if (idx > 0) {
+            const key = trimmed.slice(0, idx).trim();
+            const val = trimmed.slice(idx + 1).trim();
+            if (process.env[key] === undefined) {
+              process.env[key] = val;
+            }
+          }
+        }
+      } catch {}
+      break;
+    }
+    const parent = dirname(dir);
+    if (parent === dir) break;
+    dir = parent;
+  }
+}
+loadRootEnv();
+
 import 'reflect-metadata';
 import { NestFactory } from '@nestjs/core';
 import { WsAdapter } from '@nestjs/platform-ws';
