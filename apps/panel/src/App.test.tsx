@@ -1,27 +1,21 @@
 // @vitest-environment jsdom
-//
-// NEDEN VAR: App.tsx bir ViewModel refactor'ünden geçti ve panelde hiçbir
-// çizim testi yoktu. Tipler doğru olsa bile eksik bir alan ya da kopmuş bir
-// prop ancak tarayıcıda patlar — yani kullanıcıda. Bu test, ekranın gerçekten
-// çizildiğini ve View'ın ViewModel'den beklediği her şeyi aldığını kanıtlar.
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, render, screen } from '@testing-library/react';
-import App from './App.js';
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { cleanup, render, screen } from "@testing-library/react";
+import App from "./App.js";
 
 const emptyResponse = (): Response => ({
   ok: true,
   status: 200,
-  headers: new Headers({ 'content-type': 'application/json' }),
+  headers: new Headers({ "content-type": "application/json" }),
   json: async () => [],
-  text: async () => '[]',
+  text: async () => "[]",
 }) as Response;
 
 beforeEach(() => {
-  vi.stubGlobal('fetch', vi.fn(async () => emptyResponse()));
-  // WebSocket'i sahtelemezsek jsdom gerçek bağlantı açmayı dener.
-  vi.stubGlobal('WebSocket', class {
-    close(): void { /* test soketi */ }
-    send(): void { /* test soketi */ }
+  vi.stubGlobal("fetch", vi.fn(async () => emptyResponse()));
+  vi.stubGlobal("WebSocket", class {
+    close(): void {}
+    send(): void {}
   });
 });
 
@@ -30,30 +24,25 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-describe('App', () => {
-  it('çalışma alanı ekranını çizer', () => {
+describe("App", () => {
+  it("genel bakis sayfasini ve yan menuyu cizer", () => {
     render(<App />);
-    expect(screen.getByText('Agent çalışma alanı')).toBeDefined();
+    expect(screen.getAllByText("Genel bakış").length).toBeGreaterThan(0);
+    expect(screen.getByText("PROJE")).toBeDefined();
+    expect(screen.getByText("SİSTEM")).toBeDefined();
   });
 
-  // Bağlantı durumu görünmezse kopan besleme yine sessizce ölür.
-  it('canlı bağlantı durumunu gösterir', () => {
+  it("canli baglanti durumunu gosterir", () => {
     render(<App />);
-    expect(screen.getByTitle('Canlı olay bağlantısı')).toBeDefined();
+    expect(screen.getByTitle("Canlı olay bağlantısı")).toBeDefined();
   });
 
-  it('proje kimliği girişini sunar', () => {
-    render(<App />);
-    expect(screen.getByLabelText('Proje kimliği')).toBeDefined();
-  });
-
-  // Projesiz açılışta bile ekran çökmemeli: ilk kullanıcı deneyimi budur.
-  it('proje seçilmemişken hata vermeden çizilir', () => {
+  it("projesiz acilista bile ekran cokmeden cizilir", () => {
     expect(() => render(<App />)).not.toThrow();
   });
 
-  it('sağlayıcılar sayfasına geçiş düğmesi bulunur', () => {
+  it("saglayicilar sayfasina gecis menusu bulunur", () => {
     render(<App />);
-    expect(screen.getByRole('button', { name: "API'ler" })).toBeDefined();
+    expect(screen.getByRole("button", { name: /API/ })).toBeDefined();
   });
 });

@@ -1,52 +1,102 @@
-// Üst şerit — SALT GÖRÜNÜM (docs/08 genel yerleşim).
-//
-// NEDEN AYRI: App.tsx içinde TEK SATIRDA 718 karakterdi ve iki sayfada
-// (çalışma alanı / sağlayıcılar) elle kopyalanmıştı — biri değiştiğinde
-// diğeri sessizce geride kalırdı.
-import type { ReactNode } from 'react';
-import { connectionLabel, type ConnectionState } from '../viewmodels/live-connection.js';
+import type { ReactNode } from "react";
+import { connectionLabel, type ConnectionState } from "../viewmodels/live-connection.js";
+import { BudgetBadge } from "./BudgetBadge.js";
+import { ProjectSwitcher } from "./ProjectSwitcher.js";
+import type { Project } from "../services/projects.js";
+import type { BudgetState } from "../services/budget.js";
+import type { PageId } from "../services/routes.js";
 
 export function TopBar({
-  title, connection, projectId, onProjectId, onProviders, onBack, children,
+  title,
+  connection,
+  eventsCount,
+  projects,
+  selectedProjectId,
+  onSelectProject,
+  onNewProject,
+  budget,
+  onNavigate,
+  projectId,
+  onProjectId,
+  onProviders,
+  onBack,
+  children,
 }: {
   readonly title: string;
-  /** Canlı olay bağlantısı; verilmezse rozet çizilmez. */
-  readonly connection?: ConnectionState;
-  readonly projectId?: string;
-  readonly onProjectId?: (next: string) => void;
-  readonly onProviders?: () => void;
-  readonly onBack?: () => void;
-  /** Bildirim zili gibi ek eylemler. */
-  readonly children?: ReactNode;
+  readonly connection?: ConnectionState | undefined;
+  readonly eventsCount?: number | undefined;
+  readonly projects?: readonly Project[] | undefined;
+  readonly selectedProjectId?: string | undefined;
+  readonly onSelectProject?: ((next: string) => void) | undefined;
+  readonly onNewProject?: (() => void) | undefined;
+  readonly budget?: { readonly state: BudgetState; readonly ratio: number; readonly spentUsd: number; readonly limitUsd: number } | undefined;
+  readonly onNavigate?: ((page: PageId) => void) | undefined;
+  readonly projectId?: string | undefined;
+  readonly onProjectId?: ((next: string) => void) | undefined;
+  readonly onProviders?: (() => void) | undefined;
+  readonly onBack?: (() => void) | undefined;
+  readonly children?: ReactNode | undefined;
 }) {
   return (
     <header className="topbar">
-      <div>
-        <p className="eyebrow">ww / ORCHESTRATION</p>
-        <h1>{title}</h1>
-      </div>
+      {projects && onSelectProject ? (
+        <ProjectSwitcher
+          projects={projects}
+          selectedProjectId={selectedProjectId ?? ""}
+          onSelectProject={onSelectProject}
+          onNewProject={onNewProject}
+        />
+      ) : (
+        <div className="topbar-title-legacy">
+          <p className="eyebrow">ww / ORCHESTRATION</p>
+          <h1>{title}</h1>
+        </div>
+      )}
+
+      {projects && onSelectProject ? (
+        <>
+          <div className="topbar-divider" />
+          <span className="topbar-page-title">{title}</span>
+        </>
+      ) : null}
+
       <div className="topbar-actions">
-        {connection === undefined ? null : (
+        {budget ? (
+          <BudgetBadge budget={budget} onClick={() => onNavigate?.("budget")} />
+        ) : null}
+
+        {connection !== undefined ? (
           <span className={`conn conn--${connection}`} title="Canlı olay bağlantısı">
             <span className="conn__dot" aria-hidden="true" />
-            {connectionLabel(connection)}
+            <span>
+              {connectionLabel(connection)}
+              {eventsCount && eventsCount > 0 && connection === "open" ? ` · ${eventsCount} olay` : ""}
+            </span>
           </span>
-        )}
-        {onBack === undefined ? null : (
-          <button type="button" onClick={onBack}>← Çalışma alanı</button>
-        )}
-        {onProviders === undefined ? null : (
-          <button type="button" onClick={onProviders}>API&apos;ler</button>
-        )}
+        ) : null}
+
+        {onBack ? (
+          <button type="button" className="btn btn--secondary" onClick={onBack}>
+            ← Çalışma alanı
+          </button>
+        ) : null}
+
+        {onProviders ? (
+          <button type="button" className="btn btn--secondary" onClick={onProviders}>
+            API&apos;ler
+          </button>
+        ) : null}
+
         {children}
-        {onProjectId === undefined ? null : (
+
+        {onProjectId ? (
           <input
             aria-label="Proje kimliği"
             placeholder="Proje UUID"
-            value={projectId ?? ''}
+            value={projectId ?? ""}
             onChange={(event) => onProjectId(event.target.value)}
           />
-        )}
+        ) : null}
       </div>
     </header>
   );
