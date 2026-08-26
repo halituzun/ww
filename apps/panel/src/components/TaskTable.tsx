@@ -1,3 +1,7 @@
+// TaskTable — SALT GÖRÜNÜM (docs/09 MVVM standardı).
+// Tablo satırları erişilebilir: ilk hücrede <button> ile klavye+fare erişimi.
+// onSelectTask → TaskDetailDrawer'ı açar (App.tsx üzerinden).
+import React from "react";
 import { taskStatusLabel } from "../services/task-status.js";
 import type { Task } from "../services/projects.js";
 
@@ -9,7 +13,11 @@ export function TaskTable({
   readonly onSelectTask?: ((taskId: string) => void) | undefined;
 }) {
   if (tasks.length === 0) {
-    return <p className="hint">Filtreye uygun görev bulunamadı.</p>;
+    return (
+      <div className="task-table-empty">
+        <p className="hint">Filtreye uygun görev bulunamadı.</p>
+      </div>
+    );
   }
 
   return (
@@ -17,24 +25,30 @@ export function TaskTable({
       <table className="task-table">
         <thead>
           <tr>
-            <th>GÖREV & ID</th>
+            <th>GÖREV &amp; ID</th>
             <th>DURUM</th>
             <th>ÖNCELİK</th>
           </tr>
         </thead>
         <tbody>
           {tasks.map((task) => (
-            <tr
-              key={task.task_id}
-              onClick={() => onSelectTask?.(task.task_id)}
-              className="task-row"
-            >
+            <tr key={task.task_id} className="task-table-row">
+              {/* İlk hücrede gerçek <button> — klavye (Tab/Enter/Space) erişilebilir */}
               <td className="task-cell-main">
-                <strong>{task.title || task.task_id}</strong>
-                <small className="mono-id">{task.task_id}</small>
+                <button
+                  type="button"
+                  className="task-row-btn"
+                  onClick={() => onSelectTask?.(task.task_id)}
+                  aria-label={`${task.title ?? task.task_id} görev detayını aç`}
+                >
+                  <strong>{task.title ?? task.task_id}</strong>
+                  <small className="mono-id">{task.task_id}</small>
+                </button>
               </td>
               <td>
-                <span className={`pill pill--${task.status}`}>{taskStatusLabel(task.status)}</span>
+                <span className={`pill pill--${task.status}`}>
+                  {taskStatusLabel(task.status)}
+                </span>
               </td>
               <td className="mono-priority">{task.priority ?? 0}</td>
             </tr>

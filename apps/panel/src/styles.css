@@ -1077,6 +1077,27 @@ input:focus, select:focus, textarea:focus {
   gap: 14px;
 }
 
+/* TasksPage — görevler sayfası kapsayıcı */
+.tasks-page {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.tasks-page--empty {
+  padding: 24px;
+}
+.tasks-page-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.tasks-page-title {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--text);
+  margin: 0;
+}
+
 .task-management-card {
   padding: 16px 18px;
   border: 1px solid var(--border);
@@ -1156,8 +1177,31 @@ input:focus, select:focus, textarea:focus {
   color: var(--text);
 }
 
-.task-row:hover td {
-  background: rgba(255, 255, 255, 0.02);
+.task-table-row:hover td {
+  background: rgba(255, 255, 255, 0.03);
+}
+
+/* Satır içi erişilebilir button — tüm satırın tıklanabilir alanı */
+.task-row-btn {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  background: transparent;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  text-align: left;
+  color: var(--text);
+  width: 100%;
+}
+.task-row-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
+}
+.task-row-btn strong {
+  font-size: 13px;
+  color: var(--text);
 }
 
 .mono-id {

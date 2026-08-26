@@ -10,7 +10,7 @@ import { CommandPalette } from "./components/CommandPalette.js";
 import { NotificationBell } from "./components/NotificationBell.js";
 import { OverviewPage } from "./components/OverviewPage.js";
 import { CanvasPanel } from "./components/CanvasPanel.js";
-import { TaskListPanel } from "./components/TaskListPanel.js";
+import { TasksPage } from "./components/TasksPage.js";
 import { FileBrowserPanel } from "./components/FileBrowserPanel.js";
 import { ChatPage } from "./components/ChatPage.js";
 import { PreviewPage } from "./components/PreviewPage.js";
@@ -127,9 +127,8 @@ function AppContent() {
         );
       case "tasks":
         return (
-          <TaskListPanel
+          <TasksPage
             tasks={vm.tasks}
-            statusCounts={vm.statusCounts}
             onSelectTask={vm.setSelectedTaskId}
           />
         );
