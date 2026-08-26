@@ -1,4 +1,4 @@
-import type { FileIndex } from "../services/projects.js";
+import type { FileIndex, Task } from "../services/projects.js";
 import { FileEditor } from "./FileEditor.js";
 import { FileFihrist } from "./FileFihrist.js";
 import { useFileSearchViewModel } from "../viewmodels/useFileSearchViewModel.js";
@@ -18,6 +18,7 @@ export function FileBrowserPanel({
   onAskNarrator,
   narratorResult,
   onSelectTask,
+  tasks = [],
 }: {
   readonly projectId: string;
   readonly files: readonly FileIndex[];
@@ -28,6 +29,7 @@ export function FileBrowserPanel({
   readonly onAskNarrator: () => void;
   readonly narratorResult: NarratorAnswer | undefined;
   readonly onSelectTask?: ((taskId: string) => void) | undefined;
+  readonly tasks?: readonly Task[] | undefined;
 }) {
   const { search, setSearch, filteredFiles, selectedFile: selected } =
     useFileSearchViewModel(files, selectedFile);
@@ -73,7 +75,7 @@ export function FileBrowserPanel({
       </section>
 
       <aside className="file-browser__fihrist-col">
-        <FileFihrist projectId={projectId} file={selected} onSelectTask={onSelectTask} />
+        <FileFihrist projectId={projectId} file={selected} onSelectTask={onSelectTask} tasks={tasks} />
 
         <div className="narrator-card">
           <h3>Nasıl yapıldı?</h3>

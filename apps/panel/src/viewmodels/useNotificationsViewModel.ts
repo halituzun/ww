@@ -5,7 +5,7 @@
 // mantığıdır ve View'da test edilemez; bildirim gürültüsü kuralı
 // ("yalnız kritik ve daha önce duyurulmamış") tam da sessizce bozulabilecek
 // türden bir kuraldır.
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useCallback } from 'react';
 import {
   deriveNotifications,
   loadSeen,
@@ -26,6 +26,7 @@ export interface NotificationsViewModel {
   readonly notifications: readonly PanelNotification[];
   readonly unseen: number;
   readonly open: boolean;
+  readonly containerRef: React.RefObject<HTMLDivElement | null>;
   setOpen(open: boolean): void;
   toggleOpen(): void;
   /** View, görüldü kümesini görmez; yalnız tek tek sorar. */
@@ -51,6 +52,7 @@ export function useNotificationsViewModel(
   const [open, setOpen] = useState(false);
   const [seen, setSeen] = useState<Set<string>>(() => readSeen());
   const alerted = useRef<Set<string>>(new Set());
+  const containerRef = useRef<HTMLDivElement>(null);
 
   const notifications = deriveNotifications(signals);
   const unseen = unseenCount(notifications, seen);
@@ -66,12 +68,73 @@ export function useNotificationsViewModel(
     }
   }, [notifications, seen, announce]);
 
+  const close = useCallback(() => setOpen(false), []);
+
+  const toggleOpen = useCallback(() => {
+    setOpen((current) => {
+      const next = !current;
+      if (next && typeof window !== "undefined") {
+        window.dispatchEvent(new CustomEvent("ww-popover-open", { detail: "notifications" }));
+      }
+      return next;
+    });
+  }, []);
+
+  // Karşılıklı dışlama ve sayfa değişimi
+  useEffect(() => {
+    function handleOtherPopover(e: Event) {
+      const customEvent = e as CustomEvent<string>;
+      if (customEvent.detail !== "notifications") {
+        close();
+      }
+    }
+    function handleHashChange() {
+      close();
+    }
+    if (typeof window !== "undefined") {
+      window.addEventListener("ww-popover-open", handleOtherPopover);
+      window.addEventListener("hashchange", handleHashChange);
+    }
+    return () => {
+      if (typeof window !== "undefined") {
+        window.removeEventListener("ww-popover-open", handleOtherPopover);
+        window.removeEventListener("hashchange", handleHashChange);
+      }
+    };
+  }, [close]);
+
+  // Dışarı tıklama ve Escape
+  useEffect(() => {
+    if (!open) return;
+    function handleClickOutside(e: MouseEvent) {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        close();
+      }
+    }
+    function handleKeyDown(e: KeyboardEvent) {
+      if (e.key === "Escape") {
+        close();
+      }
+    }
+    if (typeof window !== "undefined") {
+      window.addEventListener("mousedown", handleClickOutside);
+      window.addEventListener("keydown", handleKeyDown);
+    }
+    return () => {
+      if (typeof window !== "undefined") {
+        window.removeEventListener("mousedown", handleClickOutside);
+        window.removeEventListener("keydown", handleKeyDown);
+      }
+    };
+  }, [open, close]);
+
   return {
     notifications,
     unseen,
     open,
+    containerRef,
     setOpen,
-    toggleOpen: () => setOpen((current) => !current),
+    toggleOpen,
     isSeen: (notificationId) => seen.has(notificationId),
     markAllSeen: () => {
       const next = new Set(notifications.map((notification) => notification.id));

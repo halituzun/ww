@@ -7,10 +7,13 @@ import {
   useFileFihristViewModel, type FileFihristPorts,
 } from '../viewmodels/useFileFihristViewModel.js';
 
-export function FileFihrist({ projectId, file, onSelectTask, ports }: {
+import type { Task } from '../services/projects.js';
+
+export function FileFihrist({ projectId, file, onSelectTask, tasks = [], ports }: {
   readonly projectId: string;
   readonly file: FileIndex | undefined;
   readonly onSelectTask?: ((taskId: string) => void) | undefined;
+  readonly tasks?: readonly Task[] | undefined;
   /** Testler gerçek uca gitmeden görünümü sürebilsin diye. */
   readonly ports?: FileFihristPorts;
 }) {
@@ -42,13 +45,17 @@ export function FileFihrist({ projectId, file, onSelectTask, ports }: {
         <p className="hint">Bu dosyaya bağlı görev kaydı yok.</p>
       ) : (
         <ul className="fihrist__tasks">
-          {relatedTaskIds.map((taskId) => (
-            <li key={taskId}>
-              <button type="button" className="linklike" onClick={() => onSelectTask?.(taskId)}>
-                <code>{taskId.slice(0, 8)}</code>
-              </button>
-            </li>
-          ))}
+          {relatedTaskIds.map((taskId) => {
+            const taskObj = tasks?.find((t) => t.task_id === taskId);
+            return (
+              <li key={taskId}>
+                <button type="button" className="linklike" onClick={() => onSelectTask?.(taskId)}>
+                  <code>{taskId.slice(0, 8)}</code>
+                  {taskObj?.title ? <span> · {taskObj.title}</span> : null}
+                </button>
+              </li>
+            );
+          })}
         </ul>
       )}
 

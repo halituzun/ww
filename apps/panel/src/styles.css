@@ -193,7 +193,7 @@ body {
   align-items: center;
   gap: 10px;
   width: 100%;
-  padding: 8px 10px;
+  padding: 9px 10px;
   border: 1px solid transparent;
   border-radius: var(--radius-md);
   background: transparent;
@@ -204,6 +204,20 @@ body {
   cursor: pointer;
   text-align: left;
   transition: var(--transition);
+  box-sizing: border-box;
+}
+
+.nav-link svg {
+  width: 16px;
+  height: 16px;
+  min-width: 16px;
+  max-width: 16px;
+  flex-shrink: 0;
+}
+
+.nav-link span {
+  flex: 1;
+  text-align: left;
 }
 
 .nav-link:hover {
@@ -739,14 +753,14 @@ button {
   border: 1px solid transparent;
 }
 
-.btn--primary, button:not(.btn--secondary):not(.btn--ghost):not(.btn--danger):not(.linklike):not(.nav-link):not(.project-switcher-btn):not(.budget-badge-btn):not(.bell__button):not(.command-palette-trigger):not(.task-filter-tab):not(.project-switcher-item):not(.palette-item) {
+.btn--primary {
   background: var(--accent);
   color: #04120d;
   border: none;
   font-weight: 700;
 }
 
-.btn--primary:hover:not(:disabled), button:not(.btn--secondary):not(.btn--ghost):not(.btn--danger):not(.linklike):not(.nav-link):not(.project-switcher-btn):not(.budget-badge-btn):not(.bell__button):not(.command-palette-trigger):not(.task-filter-tab):not(.project-switcher-item):not(.palette-item):hover:not(:disabled) {
+.btn--primary:hover:not(:disabled) {
   background: var(--accent-light);
 }
 
@@ -1182,26 +1196,60 @@ input:focus, select:focus, textarea:focus {
 }
 
 /* Satır içi erişilebilir button — tüm satırın tıklanabilir alanı */
+.task-table th {
+  padding: 10px 14px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: var(--text-label);
+  border-bottom: 1px solid var(--border);
+  text-transform: uppercase;
+}
+
+.task-table td {
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--border);
+  color: var(--text);
+  vertical-align: middle;
+}
+
+.task-table-row {
+  transition: background var(--trans-fast);
+}
+
+.task-table-row:hover td {
+  background: rgba(255, 255, 255, 0.025);
+}
+
 .task-row-btn {
   display: flex;
   flex-direction: column;
-  gap: 2px;
-  background: transparent;
-  border: none;
-  padding: 0;
+  gap: 3px;
+  background: transparent !important;
+  border: none !important;
+  padding: 0 !important;
   cursor: pointer;
   text-align: left;
-  color: var(--text);
   width: 100%;
+  box-shadow: none !important;
 }
+
 .task-row-btn:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
   border-radius: var(--radius-sm);
 }
+
 .task-row-btn strong {
-  font-size: 13px;
-  color: var(--text);
+  font-size: 13.5px;
+  font-weight: 600;
+  color: #f8fafc;
+}
+
+.task-row-btn .mono-id {
+  font-family: var(--font-mono, 'JetBrains Mono', monospace);
+  font-size: 11px;
+  color: #4b5c74;
 }
 
 .mono-id {
@@ -1222,19 +1270,59 @@ input:focus, select:focus, textarea:focus {
 
 .file-browser--3col {
   display: grid;
-  grid-template-columns: 280px 1fr 340px;
-  gap: 14px;
-  align-items: start;
-  min-height: 520px;
+  grid-template-columns: 280px minmax(0, 1fr) 320px;
+  gap: 16px;
+  align-items: stretch;
+  height: calc(100vh - 120px);
+  min-height: 560px;
 }
 
-.file-browser__tree-col, .file-browser__editor-col, .file-browser__fihrist-col {
+.file-browser__tree-col {
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
   background: var(--card);
   padding: 14px 16px;
-  display: grid;
+  display: flex;
+  flex-direction: column;
   gap: 10px;
+  overflow-y: auto;
+}
+
+.file-browser__editor-col {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--card);
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  overflow: hidden;
+  height: 100%;
+}
+
+.file-browser__fihrist-col {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--card);
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  overflow-y: auto;
+}
+
+.file-editor {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  gap: 8px;
+}
+
+.file-editor__monaco-wrap {
+  flex: 1;
+  min-height: 380px;
+  border-radius: var(--radius-sm);
+  overflow: hidden;
 }
 
 .file-list {

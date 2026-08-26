@@ -3,6 +3,7 @@ import { NAV_ROUTES, type PageId } from "../services/routes.js";
 export interface HealthSummary {
   readonly clickhouse: boolean;
   readonly redis: boolean;
+  readonly api?: boolean | undefined;
 }
 
 export function SideNav({
@@ -184,7 +185,13 @@ export function SideNav({
           <div className="infra-mini-card__head">
             <span className="infra-label">ALTYAPI</span>
             <span className={`infra-status ${isHealthy ? "ok" : "warn"}`}>
-              {isHealthy ? "Sağlıklı" : "Uyarı"}
+              {(() => {
+                const chOk = health?.clickhouse ?? true;
+                const redisOk = health?.redis ?? true;
+                const apiOk = health?.api ?? true;
+                const upCount = (chOk ? 1 : 0) + (redisOk ? 1 : 0) + (apiOk ? 1 : 0);
+                return `${upCount}/3 ayakta`;
+              })()}
             </span>
           </div>
           <div className="infra-mini-card__items">
@@ -195,6 +202,10 @@ export function SideNav({
             <span className="infra-item">
               <i className={`dot ${health?.redis ?? true ? "dot--ok" : "dot--err"}`} />
               Redis
+            </span>
+            <span className="infra-item">
+              <i className={`dot ${health?.api ?? true ? "dot--ok" : "dot--err"}`} />
+              API
             </span>
           </div>
         </div>

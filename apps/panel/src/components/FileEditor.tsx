@@ -25,13 +25,15 @@ export function FileEditor({ projectId, filePath, summary }: {
   return (
     <div className="file-editor">
       {summary !== undefined && <p className="file-editor__summary">{summary}</p>}
-      <Editor
-        height="360px"
-        language={filePath === undefined ? 'plaintext' : languageOf(filePath)}
-        theme="vs-dark"
-        value={value}
-        options={{ readOnly: true, minimap: { enabled: false }, wordWrap: 'on' }}
-      />
+      <div className="file-editor__monaco-wrap">
+        <Editor
+          height="100%"
+          language={filePath === undefined ? 'plaintext' : languageOf(filePath)}
+          theme="vs-dark"
+          value={value}
+          options={{ readOnly: true, minimap: { enabled: false }, wordWrap: 'on' }}
+        />
+      </div>
     </div>
   );
 }

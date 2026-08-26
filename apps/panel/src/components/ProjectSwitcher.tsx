@@ -13,11 +13,11 @@ export function ProjectSwitcher({
   readonly onSelectProject: (projectId: string) => void;
   readonly onNewProject?: (() => void) | undefined;
 }) {
-  const { open, toggleOpen, close, search, setSearch, selectedProject, filteredProjects } =
+  const { open, toggleOpen, close, search, setSearch, selectedProject, filteredProjects, containerRef } =
     useProjectSwitcherViewModel(projects, selectedProjectId);
 
   return (
-    <div className="project-switcher-container">
+    <div className="project-switcher-container" ref={containerRef}>
       <button
         type="button"
         className="project-switcher-btn"

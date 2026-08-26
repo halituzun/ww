@@ -17,10 +17,10 @@ describe("SideNav", () => {
     const overviewBtn = screen.getByText("Genel bakış").closest("button");
     expect(overviewBtn?.getAttribute("aria-current")).toBe("page");
 
-    const tasksBtn = screen.getByText("Görevler").closest("button");
+    const tasksBtn = screen.getByText(/Görevler/).closest("button");
     expect(tasksBtn?.getAttribute("aria-current")).toBeNull();
 
-    fireEvent.click(screen.getByText("Görevler"));
+    fireEvent.click(screen.getByText(/Görevler/));
     expect(onNavigate).toHaveBeenCalledWith("tasks");
   });
 });

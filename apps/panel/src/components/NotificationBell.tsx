@@ -3,11 +3,11 @@ import { useNotificationsViewModel } from "../viewmodels/useNotificationsViewMod
 
 export function NotificationBell({ signals }: { signals: NotificationSignals }) {
   const {
-    notifications, unseen, open, toggleOpen, isSeen, markAllSeen, requestPermission,
+    notifications, unseen, open, toggleOpen, isSeen, markAllSeen, requestPermission, containerRef,
   } = useNotificationsViewModel(signals);
 
   return (
-    <div className="bell">
+    <div className="bell" ref={containerRef}>
       <button
         type="button"
         className="bell__button"

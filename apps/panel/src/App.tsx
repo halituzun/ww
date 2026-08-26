@@ -144,6 +144,7 @@ function AppContent() {
             onAskNarrator={() => void vm.askNarrator()}
             narratorResult={vm.narratorResult ?? undefined}
             onSelectTask={vm.setSelectedTaskId}
+            tasks={vm.tasks}
           />
         );
       case "chat":
