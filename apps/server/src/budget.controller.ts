@@ -22,7 +22,9 @@ export class BudgetController {
 
   @Get()
   async report(@Param('projectId') projectId: string, @Query('days') days?: string) {
-    const id = ProjectId.parse(projectId);
+    const parsedId = ProjectId.safeParse(projectId);
+    if (!parsedId.success) throw new BadRequestException('geçersiz proje kimliği');
+    const id = parsedId.data;
     const window = Days.parse(days ?? 30);
 
     const [project, usage] = await Promise.all([

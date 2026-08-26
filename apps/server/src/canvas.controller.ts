@@ -2,9 +2,9 @@
 //
 // Bu uç dokümanda ADIYLA tanımlıydı ama hiç yazılmamıştı; panel tuvali
 // agent'ları değil görevleri çiziyordu.
-import { Controller, Get, Inject, Param, Req } from '@nestjs/common';
+import { BadRequestException, Controller, Get, Inject, Param, Req } from '@nestjs/common';
 import { checkHeartbeat, listLatestAgents, listLatestTasks } from '@ww/db';
-import type { EntityId } from '@ww/shared';
+import { EntityIdSchema, type EntityId } from '@ww/shared';
 import { parseLocalSession, type LocalSessionRequest } from './auth/local-session.js';
 import { buildCanvasProjection } from './canvas-projection.js';
 import { loadRoutingIndex } from './routing.loader.js';
@@ -17,6 +17,8 @@ export class CanvasController {
   @Get()
   async canvas(@Req() request: LocalSessionRequest, @Param('projectId') projectId: string) {
     parseLocalSession(request);
+    const id = EntityIdSchema.safeParse(projectId);
+    if (!id.success) throw new BadRequestException('geçersiz proje kimliği');
     const [agents, tasks] = await Promise.all([
       listLatestAgents(this.database.ch, projectId as EntityId),
       listLatestTasks(this.database.ch, projectId),

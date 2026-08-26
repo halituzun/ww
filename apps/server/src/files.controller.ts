@@ -1,5 +1,5 @@
 import { readFile, stat } from 'node:fs/promises';
-import { Controller, Get, Inject, Param, Query } from '@nestjs/common';
+import { BadRequestException, Controller, Get, Inject, NotFoundException, Param, Query } from '@nestjs/common';
 import { EntityIdSchema } from '@ww/shared';
 import { listFileIndex } from '@ww/db';
 import { SERVER_DATABASE, type ServerDatabase } from './orchestration.module.js';
@@ -45,11 +45,19 @@ export class FilesController {
       project.slug,
     );
     const absolute = resolveWorkspaceFile(root, filePath);
-    const info = await stat(absolute);
-    if (!info.isFile()) throw new Error('yalnızca dosya okunabilir');
-    if (info.size > MAX_FILE_BYTES) {
-      throw new Error(`dosya çok büyük: ${info.size} > ${MAX_FILE_BYTES}`);
+    try {
+      const info = await stat(absolute);
+      if (!info.isFile()) throw new BadRequestException('yalnızca dosya okunabilir');
+      if (info.size > MAX_FILE_BYTES) {
+        throw new BadRequestException(`dosya çok büyük: ${info.size} > ${MAX_FILE_BYTES}`);
+      }
+      return { path: filePath, size: info.size, content: await readFile(absolute, 'utf8') };
+    } catch (err) {
+      if (err instanceof BadRequestException || err instanceof NotFoundException) throw err;
+      if (err && typeof err === 'object' && (err.code === 'ENOENT' || err.code === 'ENOTDIR')) {
+        throw new NotFoundException(`dosya bulunamadı: ${filePath}`);
+      }
+      throw err;
     }
-    return { path: filePath, size: info.size, content: await readFile(absolute, 'utf8') };
   }
 }

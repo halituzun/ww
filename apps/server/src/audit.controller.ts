@@ -31,7 +31,9 @@ export class AuditController {
 
   @Get()
   async report(@Param('projectId') projectId: string) {
-    const id = ProjectId.parse(projectId);
+    const parsedId = ProjectId.safeParse(projectId);
+    if (!parsedId.success) throw new BadRequestException('geçersiz proje kimliği');
+    const id = parsedId.data;
 
     const [byStatus, escalations, recordFindings] = await Promise.all([
       Promise.all(AUDIT_FINDING_STATUSES.map(async (status) => ({

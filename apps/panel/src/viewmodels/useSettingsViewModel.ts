@@ -64,21 +64,27 @@ export function useSettingsViewModel() {
   }, []);
 
   const validateToken = useCallback(async () => {
-    if (!tokenInput.trim()) {
+    const trimmed = tokenInput.trim();
+    if (!trimmed) {
       setTokenValidationResult("Lütfen bir token girin.");
       return;
     }
     setValidating(true);
     setTokenValidationResult(null);
     try {
-      await new Promise((r) => setTimeout(r, 400));
-      if (tokenInput.length >= 8) {
-        setTokenValidationResult("Token formatı geçerli (Doğrulandı).");
+      const token = trimmed.startsWith("Bearer ") ? trimmed.slice(7).trim() : trimmed;
+      const res = await fetch("http://localhost:4000/projects", {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (res.ok) {
+        setTokenValidationResult("Token doğrulandı: Oturum geçerli.");
+      } else if (res.status === 401) {
+        setTokenValidationResult("Geçersiz token: Yetkilendirme reddedildi (401).");
       } else {
-        setTokenValidationResult("Geçersiz token formatı (Çok kısa).");
+        setTokenValidationResult(`Sunucu yanıtı: ${res.status}`);
       }
-    } catch {
-      setTokenValidationResult("Doğrulama başarısız oldu.");
+    } catch (err) {
+      setTokenValidationResult("Sunucuya ulaşılamadı veya ağ hatası.");
     } finally {
       setValidating(false);
     }
