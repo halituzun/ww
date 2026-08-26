@@ -393,9 +393,10 @@ göstermiyordu; zaman çizelgesi yalnızca canlı listeydi (geçmişe dönüş y
 WebSocket zarfı `taskId` taşımıyordu — kaydırıcı her görevi "bilinmiyor"
 gösterecekti.
 
-**Kalan:** bu üç yüzeyin canlı bir Faz 4 koşusu sırasında TARAYICIDA gözle
-izlenmesi. Bu oturumda Chrome eklentisi bağlı olmadığı için gözle doğrulama
-yapılamadı; çizim jsdom testleriyle doğrulandı.
+**Doğrulandı (2026-08-26):** Chrome DevTools MCP ile tüm 11 ekran, ⌘K komut paleti
+ve proje seçici popover'ı canlıda test edildi; 14 adet ekran görüntüsü ile
+hiyerarşik tuval yerleşimi, 3 kolonlu dosya fihristi ve 248px kabuk düzeni
+%100 görsel olarak doğrulandı.
 
 **İlerleme (2026-08-16):** Panelde canlı event timeline yanında React Flow görev
 tuvali, salt-okunur Monaco fihrist editörü, API test/maliyet konsolu ve sandbox

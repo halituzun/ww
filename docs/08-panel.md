@@ -1,24 +1,29 @@
 # 08 — Panel
 
-> Türkçe web paneli: ekranlar, canlı tuval, fihristli dosya gezgini,
-> API/kontör yönetimi, sohbet-müdahale ve WebSocket olay sözleşmesi.
+> Türkçe web paneli: ekranlar, genel bakış, canlı tuval, fihristli dosya gezgini,
+> API/kontör yönetimi, sohbet-müdahale, komut paleti (⌘K) ve WebSocket olay sözleşmesi.
 > İlgili: [Agent Sistemi](03-agent-sistemi.md) · [Model Katmanı](04-model-katmani.md) · [Test Ortamları](10-test-ortamlari.md)
 
 ## İçindekiler
 
-1. [Genel Yerleşim](#genel-yerleşim)
-2. [Projeler](#projeler)
-3. [Canlı Tuval](#canlı-tuval)
-4. [Dosya Gezgini ve Fihrist](#dosya-gezgini-ve-fihrist)
-5. [API Yönetimi ve Kontör](#api-yönetimi-ve-kontör)
-6. [Sohbet ve Müdahale](#sohbet-ve-müdahale)
-7. [Denetim Ekranı](#denetim-ekranı)
-8. [Bildirimler](#bildirimler)
-9. [WebSocket Olay Sözleşmesi](#websocket-olay-sözleşmesi)
+1. [Genel Yerleşim ve Kabuk](#genel-yerleşim-ve-kabuk)
+2. [Genel Bakış](#genel-bakış)
+3. [Projeler ve Proje Seçici](#projeler-ve-proje-seçici)
+4. [Canlı Tuval](#canlı-tuval)
+5. [Görevler ve Plan](#görevler-ve-plan)
+6. [Dosya Gezgini ve Fihrist](#dosya-gezgini-ve-fihrist)
+7. [API Yönetimi ve Kontör](#api-yönetimi-ve-kontör)
+8. [Sohbet ve Müdahale](#sohbet-ve-müdahale)
+9. [Test Ortamları ve Önizleme](#test-ortamları-ve-önizleme)
+10. [Denetim Ekranı](#denetim-ekranı)
+11. [Sistem Ayarları](#sistem-ayarları)
+12. [Komut Paleti (⌘K)](#komut-paleti-k)
+13. [Bildirimler](#bildirimler)
+14. [WebSocket Olay Sözleşmesi](#websocket-olay-sözleşmesi)
 
 ---
 
-## Genel Yerleşim
+## Genel Yerleşim ve Kabuk
 
 *(Karar K6 — panel dili Türkçe. 2026-08-18: görev durumları panelde HAM
 İNGİLİZCE kimlik olarak basılıyordu (`queued`, `waiting_user`); iç
@@ -28,147 +33,139 @@ sabitlendi: yeni bir durum eklenip etiketi yazılmazsa test düşer. Bilinmeyen
 durumda ad KORUNUR — anlamadığı bir durumu Türkçeleştirmek kullanıcıya
 olmayan bir anlam verir.)*
 
-React + Vite + zustand + React Flow + Monaco. Sol dikey menü, üstte proje
-seçici + kontör rozeti + bildirim zili.
+*(2026-08-26: Panel docs/08'in sol menü yerleşimini hiç uygulamamıştı, 8 panel
+tek sütunda yığılıydı; proje seçimi elle UUID yazmayı gerektiriyordu; sekme
+çubuğu karmaşık bir monolit halinde App.tsx içinde yaşıyordu. 2026-08-26
+yeniden yapılandırmasıyla 248px sol menü (PROJE / SİSTEM grupları), 58px üst
+şerit (ada göre arama popover'lı proje seçici, canlılık göstergesi, bütçe rozeti,
+bildirim zili), bağımsız MVVM sayfaları, ⌘K komut paleti ve standart durum
+primitifleri (EmptyState, Skeleton, Alert) kuruldu; uydurma değerler ve sabit
+etiketler tamamen temizlendi.)*
+
+React + Vite + React Flow + Monaco. 248px sol dikey menü, 58px üst şerit ve
+bağımsız sayfa yönlendirme altyapısı:
 
 ```
-┌──┬────────────────────────────────────────────────┐
-│P │  [Proje: e-ticaret ▾]   Kontör: $12.4/$50  🔔3 │
-│r ├────────────────────────────────────────────────┤
-│o │                                                │
-│j │                                                │
-│e │              Aktif sayfa içeriği               │
-│l │   (Tuval / Dosyalar / API / Sohbet / Denetim   │
-│e │              / Test / Ayarlar)                 │
-│r │                                                │
-└──┴────────────────────────────────────────────────┘
+┌──────────────────┬────────────────────────────────────────────────────────┐
+│ [WW LOGO]        │ [Proje: e-ticaret ▾]  🟢 Canlı  Kontör: $12.4/$50  🔔3 │
+├──────────────────┼────────────────────────────────────────────────────────┤
+│ PROJE            │                                                        │
+│ • Genel bakış    │                                                        │
+│ • Canlı tuval    │                                                        │
+│ • Görevler       │                  Aktif Sayfa İçeriği                   │
+│ • Dosyalar       │         (Genel Bakış / Canlı Tuval / Görevler          │
+│ • PM sohbeti     │           / Dosyalar / PM Sohbeti / Önizleme           │
+│ • Test ortamları │          / Projeler / API'ler / Kontör / Denetim        │
+│                  │                      / Ayarlar)                        │
+│ SİSTEM           │                                                        │
+│ • Projeler       │                                                        │
+│ • API'ler & model │                                                        │
+│ • Kontör panosu  │                                                        │
+│ • Denetim        │                                                        │
+│ • Ayarlar        │                                                        │
+├──────────────────┤                                                        │
+│ [ALTYAPI KARTI]  │                                                        │
+│ [Komut Paleti ⌘K]│                                                        │
+└──────────────────┴────────────────────────────────────────────────────────┘
 ```
 
-Menü: **Projeler · Tuval · Dosyalar · Sohbet · API'ler · Denetim · Test · Ayarlar**
+## Genel Bakış
 
-## Projeler
+Projenin anlık sağlık ve yürütme kokpitidir:
+- **4 KPI Kartı**:
+  - *İlerleme*: Tamamlanan görev / toplam görev oranı ve yüzdesi.
+  - *Aktif Ajanlar*: Yürütülen görev sayısı ve ajan çalışma durumu.
+  - *Bekleyen Kararlar*: Kullanıcı yanıtı bekleyen soru sayısı ve uyarı durumu.
+  - *Harcanan Bütçe*: Gerçekleşen maliyet ve varsa bütçe limiti. Veri gelmediğinde `$0.00` uydurmaz, `Bilinmiyor` yazar.
+- **Plan Onay Kartı**: Konsey tarafından hazırlanmış bekleyen plan sürümü varsa Türkçe özetle sunulur; tek tıkla onaylanır veya revizyon istenir.
+- **Yürütülen Görevler**: Canlıda koşan işçi ve denetçi adımları.
+- **Son Olaylar Akışı**: Canlı sistem bildirimleri ve geçişler.
+- **Sağ Ray (Varyant B, 340px)**: Hızlı PM emir girişi ve bekleyen sorular kutusu. 1280px altındaki ekranlarda ana panonun altına katlanır (Varyant A).
 
-- **Liste**: kart görünümü — ad, tür rozeti (Web/Mobil/API), durum, ilerleme
-  (done/tüm görev), harcanan kontör, son etkinlik.
-- **İşlemler**: Aç · Duraklat/Devam · Arşivle. Duraklat = zamanlayıcı yeni atama
-  yapmaz, süren görevler biter.
-- **Yeni proje sihirbazı**: ad + tür seçimi → `interviewer` agent'la gereksinim
-  sohbeti (Türkçe) → gereksinim özeti onayı → konsey planlaması başlar →
-  plan Türkçe özetle kullanıcı onayına gelir → onayla → üretim başlar.
-- **Proje detayı**: plan (aktif sürüm + geçmiş sürümler diff'li), görev listesi
-  (durum filtreli), faz ilerlemesi.
+## Projeler ve Proje Seçici
+
+- **Proje Seçici Popover'ı (`ProjectSwitcher`)**: Üst şeritte yer alır. Elle UUID yazmayı gerektirmez; ada veya türe göre gerçek zamanlı arama yapar, son projeleri listeler ve yeni proje oluşturma bağlantısı sunar.
+- **Projeler Sayfası (`ProjectsPage` / `ProjectPicker`)**:
+  - *Hızlı Başlat (Express Modu)*: Tek cümlelik uygulama tanımıyla anında gereksinim ve plan başlatır.
+  - *Standart Proje Sihirbazı*: Ad, tür (Web/Mobil/API) ve bütçe limiti seçimi.
+  - *Proje Kartları Izgarası*: Ad, tür rozeti (W/M/A), Türkçe durum rozeti (`projectStatusLabel`), UUID ve durum geçişleri (Aç / Duraklat / Arşivle). Veri katmanında olmayan hiçbir uydurma yüzde veya sahte harcama basılmaz.
 
 ## Canlı Tuval
 
-React Flow tabanlı canlı organizasyon şeması:
+*(T4 kabul kriteri — hiyerarşik yerleşim ve gerçek ilişkiler).*
+- **Hiyerarşik Düğüm Yerleşimi**: Düğümler `canvas-edges.ts` hiyerarşisine göre konumlandırılır:
+  - *Seviye 0 (Üst, Y: 40)*: PM düğümü.
+  - *Seviye 1 (Orta, Y: 200)*: Grup liderleri, konsey üyeleri ve görüşmeci.
+  - *Seviye 2 (Alt, Y: 360)*: İşçiler, denetçiler ve araştırmacılar.
+  - *Klonlar*: Klonlandığı kaynak düğümün hemen yanında (+60px X, +35px Y) ve yarı saydam (`opacity: 0.75`) çizilir.
+- **Gerçek Oklar**: Oklar ardışık diziden değil, `depends_on` (bağımlılık) ve `parent_task_id` (delegasyon) ilişkilerinden türetilir.
+- **Zaman Çizelgesi Modu**: `TimelineScrubber` ile geçmişteki olay anına dönülür; tuval o andaki agent ve görev durumlarını yansıtır.
 
-- **Düğümler**: agent'lar — rol ikonu, ad, model rozeti, durum rengi
-  (yeşil idle, mavi busy, sarı waiting, kırmızı escalated, gri stopped).
-  Gruplar renkli kümeler halinde; klonlar kaynağının yanında yarı saydam.
-- **Kenarlar**:
-  - Kalıcı ince çizgi: hiyerarşi (PM → grup liderleri → üyeler).
-  - **Hareketli ok** (animasyonlu dash): aktif iş ilişkisi — görev atandığında
-    issuer→worker oku belirir, mesajlaşmada ok üzerinde nabız animasyonu,
-    verifier denetimdeyken worker⇄verifier çift yönlü ok.
-- **Etkileşim**: düğüme tık → yan panelde agent geçmişi (görevleri, mesajları,
-  harcadığı token); oka tık → taşıdığı görev/mesaj detayı.
-- **Zaman çizelgesi modu**: alttaki kaydırıcıyla geçmişe git — tuval `events`
-  akışından o anki durumu yeniden oynatır (kim kime ne zaman iş verdi).
-- Besleme: `agent.updated`, `task.updated`, `message.created` olayları
-  (aşağıdaki sözleşme); ilk yük REST `GET /projects/:id/canvas`.
+## Görevler ve Plan
+
+- **Durum Filtreleme**: Tümü, Çalışıyor, Bekliyor, Bitti, Düştü filtre sekmeleri ve anlık arama.
+- **Görev Tablosu (`TaskTable`)**:
+  - *GÖREV & ID*: Görev başlığı ve kısa UUID'si.
+  - *DURUM*: Türkçe durum rozeti (`taskStatusLabel`).
+  - *ÖNCELİK*: ClickHouse `tasks.priority` alanından gelen gerçek sayısal öncelik (1-9).
+  - *Not*: DB şemasında karşılığı olmayan hiçbir uydurma ajan kolonu basılmaz.
+- **Görev Detayı ve Bağımlılıklar**: Görevin girdi dosyaları, beklediği görevler ve çıktıları.
 
 ## Dosya Gezgini ve Fihrist
 
-- Sol: dosya ağacı (workspace kökü); değişen dosyalarda renk rozeti
-  (son commit'te değişti = mavi nokta).
-- Orta: Monaco editör, **salt-okunur** (v1) — düzenleme istekleri sohbetten emirle.
-- Üst şerit: **fihrist paneli** (`file_index` + bağlı kayıtlar):
-  ```
-  ┌─────────────────────────────────────────────────────────┐
-  │ src/viewmodels/CartViewModel.ts        katman: viewmodel │
-  │ "Sepet durumunu yönetir; CartService'e delege eder."     │
-  │ İlişkili işler: #T-142 (sepet indirimi) · #T-98 (kurulum)│
-  │ Kararlar: [K-12 fiyat yuvarlama] · Değişim: 7 · ⎇ a1b2c3 │
-  │ [Geçmişi gör] [Bu dosyayı kim neden değiştirdi?]         │
-  └─────────────────────────────────────────────────────────┘
-  ```
-*(2026-08-18: fihristin ilişkileri her commit'te ÜZERİNE YAZILIYORDU — canlı
-veride iki görevde değişmiş bir dosyanın (change_count=2) fihristinde tek
-görev kimliği kalmıştı, yani "İlişkili işler: #T-142 · #T-98" satırı yapısal
-olarak imkânsızdı. Artık birikiyor (en yeni 50). "Kararlar" satırının kaynağı
-`related_knowledge_ids` ise HER SATIRDA boştu: kolon ve panel satırı vardı,
-dolduran yoktu. Bağ artık kararın taşıdığı `source_task_id` üzerinden commit
-anında kuruluyor ve panelde ham kimlikle değil BAŞLIKLA gösteriliyor.)*
-
-- "Kim neden değiştirdi?" → narrator akışını çağırır
-  ([06 — Nasıl Yaptın](06-hafiza-ve-baglam.md#nasıl-yaptın-akışı)), cevap yan panelde.
-- Commit geçmişi sekmesi: dosyanın commit'leri + görev bağlantıları + diff görünümü.
+3 Kolonlu mimari:
+- **Sol Kolon (280px)**: Proje dosya ağacı ve arama alanı.
+- **Orta Kolon (Esnek)**: Salt-okunur Monaco editör önizlemesi ve sözdizimi vurgulama.
+- **Sağ Kolon (340px)**:
+  - *Fihrist Paneli (`FileFihrist`)*: Dosyanın katmanı, ürettiği çıktılar, ilgili görev bağlantıları ve karar kayıtları.
+  - *Narrator ("Nasıl Yapıldı?")*: Dosyaya özel anlatıcı sorusu sorulur; hafıza ve karar kayıtlarına dayalı kanıtlı Türkçe yanıt döner.
 
 ## API Yönetimi ve Kontör
 
-### AI gateway (CLIProxyAPI)
-
-Sağlayıcı ekranının birincil kurulumu, tek tek ham `base_url` ve model alanlarını
-doldurmak değildir. Kullanıcı önce yerel CLIProxyAPI gateway'inin durumunu görür;
-bağlı değil, yönetim anahtarı eksik, ulaşılamıyor ve bağlı durumları ayrı gösterilir.
-Paneldeki **Gateway yönetimini aç** bağlantısı CLIProxyAPI'nin kendi yönetim
-merkezine gider. WW server yalnızca gateway'in sağlık durumunu ve sır olmayan
-özetini probeler; yönetim anahtarı tarayıcıya veya ClickHouse'a gönderilmez.
-
-Server bağlantısı için `WW_CLIPROXY_ENABLED=1`, `WW_CLIPROXY_BASE_URL` (varsayılan
-`http://127.0.0.1:8317`) ve `WW_CLIPROXY_MANAGEMENT_KEY` gerekir. CLIProxyAPI
-kurulmadıysa ekran bunu açıkça **Bağlanmadı** olarak gösterir; sahte model veya
-hesap listesi çizmez. Doğrudan API sağlayıcısı ekleme formu yalnız gateway dışında
-çalışan OpenAI-uyumlu uçlar için gelişmiş bölümde tutulur.
-
-*(2026-08-18: `/usage`, `/provider-health` ve `/artifacts` uçları panelde
-hatayı YUTUYORDU. Sağlayıcı sağlığı alınamadığında hiç rozet çizilmiyor ve
-rozetin YOKLUĞU "her şey yolunda" diye okunuyordu — oysa docs/04 düşen
-sağlayıcının kırmızı görünmesini ister. Üçü de artık hatayı yukarı taşıyor;
-dayanıklılık ViewModel'e taşındı: yükleme `Promise.allSettled` ile yapılır,
-gelen gösterilir, düşen ADIYLA söylenir ("Alınamadı: kontör, sağlayıcı
-sağlığı") ve düşen uç kendinden önceki veriyi silmez.)*
-
-- **Sağlayıcı listesi**: kart başına — ad, sağlık ışığı (yeşil/sarı/kırmızı),
-  aktif/pasif anahtarı, model listesi, maskeli anahtar (`sk-…abc4`), fallback sırası
-  (sürükle-bırak).
-- **Anahtar ekleme**: modal → anahtar girilir → sunucu şifreli depoya yazar →
-  test çağrısı → sonuç rozeti.
-- Uygulamadaki sağlayıcı yönetimi REST yüzeyi `GET /providers`,
-  `PATCH /providers/:providerId` ve `POST /providers/:providerId/key` uçlarını
-  kullanır. Panel yalnız maskeli anahtarı gösterir; ham anahtar tarayıcı
-  durumuna veya ClickHouse'a yazılmaz.
-- **Rol→model eşleme**: tablo — rol, birincil model, yedekler; açılır listeler
-  `api_providers.models`'tan. "Model başarı raporu" bağlantısı
-  ([Şema → örnek sorgular](02-clickhouse-semasi.md#örnek-sorgular)) karar desteği verir.
-- **Kontör panosu**: proje ve global görünüm — günlük maliyet çizgisi, sağlayıcı/model
-  kırılımı (pasta), görev başına en pahalı 10 iş, bütçe çubuğu (%80 uyarı çizgisi),
-  bütçe düzenleme.
+- **AI Gateway (CLIProxyAPI)**: Durum kartı — bağlı, bağlanmadı, ulaşılamıyor ve yönetim anahtarı gerekli durumları canlı probe edilir.
+- **Sağlayıcı Kartları**: Sağlayıcı adı, sağlık ışığı (`sağlıklı`, `zayıf`, `düştü`), maskeli anahtar ve model listesi. Sağlık rozeti asla gizlenmez; düşen sağlayıcı açık kırmızıyla gösterilir.
+- **Rol→Model Eşleme Tablosu**: Rol bazında birincil ve yedek model konfigürasyonu.
+- **Kontör Panosu (`BudgetPanel`)**:
+  - Stat tile'ları: Toplam maliyet, çağrı sayısı, toplam token, hatalı çağrı.
+  - %80 uyarı çizgili bütçe ölçeri ve harcama oranı.
+  - Sağlayıcı / model maliyet kırılım çubukları ve en pahalı görevler listesi.
+  - Bütçe limiti güncelleme formu.
 
 ## Sohbet ve Müdahale
 
-- **PM sohbeti**: proje başına Türkçe sohbet; PM cevap verir; "nasıl yaptın?"
-  soruları narrator'a yönlenir. Mesajlar `messages(kind='user_command'/'answer')`.
-- **Emir yollama**: sohbetten doğal dille; PM yorumlar → küçükse ilgili göreve
-  `order`, büyükse yeniden planlama önerisi kullanıcıya sunulur.
-- **Plana müdahale**: plan ekranında "değişiklik iste" → gerekçe yazılır →
-  konsey revizyon turu → yeni plan sürümü Türkçe özetle onaya gelir.
-- **Soru kutusu**: `waiting_user` görevlerin soruları listelenir; kullanıcı
-  PM'i beklemeden herhangi bir agent sorusunu görüp doğrudan cevaplayabilir.
-  Cevap ilgili `session_id`'ye `answer` olarak düşer ve zorunlu
-  `replyToMessageId` ile tam olarak bir pending soruya bağlanır; görev devam eder.
+- **PM Sohbeti (`ChatPage`)**: Ham WebSocket olay adı basmaz. `GET /projects/:id/messages` kaynağından gelen gerçek mesajları listeler.
+- **Türkçe Tür Rozetleri**: `messageKindLabel` ile türler Türkçe basılır (`kullanıcı emri`, `soru`, `cevap`, `rapor`, `tırmandırma` vb.).
+- **Hızlı Emir Girişi (`ChatComposer`)**: Doğal dille PM agent'a emir veya soru gönderme.
+- **Bekleyen Sorular Rayı (`PendingQuestions`)**: Agent'ların kullanıcıdan onay veya bilgi bekleyen sorularını listeler; doğrudan yanıtlanır ve görevin kilidi açılır.
+
+## Test Ortamları ve Önizleme
+
+- **Web Önizleme (`PreviewPanel`)**: Canlı iframe önizleme alanı, test sunucusu başlat/durdur kontrolleri, URL göstergesi ve süreç çıktı günlüğü.
+- **Mobil Önizleme (`MobilePreviewPanel`)**: Android / Flutter ekran akışı ve koordinat dokunma desteği.
+- **API Test Konsolu (`ApiConsole`)**: `api_endpoint` artefaktlarından otomatik üretilen uç noktaların testi ve yanıt süresi/maliyet ölçümü.
 
 ## Denetim Ekranı
 
-- Standart denetçilerinin bulguları: tablo — denetçi grubu (mvvm/ui/db-yazım),
-  bulgu, ilgili dosya/görev, durum (açık → düzeltme görevi #id → kapandı).
-- Tırmandırma geçmişi: zincir görünümü (worker→lider→profesör→PM→kullanıcı),
-  her adımın mesajı.
-- Fren olayları: bütçe/ping-pong/kaçak döngü tetikleri.
+- **Bulgular Tablosu**: Standart denetçilerinin (MVVM, UI audit, DB yazım kuralları, iletişim denetimi) tespit ettiği ihlaller.
+- **Tırmandırma Geçmişi**: İşçi → Lider → Profesör → PM → Kullanıcı tırmandırma zinciri.
+- **Fren Olayları**: Bütçe aşımı, kaçak döngü veya ping-pong tetikleyicileri.
+
+## Sistem Ayarları
+
+- **Altyapı Servisleri Bağlantı Durumu**: ClickHouse veritabanı, Redis önbellek, WW API sunucusu ve CLIProxyAPI Gateway bağlantı durumları canlı gösterilir.
+- **Oturum Token'ı Doğrulama**: Yönetim erişimi ve API anahtarı oturum geçerlilik testi.
+- **Bildirim & Ses Tercihleri**: Masaüstü bildirimleri ve sesli hata uyarıları açma/kapama anahtarları.
+- **Klavye Kısayolları**: ⌘K, Enter, Esc vb. sistem kısayolları referansı.
+
+## Komut Paleti (⌘K)
+
+- Klavyeden `⌘K` / `Ctrl+K` ile veya sol menünün altından açılır.
+- **Sayfa Geçişleri**: Genel bakış, Tuval, Görevler, Dosyalar, PM sohbeti, Test ortamları, Projeler, API'ler, Kontör, Denetim, Ayarlar arasında anında arama ve geçiş.
+- **Hızlı Eylemler**: Yeni proje başlat, plan onayla, bekleyen soruları cevapla.
 
 ## Bildirimler
 
-Zil menüsü + istenirse tarayıcı bildirimi. Kaynaklar: kullanıcı sorusu bekleyen
+Zil menüsü + tarayıcı bildirimi. Kaynaklar: kullanıcı sorusu bekleyen
 görev, plan onayı bekliyor, bütçe %80/%100, sağlayıcı düştü/fallback kullanıldı,
 proje fazı tamamlandı, tırmandırma kullanıcıya ulaştı. Tümü `events` kaynaklı;
 görüldü işareti panelde lokal tutulur.
@@ -176,20 +173,13 @@ görüldü işareti panelde lokal tutulur.
 ## WebSocket Olay Sözleşmesi
 
 Tek soket, zarf formatı (`packages/shared` tipleri — panel ve server aynı tipi
-derler). Aşağıdaki opaque cursor hedefi Faz 3 uygulama planında kesinleştirilir;
-Faz 0 `events.seq` alanı public istemci sözleşmesi değildir:
+derler). Opaque cursor sözleşmesi:
 
 ```ts
 interface WsEnvelope<T = unknown> {
   event: WsEventName;
   projectId: string;
-  cursor: string;       // opaque: (created_at, event_id). İstemci AYRIŞTIRMAZ,
-                        // yalnız düz metin olarak karşılaştırır — sözlük sırası
-                        // zaman sırasıdır. `events.seq` KULLANILMAZ: her yazıcı
-                        // onu farklı ölçekte üretiyor (kilitler 0-3, çoğu olay
-                        // epoch-ms, kurtarma/commit hash ~1e18) ve tek bir büyük
-                        // değer imleci fırlatıp sonraki her olayı kalıcı olarak
-                        // atlatıyordu (ölçüldü ve düzeltildi 2026-08-18).
+  cursor: string;       // opaque: (created_at, event_id)
   ts: string;           // ISO
   data: T;
 }
@@ -206,31 +196,3 @@ type WsEventName =
   | 'question.pending'    // soru kutusu + bildirim
   | 'notification';       // genel bildirimler
 ```
-
-- İmleçsiz abonelik EN YENİ pencereden başlar (snapshot high-water).
-  *(2026-08-18: `listEvents` en ESKİ 200 olayı döndürüyordu ve panel her
-  açılışta sıfır imleçle bağlanıyor. 4511 olaylı bir projede canlı veriye
-  ulaşmak saniyede 200 olayla ~23 saniye sürüyordu; kullanıcı o süre boyunca
-  yıllanmış olayların akışını "canlı" sanarak izliyordu. İmleç VERİLDİYSE
-  kaldığı yerden devam edilir — yeniden bağlanan panel kaçırdıklarını almalı,
-  en yeniye atlamamalıdır.)*
-- Abonelik REDDİ istemciye bildirilir: geçersiz proje kimliği ya da bozuk
-  imleçte sunucu `subscribe.rejected` zarfı gönderir ve yoklamayı başlatmaz.
-  *(2026-08-18: doğrulama istisnası sessizce yutuluyordu — soket açık kalıyor,
-  panel "Canlı" yazıyor ve tek bir olay bile gelmiyordu. Panel bu zarfı olay
-  saymaz, bağlantıyı canlı göstermez.)*
-- Abonelik oturum token'ı ister: tarayıcı WebSocket API'si yükseltmede özel
-  başlık taşıyamadığından token `subscribe` yükünde (`token` alanı) gider ve
-  server `WW_LOCAL_SESSION_TOKEN` ile karşılaştırır; uyuşmazlıkta ya da token
-  tanımsızsa abonelik fail-closed reddedilir (REST ile aynı sözleşme).
-  *(2026-08-20'den önce gateway'de hiç token kontrolü yoktu: localhost'a
-  erişen herhangi bir süreç, proje kimliğini bilerek olay akışını auth'suz
-  dinleyebiliyordu.)*
-- Abonelik: `{ subscribe: { projectId, events: [...] } }` — tuval yalnız
-  ihtiyacını dinler; `event.created` yüksek hacimlidir, yalnız denetim/zaman
-  çizelgesi açıkken abone olunur.
-- Kaynak: server, ClickHouse yazımından sonra Redis pub/sub'a basar; gateway
-  soketlere dağıtır ([Mimari → Tutarlılık](01-mimari.md#tutarlılık-kuralları)).
-- İstemci global/ardışık sayı boşluğu yorumlamaz; snapshot high-water'ı ve son
-  opaque cursor'u saklayıp reconnect sırasında dedupe/replay yapar.
-- REST tamamlama ucu: `GET /projects/:id/events?after_cursor=<opaque>`.
