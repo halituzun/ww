@@ -1,10 +1,6 @@
 // Proje seçim ve oluşturma ekranı — SALT GÖRÜNÜM (docs/08 → projeler).
-//
-// NEDEN AYRI: App.tsx'te 1337 karakterlik tek satırdı; içinde üç form alanı,
-// bir buton, bir durum mesajı ve proje listesi vardı. Okunamaz bir satır,
-// uzun bir dosyadan iyi değildir.
-import { projectStatusLabel } from '../services/labels.js';
-import type { Project } from '../services/projects.js';
+import { projectStatusLabel } from "../services/labels.js";
+import type { Project } from "../services/projects.js";
 
 export interface ProjectDraft {
   readonly name: string;
@@ -18,12 +14,9 @@ export function ProjectPicker({
 }: {
   readonly projects: readonly Project[];
   readonly draft: ProjectDraft;
-  /** Yalnız DEĞİŞEN alan bildirilir; birleştirme çağıranın işidir. */
   readonly onDraft: (patch: Partial<ProjectDraft>) => void;
   readonly onCreate: () => void;
   readonly statusMessage: string;
-  /** Liste ALINAMADI. Boş listeden ayrı tutulur: ikisini karıştırmak
-   * kullanıcıya projelerini kaybettiğini düşündürür. */
   readonly loadError?: string | undefined;
   readonly onSelect: (projectId: string) => void;
   readonly expressPrompt?: string | undefined;
@@ -34,38 +27,49 @@ export function ProjectPicker({
 }) {
   return (
     <section className="workspace-card project-picker">
-      <h2>Projeler</h2>
+      <div className="section-header">
+        <h2>Projeler</h2>
+        <span className="badge badge--neutral">{projects.length} Proje</span>
+      </div>
 
       {onExpressCreate && onExpressPrompt ? (
-        <div className="express-create" style={{ marginBottom: '1.5rem', padding: '1rem', background: 'rgba(255,255,255,0.03)', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.1)' }}>
-          <h3 style={{ margin: '0 0 0.5rem 0', fontSize: '1rem' }}>⚡ Tek Cümleyle Hızlı Başlat (Express Modu)</h3>
-          <p className="hint" style={{ margin: '0 0 0.75rem 0' }}>Ne tür bir uygulama istediğinizi tek cümleyle yazın, sistem gereksinimleri ve planı anında hazırlasın.</p>
-          <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+        <div className="express-create">
+          <div className="express-create__head">
+            <span className="express-badge">⚡ HIZLI BAŞLAT</span>
+            <h3>Tek Cümleyle Hızlı Başlat (Express Modu)</h3>
+          </div>
+          <p className="hint">Ne tür bir uygulama istediğinizi tek cümleyle yazın, sistem gereksinimleri ve planı anında hazırlasın.</p>
+          <div className="express-create__row">
             <input
               aria-label="Uygulama açıklaması"
+              className="express-input express-input--prompt"
               placeholder="Örn: Modern karanlık temalı bir yapılacaklar (Todo) listesi web uygulaması"
-              value={expressPrompt ?? ''}
+              value={expressPrompt ?? ""}
               onChange={(event) => onExpressPrompt(event.target.value)}
               onKeyDown={(event) => {
-                if (event.key === 'Enter' && expressPrompt && expressPrompt.trim() !== '') {
+                if (event.key === "Enter" && expressPrompt && expressPrompt.trim() !== "") {
                   onExpressCreate();
                 }
               }}
-              style={{ flex: '1 1 300px' }}
             />
             <input
               aria-label="Proje adı (isteğe bağlı)"
+              className="express-input express-input--name"
               placeholder="Proje adı (isteğe bağlı)"
-              value={expressName ?? ''}
+              value={expressName ?? ""}
               onChange={(event) => onExpressName ? onExpressName(event.target.value) : undefined}
               onKeyDown={(event) => {
-                if (event.key === 'Enter' && expressPrompt && expressPrompt.trim() !== '') {
+                if (event.key === "Enter" && expressPrompt && expressPrompt.trim() !== "") {
                   onExpressCreate();
                 }
               }}
-              style={{ width: '180px' }}
             />
-            <button type="button" onClick={onExpressCreate} disabled={!expressPrompt || expressPrompt.trim() === ''}>
+            <button
+              type="button"
+              className="btn btn--primary btn--express"
+              onClick={onExpressCreate}
+              disabled={!expressPrompt || expressPrompt.trim() === ""}
+            >
               Hızlı Başlat
             </button>
           </div>
@@ -97,22 +101,24 @@ export function ProjectPicker({
           value={draft.budget}
           onChange={(event) => onDraft({ budget: event.target.value })}
         />
-        <button type="button" onClick={onCreate}>Proje oluştur</button>
+        <button type="button" className="btn btn--secondary" onClick={onCreate}>Proje oluştur</button>
       </div>
 
-      {statusMessage === '' ? null : <small className="hint">{statusMessage}</small>}
+      {statusMessage === "" ? null : <small className="hint hint--status">{statusMessage}</small>}
 
-      {/* Boş durum AÇIKÇA söylenir (docs/09 ui_audit): boş liste kullanıcıya
-          "yükleniyor mu, yok mu?" sorusunu bırakır. */}
-      {loadError !== undefined && loadError !== '' ? (
+      {loadError !== undefined && loadError !== "" ? (
         <p className="audit-error" role="alert">{loadError}</p>
       ) : projects.length === 0 ? (
         <p className="hint">Henüz proje yok — yukarıdan ilkini oluşturun.</p>
       ) : (
-        <ul className="task-list">
+        <ul className="task-list project-list">
           {projects.map((project) => (
-            <li key={project.project_id} onClick={() => onSelect(project.project_id)}>
-              <div>
+            <li
+              key={project.project_id}
+              className="project-item"
+              onClick={() => onSelect(project.project_id)}
+            >
+              <div className="project-item__info">
                 <strong>{project.name}</strong>
                 <small>{project.type} · {project.project_id}</small>
               </div>
