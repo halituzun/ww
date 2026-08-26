@@ -1,8 +1,7 @@
 // useTaskFilterViewModel — Görevler sayfası filtre + arama VM.
 // Kural: task-status.ts'deki RUNNING_TASK_STATUSES ile hizalıdır.
-// "running" ve "active" görev durumu DEĞİLDİR (proje durumudur).
-// URL sync: filtre ve arama ?filter=running&q=... olarak taşınır; yenilemede korunur.
-// (2026-08-26) URL sync eklendi, filtre durumları task-status.ts'e hizalandı.
+// URL sync: filtre ve arama hash query param (#/tasks?filter=running&q=...) olarak taşınır.
+// Tek state objesi {filter, search} — yan-etki okuma anti-pattern'i olmadan çalışır.
 import { useState, useMemo, useCallback, useEffect } from "react";
 import { RUNNING_TASK_STATUSES } from "../services/task-status.js";
 import type { Task } from "../services/projects.js";
@@ -13,22 +12,50 @@ const VALID_FILTERS: ReadonlySet<string> = new Set<TaskStatusFilter>([
   "all", "running", "waiting", "done", "failed",
 ]);
 
-function readSearchParam(key: string): string {
-  if (typeof window === "undefined") return "";
-  return new URLSearchParams(window.location.search).get(key) ?? "";
+interface FilterState {
+  filter: TaskStatusFilter;
+  search: string;
 }
 
-function pushSearchParam(filter: TaskStatusFilter, search: string) {
+function getQueryParams(): URLSearchParams {
+  if (typeof window === "undefined") return new URLSearchParams();
+  const hash = window.location.hash || "";
+  const qIndex = hash.indexOf("?");
+  if (qIndex !== -1) {
+    return new URLSearchParams(hash.slice(qIndex + 1));
+  }
+  return new URLSearchParams(window.location.search);
+}
+
+function readUrlState(): FilterState {
+  if (typeof window === "undefined") return { filter: "all", search: "" };
+  const params = getQueryParams();
+  const f = params.get("filter") ?? "all";
+  return {
+    filter: VALID_FILTERS.has(f) ? (f as TaskStatusFilter) : "all",
+    search: params.get("q") ?? "",
+  };
+}
+
+function pushUrlState(filter: TaskStatusFilter, search: string) {
   if (typeof window === "undefined") return;
-  const params = new URLSearchParams(window.location.search);
-  if (filter === "all") { params.delete("filter"); } else { params.set("filter", filter); }
-  if (search.trim() === "") { params.delete("q"); } else { params.set("q", search.trim()); }
+  const hash = window.location.hash || "";
+  const [pathPart] = hash.split("?");
+  const baseRoute = pathPart && pathPart !== "" ? pathPart : "#/tasks";
+
+  const params = new URLSearchParams();
+  if (filter !== "all") {
+    params.set("filter", filter);
+  }
+  if (search.trim() !== "") {
+    params.set("q", search.trim());
+  }
+
   const qs = params.toString();
-  window.history.replaceState(
-    null, "",
-    qs ? `${window.location.pathname}?${qs}${window.location.hash}`
-       : `${window.location.pathname}${window.location.hash}`,
-  );
+  const newHash = qs ? `${baseRoute}?${qs}` : baseRoute;
+  if (window.location.hash !== newHash) {
+    window.history.replaceState(null, "", `${window.location.pathname}${newHash}`);
+  }
 }
 
 function matchFilter(task: Task, filter: TaskStatusFilter): boolean {
@@ -53,46 +80,46 @@ export interface TaskFilterState {
 }
 
 export function useTaskFilterViewModel(tasks: readonly Task[]): TaskFilterState {
-  // URL'den ilk değeri oku
-  const initialFilter = (): TaskStatusFilter => {
-    const v = readSearchParam("filter");
-    return VALID_FILTERS.has(v) ? (v as TaskStatusFilter) : "all";
-  };
+  const [state, setState] = useState<FilterState>(readUrlState);
 
-  const [filter, _setFilter] = useState<TaskStatusFilter>(initialFilter);
-  const [search, _setSearch] = useState<string>(() => readSearchParam("q"));
-
-  // URL → state senkronu: hash router sayfa değişiminde de çalışır
   useEffect(() => {
-    function sync() {
-      const f = readSearchParam("filter");
-      _setFilter(VALID_FILTERS.has(f) ? (f as TaskStatusFilter) : "all");
-      _setSearch(readSearchParam("q"));
+    function onPopOrHash() {
+      setState(readUrlState());
     }
-    window.addEventListener("popstate", sync);
-    return () => { window.removeEventListener("popstate", sync); };
+    window.addEventListener("popstate", onPopOrHash);
+    window.addEventListener("hashchange", onPopOrHash);
+    return () => {
+      window.removeEventListener("popstate", onPopOrHash);
+      window.removeEventListener("hashchange", onPopOrHash);
+    };
   }, []);
 
-  const setFilter = useCallback((f: TaskStatusFilter) => {
-    _setFilter(f);
-    _setSearch((s) => { pushSearchParam(f, s); return s; });
+  const setFilter = useCallback((filter: TaskStatusFilter) => {
+    setState((prev) => {
+      pushUrlState(filter, prev.search);
+      return { ...prev, filter };
+    });
   }, []);
 
-  const setSearch = useCallback((s: string) => {
-    _setSearch(s);
-    _setFilter((f) => { pushSearchParam(f, s); return f; });
+  const setSearch = useCallback((search: string) => {
+    setState((prev) => {
+      pushUrlState(prev.filter, search);
+      return { ...prev, search };
+    });
   }, []);
 
   const filteredTasks = useMemo(() => {
-    let list = tasks.filter((t) => matchFilter(t, filter));
-    if (search.trim()) {
-      const q = search.toLowerCase().trim();
+    let list = tasks.filter((t) => matchFilter(t, state.filter));
+    if (state.search.trim()) {
+      const q = state.search.toLowerCase().trim();
       list = list.filter(
-        (t) => (t.title && t.title.toLowerCase().includes(q)) || t.task_id.toLowerCase().includes(q),
+        (t) =>
+          (t.title && t.title.toLowerCase().includes(q)) ||
+          t.task_id.toLowerCase().includes(q),
       );
     }
     return list;
-  }, [tasks, filter, search]);
+  }, [tasks, state.filter, state.search]);
 
   const counts = useMemo(
     () => ({
@@ -101,11 +128,14 @@ export function useTaskFilterViewModel(tasks: readonly Task[]): TaskFilterState 
       waiting: tasks.filter((t) => t.status === "queued" || t.status === "waiting_user").length,
       done: tasks.filter((t) => t.status === "done").length,
       failed: tasks.filter(
-        (t) => t.status === "failed" || t.status === "cancelled" || t.status === "escalated",
+        (t) =>
+          t.status === "failed" ||
+          t.status === "cancelled" ||
+          t.status === "escalated",
       ).length,
     }),
     [tasks],
   );
 
-  return { filter, search, filteredTasks, counts, setFilter, setSearch };
+  return { filter: state.filter, search: state.search, filteredTasks, counts, setFilter, setSearch };
 }

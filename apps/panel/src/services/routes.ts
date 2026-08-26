@@ -40,7 +40,9 @@ export function pageTitle(pageId: PageId): string {
 }
 
 export function parseHashPage(hash: string): PageId {
-  const clean = hash.replace(/^#\/?/, "").toLowerCase().trim();
+  const withoutHash = hash.replace(/^#\/?/, "");
+  const [routePart] = withoutHash.split("?");
+  const clean = (routePart ?? "").toLowerCase().trim();
   const found = NAV_ROUTES.find((r) => r.id === clean);
   return found ? found.id : DEFAULT_PAGE;
 }
