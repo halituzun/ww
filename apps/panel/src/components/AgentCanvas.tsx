@@ -143,21 +143,13 @@ export function AgentCanvas({
   } = useCanvasViewModel(projectId);
 
   // B6 — Boş/hata durumları
-  if (error !== "") {
-    return (
-      <div className="canvas__empty-state canvas__empty-state--error" role="alert">
-        <span className="canvas__empty-icon">⚠️</span>
-        <p className="canvas__empty-title">Tuval verisi alınamadı</p>
-        <p className="canvas__empty-desc">{error}</p>
-      </div>
-    );
-  }
+  if (error !== "") return <p className="canvas__error">{error}</p>;
 
   if (rawData.nodes.length === 0) {
     return (
       <div className="canvas__empty-state" aria-live="polite">
         <span className="canvas__empty-icon">🤖</span>
-        <p className="canvas__empty-title">Bu projede henüz agent çalışmıyor</p>
+        <p className="canvas__empty-title">Bu projede henüz agent yok</p>
         <p className="canvas__empty-desc hint">
           Plan onaylanmamış veya proje duraklatılmış olabilir.
         </p>
@@ -183,7 +175,7 @@ export function AgentCanvas({
 
     const labelParts = [
       `${node.label}`,
-      `${agentRoleLabel(node.role)} · ${agentStatusLabel(node.status)}`,
+      `${agentRoleLabel(node.role)} · ${agentStatusLabel(node.status)}${node.unresponsive ? " · yanıt vermiyor" : ""}`,
       taskLine,
       elapsedLine,
       stuckLine,

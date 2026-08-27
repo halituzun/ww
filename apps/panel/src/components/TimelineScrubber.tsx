@@ -52,7 +52,7 @@ export function TimelineScrubber({ events, cursor, onCursor, at }: {
       {/* B5 — GEÇMİŞ şeridi: cursor geçmişteyken belirgin */}
       {!live && (
         <div className="scrubber__past-banner" role="status" aria-live="polite">
-          <span className="scrubber__past-label">GEÇMİŞ</span>
+          <span className="scrubber__past-label">⏮ Geçmiş Konum</span>
           <span className="scrubber__past-time">
             {at ? new Date(at.ts).toLocaleTimeString() : '—'}
           </span>
@@ -95,9 +95,7 @@ export function TimelineScrubber({ events, cursor, onCursor, at }: {
 
       <div className="scrubber__meta">
         {/* Canlı mı geçmiş mi olduğu METİNLE yazılır; yalnız renk yeterli değil. */}
-        <strong className={live ? "scrubber__badge scrubber__badge--live" : "scrubber__badge scrubber__badge--past"}>
-          {live ? '🔴 CANLI' : '⏮ GEÇMİŞ'}
-        </strong>
+        <strong className={live ? "scrubber__badge scrubber__badge--live" : "scrubber__badge scrubber__badge--past"}>{live ? 'CANLI' : 'GEÇMİŞ'}</strong>
         <span>{Math.min(cursor, total)} / {total} olay</span>
         {windowed ? <span title="Daha eski olaylar panel belleğinde tutulmuyor">
           (pencere: son {TIMELINE_LIMIT})
