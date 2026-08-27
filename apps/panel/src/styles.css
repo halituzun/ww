@@ -758,7 +758,9 @@ button {
   align-items: center;
   justify-content: center;
   gap: 6px;
-  border: 1px solid transparent;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.04);
+  color: #f8fafc;
 }
 
 .btn--primary {
@@ -3657,4 +3659,66 @@ input:focus, select:focus, textarea:focus {
 .role-model-table button:disabled {
   opacity: 0.35;
   cursor: not-allowed;
+}
+
+/* Fihrist Tasks and Action Buttons */
+.fihrist > button {
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  color: #f8fafc;
+  font-size: 12.5px;
+  font-weight: 500;
+  padding: 8px 14px;
+  border-radius: var(--radius-sm, 6px);
+  cursor: pointer;
+  transition: background var(--transition, 0.15s ease), border-color var(--transition, 0.15s ease);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: auto;
+  align-self: flex-start;
+}
+.fihrist > button:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.05);
+  border-color: rgba(255, 255, 255, 0.25);
+}
+.fihrist > button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.fihrist__tasks button,
+.fihrist__tasks button.linklike {
+  background: transparent;
+  border: none;
+  padding: 3px 0;
+  color: var(--accent, #34d399);
+  font-size: 13px;
+  font-weight: 500;
+  text-decoration: none;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  text-align: left;
+  transition: color var(--transition, 0.15s ease);
+}
+.fihrist__tasks button code,
+.fihrist__tasks button.linklike code {
+  color: var(--accent, #34d399);
+  background: rgba(16, 185, 129, 0.08);
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 11.5px;
+  font-family: 'JetBrains Mono', monospace;
+}
+.fihrist__tasks button:hover,
+.fihrist__tasks button.linklike:hover {
+  color: var(--accent-light, #a7f3d0);
+  text-decoration: underline;
+}
+.fihrist__tasks button:hover code,
+.fihrist__tasks button.linklike:hover code {
+  color: var(--accent-light, #a7f3d0);
+  background: rgba(16, 185, 129, 0.16);
 }

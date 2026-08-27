@@ -90,7 +90,7 @@ export function FileBrowserPanel({
                 if (e.key === "Enter" && narratorQuestion.trim()) onAskNarrator();
               }}
             />
-            <button type="button" className="btn btn--primary" onClick={onAskNarrator}>
+            <button type="button" className="btn btn--secondary" onClick={onAskNarrator}>
               Sor
             </button>
           </div>
