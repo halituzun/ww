@@ -42,15 +42,24 @@ function formatElapsed(sec: number | undefined): string {
 /** Model referansından kısa model adı çıkar (ör. "ollama:qwen3.6:latest" → "qwen3.6"). */
 function cleanModelName(modelRef: string | undefined): string {
   if (!modelRef || modelRef === "" || modelRef === "unknown") return "model bilinmiyor";
+  // ollama:deepseek-coder:33b -> deepseek-33b
+  // ollama:qwen2.5-coder:7b -> qwen-7b
+  // ollama:qwen3.6:latest -> qwen3.6
+  // deepseek:deepseek-chat -> deepseek-chat
+  if (modelRef.includes("deepseek-coder:33b")) return "deepseek-33b";
+  if (modelRef.includes("qwen2.5-coder:7b")) return "qwen-7b";
+  if (modelRef.includes("qwen3.6")) return "qwen3.6";
+  if (modelRef.includes("deepseek-chat")) return "deepseek-chat";
+
   const parts = modelRef.split(":");
   if (parts.length >= 2) {
     const name = parts[1] ?? parts[0];
     if (parts.length >= 3 && parts[2] !== "latest") {
-      return `${name}:${parts[2]}`;
+      return `${name.replace("-coder", "")}-${parts[2]}`;
     }
-    return name;
+    return name.replace("-coder", "");
   }
-  return modelRef.slice(0, 24);
+  return modelRef.slice(0, 20);
 }
 
 /**
@@ -79,17 +88,17 @@ export function computeHierarchicalPositions(
     positions.set(node.id, { x: 400 + idx * 240, y: 40 });
   });
 
-  // Seviye 1: Yan roller (Görüşmeci vb. solda) ve Grup Liderleri (ortada/sağda)
+  // Seviye 1: Yan roller (Görüşmeci sol dış kanatta X: 60) ve Grup Liderleri (ortada/sağda)
   sideRoles.forEach((node, idx) => {
-    positions.set(node.id, { x: 100 + idx * 240, y: 180 });
+    positions.set(node.id, { x: 60 + idx * 240, y: 180 });
   });
   groupLeads.forEach((node, idx) => {
-    positions.set(node.id, { x: 400 + idx * 260, y: 180 });
+    positions.set(node.id, { x: 420 + idx * 260, y: 180 });
   });
 
-  // Seviye 2: Yapanlar ve Denetleyenler (Geniş alt katman, PM'in altına yayılmış)
-  const execSpacing = 240;
-  const execStartX = Math.max(40, 400 - ((executionNodes.length - 1) * execSpacing) / 2);
+  // Seviye 2: Yapanlar ve Denetleyenler (Geniş alt katman, X: 40, 290, 540, 790)
+  const execSpacing = 250;
+  const execStartX = 40;
   executionNodes.forEach((node, idx) => {
     positions.set(node.id, { x: execStartX + idx * execSpacing, y: 340 });
   });
@@ -208,7 +217,7 @@ export function AgentCanvas({
         opacity: isDimmed ? 0.35 : (node.cloneOf === undefined ? 1 : 0.75),
         fontSize: 12,
         lineHeight: 1.45,
-        minWidth: 190,
+        minWidth: 220,
         boxShadow: isBusy && !isDimmed ? `0 0 12px 2px ${borderColor}33` : "0 4px 12px rgba(0,0,0,0.3)",
         transition: "opacity 0.2s, box-shadow 0.2s, border-color 0.2s",
       },

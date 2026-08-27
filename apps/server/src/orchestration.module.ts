@@ -239,6 +239,17 @@ export class TaskApplicationService implements TaskApplication {
       }) as never);
       planId = seeded.plan_id as EntityId;
     }
+    // C2/C5 Görev Tekilleştirme Kalkanı: Aynı projede aynı başlık ile henüz
+    // tamamlanmamış (kuyrukta/çalışıyor) görev varsa mükerrer kopya açılmaz.
+    const existingTasks = await listLatestTasks(this.database.ch, project.project_id);
+    const duplicate = existingTasks.find(
+      (t) => t.title.trim().toLowerCase() === input.title.trim().toLowerCase()
+        && (t.status === 'queued' || t.status === 'working' || t.status === 'verifying' || t.status === 'testing'),
+    );
+    if (duplicate !== undefined) {
+      return duplicate;
+    }
+
     const task = await createTask(this.database.ch, { task_id: taskId, project_id: project.project_id, plan_id: planId, parent_task_id: NIL_UUID, title: input.title, description: input.description, acceptance_criteria: input.acceptanceCriteria, status: 'queued', priority: 5, issuer_agent_id: issuer.agent_id, worker_agent_id: NIL_UUID, verifier_agent_id: NIL_UUID, group: 'coding' as AgentGroup, depends_on: input.dependencies, target_files: input.files, attempt: 0, max_attempts: input.maxAttempts, delegation_depth: 0, token_budget: input.budget, tokens_spent: '0', commit_hash: '', result_summary: '', reject_reason: '', task_brief_id: NIL_UUID, assignment_attempt_id: NIL_UUID, created_at: now, updated_at: now });
     this.#redis ??= createRedis();
     await enqueueTask(await this.#redis, `ww:queue:${project.project_id}`, task.task_id);
