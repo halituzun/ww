@@ -120,7 +120,11 @@ function AppContent() {
             onCursor={vm.setTimelineCursor}
             at={vm.replay?.at}
             tasks={vm.tasks}
-            statusByTask={vm.replay?.statusByTask}
+            statusByTask={
+              Number.isFinite(vm.timelineCursor) && vm.timelineCursor < vm.events.length
+                ? vm.replay?.statusByTask
+                : undefined
+            }
             selectedAgent={vm.selectedAgent}
             onSelectAgent={vm.setSelectedAgent}
           />

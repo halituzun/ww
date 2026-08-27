@@ -83,6 +83,18 @@ const MESSAGE_KIND: Readonly<Record<string, string>> = Object.freeze({
 const lookup = (table: Readonly<Record<string, string>>, value: string): string =>
   table[value] ?? value;
 
+const TASK_STATUS: Readonly<Record<string, string>> = Object.freeze({
+  queued: 'kuyrukta',
+  working: 'çalışıyor',
+  verifying: 'doğrulanıyor',
+  testing: 'test ediliyor',
+  done: 'tamamlandı',
+  rejected: 'reddedildi',
+  failed: 'başarısız',
+  blocked: 'engellendi',
+});
+
+export const taskStatusLabel = (value: string): string => lookup(TASK_STATUS, value);
 export const projectStatusLabel = (value: string): string => lookup(PROJECT, value);
 export const agentStatusLabel = (value: string): string => lookup(AGENT_STATUS, value);
 export const agentRoleLabel = (value: string): string => lookup(AGENT_ROLE, value);

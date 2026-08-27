@@ -45,6 +45,6 @@ describe('TaskCanvas', () => {
     const { container } = render(
       <TaskCanvas tasks={[task()]} statusByTask={new Map([['t1', 'working']])} />,
     );
-    expect(container.textContent).toContain('working');
+    expect(container.textContent).toContain('çalışıyor');
   });
 });
