@@ -234,7 +234,7 @@ export function AgentCanvas({
       id: edge.id,
       source: edge.source,
       target: edge.target,
-      type: "smoothstep",
+      type: edge.kind === "hierarchy" ? "bezier" : "smoothstep",
       animated: edge.animated,
       label: showLabel ? edge.label : undefined,
       style: {

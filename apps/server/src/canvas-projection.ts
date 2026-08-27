@@ -177,9 +177,21 @@ export function buildCanvasProjection(
   };
 
   const pmAgent = agents.find((a) => a.role === 'pm');
+  const sideRoles = new Set(['interviewer', 'narrator', 'summarizer', 'researcher']);
+  const agentMap = new Map(agents.map((a) => [a.agent_id, a]));
 
   for (const agent of agents) {
     let parent = concrete(agent.parent_agent_id);
+    
+    // KURAL: Hiçbir yan rol (görüşmeci, anlatıcı, özetleyici, araştırmacı) hiyerarşide parent olamaz!
+    // Eğer veritabanında yanlışlıkla bir yan rol parent girilmişse bile geçersiz sayılır.
+    if (parent !== undefined) {
+      const parentAgent = agentMap.get(parent);
+      if (parentAgent !== undefined && sideRoles.has(parentAgent.role)) {
+        parent = undefined;
+      }
+    }
+
     // Açık parent yoksa ve projede PM varsa, PM altındaki tüm agent'ların ebeveynidir
     if (parent === undefined && pmAgent !== undefined && agent.agent_id !== pmAgent.agent_id) {
       parent = pmAgent.agent_id;

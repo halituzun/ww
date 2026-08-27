@@ -29,6 +29,27 @@ describe('buildCanvasProjection', () => {
     })]);
   });
 
+  it('hiçbir yan rol (görüşmeci, anlatıcı, özetleyici, araştırmacı) hiyerarşide parent olamaz', () => {
+    const canvas = buildCanvasProjection([
+      agent('pm', { role: 'pm' }),
+      agent('interviewer', { role: 'interviewer' }),
+      agent('narrator', { role: 'narrator' }),
+      agent('v2', { role: 'verifier', parent_agent_id: 'interviewer' }),
+      agent('w2', { role: 'worker', parent_agent_id: 'narrator' }),
+    ], []);
+
+    const hierarchyEdges = canvas.edges.filter((e) => e.kind === 'hierarchy');
+    const sources = hierarchyEdges.map((e) => e.source);
+
+    // Hiçbir yan rol source (parent) olamaz
+    expect(sources).not.toContain('interviewer');
+    expect(sources).not.toContain('narrator');
+
+    // v2 ve w2 doğrudan PM'e bağlanmalı
+    expect(hierarchyEdges).toContainEqual(expect.objectContaining({ source: 'pm', target: 'v2', kind: 'hierarchy' }));
+    expect(hierarchyEdges).toContainEqual(expect.objectContaining({ source: 'pm', target: 'w2', kind: 'hierarchy' }));
+  });
+
   it('klon kenarini clone_of alanindan turer', () => {
     const canvas = buildCanvasProjection([agent('w1'), agent('w2', { clone_of: 'w1' })], []);
     expect(canvas.edges[0]!.kind).toBe('clone');
