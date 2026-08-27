@@ -173,8 +173,15 @@ export function buildCanvasProjection(
     edges.push(edge);
   };
 
+  const pmAgent = agents.find((a) => a.role === 'pm');
+
   for (const agent of agents) {
-    const parent = concrete(agent.parent_agent_id);
+    let parent = concrete(agent.parent_agent_id);
+    // Açık parent yoksa ve projede PM varsa, PM altındaki tüm agent'ların ebeveynidir
+    if (parent === undefined && pmAgent !== undefined && agent.agent_id !== pmAgent.agent_id) {
+      parent = pmAgent.agent_id;
+    }
+
     if (parent !== undefined) {
       push({
         id: `hierarchy:${parent}:${agent.agent_id}`,

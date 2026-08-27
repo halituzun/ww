@@ -24,10 +24,10 @@ const STATUS_COLOR: Record<string, string> = {
 
 // B3 — Ok türü renk ve kalınlıkları
 const EDGE_STYLE: Record<string, { stroke: string; strokeWidth: number }> = {
-  hierarchy: { stroke: "#64748b", strokeWidth: 1.5 },
-  assignment: { stroke: "#34d399", strokeWidth: 2 },
-  verification: { stroke: "#f59e0b", strokeWidth: 2 },
-  clone: { stroke: "#a855f7", strokeWidth: 1.5 },
+  hierarchy: { stroke: "#94a3b8", strokeWidth: 1.8 },
+  assignment: { stroke: "#34d399", strokeWidth: 2.5 },
+  verification: { stroke: "#f59e0b", strokeWidth: 2.5 },
+  clone: { stroke: "#a855f7", strokeWidth: 1.8 },
 };
 
 /** Geçen süreyi okunabilir kısa metne çevirir (ör. "3 dk 12 sn"). */
@@ -40,16 +40,17 @@ function formatElapsed(sec: number | undefined): string {
 }
 
 /** Model referansından kısa model adı çıkar (ör. "ollama:qwen3.6:latest" → "qwen3.6"). */
-function cleanModelName(modelRef: string | undefined, role: string): string {
-  if (!modelRef || modelRef === "unknown") return "—";
+function cleanModelName(modelRef: string | undefined): string {
+  if (!modelRef || modelRef === "" || modelRef === "unknown") return "model bilinmiyor";
   const parts = modelRef.split(":");
-  // ollama:NAME:tag veya provider:NAME → NAME
   if (parts.length >= 2) {
-    const raw = parts[1] ?? parts[0];
-    if (raw === role || raw === "mock") return role === "pm" ? "pm-model" : "worker-model";
-    return raw;
+    const name = parts[1] ?? parts[0];
+    if (parts.length >= 3 && parts[2] !== "latest") {
+      return `${name}:${parts[2]}`;
+    }
+    return name;
   }
-  return modelRef.slice(0, 20);
+  return modelRef.slice(0, 24);
 }
 
 /**
@@ -177,7 +178,7 @@ export function AgentCanvas({
     const roleText = agentRoleLabel(node.role);
     const statusText = agentStatusLabel(node.status);
     const elapsedText = formatElapsed(node.elapsedSec);
-    const modelText = cleanModelName(node.modelRef, node.role);
+    const modelText = cleanModelName(node.modelRef);
 
     const line1 = node.label;
     const line2 = `${roleText} · ${statusText}${elapsedText ? ` · ${elapsedText}` : ""}${node.unresponsive ? " · yanıt vermiyor" : ""}`;
@@ -219,12 +220,14 @@ export function AgentCanvas({
     const style = EDGE_STYLE[edge.kind] ?? { stroke: "#64748b", strokeWidth: 1.5 };
     const isDimmed = highlightSet !== undefined
       && !highlightSet.has(edge.source) && !highlightSet.has(edge.target);
+    const showLabel = edge.kind !== "hierarchy" && edge.kind !== "clone";
     return {
       id: edge.id,
       source: edge.source,
       target: edge.target,
+      type: "smoothstep",
       animated: edge.animated,
-      label: edge.label,
+      label: showLabel ? edge.label : undefined,
       style: {
         stroke: isDimmed ? "#1e293b" : style.stroke,
         strokeWidth: isDimmed ? 1 : style.strokeWidth,
@@ -240,13 +243,16 @@ export function AgentCanvas({
         fillOpacity: 0.95,
         rx: 4,
         ry: 4,
-        stroke: "rgba(255, 255, 255, 0.12)",
+        stroke: "rgba(255, 255, 255, 0.14)",
         strokeWidth: 1,
       },
       labelBgPadding: [6, 4] as [number, number],
-      markerEnd: edge.kind === "verification" || edge.kind === "assignment"
-        ? { type: "arrowclosed" as never, color: style.stroke, width: 16, height: 16 }
-        : undefined,
+      markerEnd: {
+        type: "arrowclosed" as never,
+        color: isDimmed ? "#1e293b" : style.stroke,
+        width: edge.kind === "hierarchy" ? 12 : 16,
+        height: edge.kind === "hierarchy" ? 12 : 16,
+      },
     };
   });
 
@@ -264,6 +270,7 @@ export function AgentCanvas({
           edges={edges as never}
           fitView
           fitViewOptions={{ padding: 0.2 }}
+          proOptions={{ hideAttribution: true }}
           onNodeClick={(_event, node) => {
             setSelectedNodeId((prev) => (prev === node.id ? undefined : node.id));
             onSelectAgent?.(node.id);
