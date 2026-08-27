@@ -3902,3 +3902,98 @@ input:focus, select:focus, textarea:focus {
 .scrubber__milestone-dot:hover {
   transform: translate(-50%, -50%) scale(1.4);
 }
+
+/* ──────────────────────────────────────────────────
+   Canlı Tuval & React Flow Karanlık Tema Stilleri
+   ────────────────────────────────────────────────── */
+
+.canvas-header-controls {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.canvas-view-toggle {
+  display: flex;
+  gap: 2px;
+  background: rgba(0, 0, 0, 0.35);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  padding: 3px;
+  border-radius: 8px;
+}
+
+.canvas-toggle-btn {
+  background: transparent;
+  border: none;
+  color: #94a3b8;
+  padding: 5px 14px;
+  border-radius: 6px;
+  font-size: 12.5px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.canvas-toggle-btn:hover {
+  color: #f8fafc;
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.canvas-toggle-btn--active {
+  background: rgba(52, 211, 153, 0.15);
+  border: 1px solid rgba(52, 211, 153, 0.35);
+  color: #34d399;
+  font-weight: 600;
+}
+
+/* React Flow Karanlık Tema Controls */
+.canvas-controls {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4) !important;
+  border-radius: 8px !important;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.15) !important;
+  background: #0f172a !important;
+}
+
+.canvas-controls button {
+  background: #0f172a !important;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1) !important;
+  fill: #94a3b8 !important;
+  color: #94a3b8 !important;
+  transition: all 0.15s ease !important;
+}
+
+.canvas-controls button:last-child {
+  border-bottom: none !important;
+}
+
+.canvas-controls button:hover {
+  background: #1e293b !important;
+  fill: #34d399 !important;
+  color: #34d399 !important;
+}
+
+.canvas-controls button svg {
+  fill: inherit !important;
+}
+
+/* Tuval Kartı ve Yükseklik */
+.canvas-card {
+  height: 560px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  position: relative;
+}
+
+.flow-canvas {
+  flex: 1;
+  width: 100%;
+  height: 100%;
+  border-radius: 8px;
+  overflow: hidden;
+  background: #0b111c;
+}
+
+.react-flow__edge-text {
+  font-family: inherit !important;
+}

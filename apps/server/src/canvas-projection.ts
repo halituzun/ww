@@ -192,29 +192,66 @@ export function buildCanvasProjection(
     }
   }
 
+  // Görev oklarını kaynak-hedef çiftine göre grupla: üst üste binen etiketleri önler
+  const assignmentGroups = new Map<string, { issuer: string; worker: string; tasks: CanvasTaskLike[] }>();
+  const verificationGroups = new Map<string, { worker: string; verifier: string; tasks: CanvasTaskLike[] }>();
+
   for (const task of tasks) {
-    const active = ACTIVE_TASK_STATUSES.has(task.status);
     const issuer = concrete(task.issuer_agent_id);
     const worker = concrete(task.worker_agent_id);
     const verifier = concrete(task.verifier_agent_id);
 
     if (issuer !== undefined && worker !== undefined) {
-      push({
-        id: `assignment:${task.task_id}`,
-        source: issuer, target: worker, kind: 'assignment',
-        label: task.title ? task.title.slice(0, 40) : 'iş verdi',
-        animated: active, taskId: task.task_id, taskTitle: task.title,
-      });
+      const key = `${issuer}->${worker}`;
+      const group = assignmentGroups.get(key) ?? { issuer, worker, tasks: [] };
+      group.tasks.push(task);
+      assignmentGroups.set(key, group);
     }
     if (worker !== undefined && verifier !== undefined) {
-      push({
-        id: `verification:${task.task_id}`,
-        source: worker, target: verifier, kind: 'verification',
-        label: 'denetim',
-        animated: active && task.status === 'verifying',
-        taskId: task.task_id, taskTitle: task.title,
-      });
+      const key = `${worker}->${verifier}`;
+      const group = verificationGroups.get(key) ?? { worker, verifier, tasks: [] };
+      group.tasks.push(task);
+      verificationGroups.set(key, group);
     }
+  }
+
+  for (const [, group] of assignmentGroups) {
+    const hasActive = group.tasks.some((t) => ACTIVE_TASK_STATUSES.has(t.status));
+    const activeTasks = group.tasks.filter((t) => ACTIVE_TASK_STATUSES.has(t.status));
+    const representative = activeTasks[0] ?? group.tasks[0];
+    const count = group.tasks.length;
+    const label = count > 1 ? `${count} görev` : (representative?.title ? representative.title.slice(0, 35) : 'iş verdi');
+    const allTitles = group.tasks.map((t) => t.title).filter(Boolean).join(' · ');
+
+    push({
+      id: `assignment:${group.issuer}:${group.worker}`,
+      source: group.issuer,
+      target: group.worker,
+      kind: 'assignment',
+      label,
+      animated: hasActive,
+      taskId: representative?.task_id,
+      taskTitle: allTitles || label,
+    });
+  }
+
+  for (const [, group] of verificationGroups) {
+    const isVerifying = group.tasks.some((t) => t.status === 'verifying');
+    const representative = group.tasks[0];
+    const count = group.tasks.length;
+    const label = count > 1 ? `${count} denetim` : 'denetim';
+    const allTitles = group.tasks.map((t) => t.title).filter(Boolean).join(' · ');
+
+    push({
+      id: `verification:${group.worker}:${group.verifier}`,
+      source: group.worker,
+      target: group.verifier,
+      kind: 'verification',
+      label,
+      animated: isVerifying,
+      taskId: representative?.task_id,
+      taskTitle: allTitles || label,
+    });
   }
 
   return Object.freeze({ nodes: Object.freeze(nodes), edges: Object.freeze(edges) });
