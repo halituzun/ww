@@ -147,3 +147,73 @@ describe('buildCanvasProjection — etkin model', () => {
     expect(buildCanvasProjection([worker], []).nodes[0]!.modelRef).toBe('mock:worker');
   });
 });
+
+describe('buildCanvasProjection — B1/B2 yeni alanlar', () => {
+  const NIL_B = '00000000-0000-0000-0000-000000000000';
+  const mkAgent = (id: string, over: Record<string, unknown> = {}) => ({
+    agent_id: id, role: 'worker', group: 'coding', name: `A${id}`,
+    model_ref: 'ollama:qwen3.6:latest', parent_agent_id: NIL_B, clone_of: NIL_B,
+    status: 'idle', current_task_id: NIL_B, ...over,
+  });
+  const mkTask = (id: string, title: string, over: Record<string, unknown> = {}) => ({
+    task_id: id, title, status: 'working',
+    issuer_agent_id: NIL_B, worker_agent_id: NIL_B, verifier_agent_id: NIL_B, ...over,
+  });
+
+  it('currentTaskTitle gorev basligini doldurur', () => {
+    const canvas = buildCanvasProjection(
+      [mkAgent('w1', { current_task_id: 't1' })],
+      [mkTask('t1', 'CSS düzelt', { worker_agent_id: 'w1' })],
+    );
+    expect(canvas.nodes[0]!.currentTaskTitle).toBe('CSS düzelt');
+  });
+
+  it('gorev yoksa currentTaskTitle undefined', () => {
+    const canvas = buildCanvasProjection([mkAgent('w1')], []);
+    expect(canvas.nodes[0]!.currentTaskTitle).toBeUndefined();
+  });
+
+  it('elapsedSec status_changed_at yoksa undefined', () => {
+    const canvas = buildCanvasProjection([mkAgent('w1')], []);
+    expect(canvas.nodes[0]!.elapsedSec).toBeUndefined();
+  });
+
+  it('elapsedSec status_changed_at verilince hesaplanir', () => {
+    // 10 dakika önce değişmiş
+    const changedAt = new Date(Date.now() - 10 * 60 * 1000).toISOString();
+    const canvas = buildCanvasProjection(
+      [mkAgent('w1', { status_changed_at: changedAt, status: 'waiting_answer' })],
+      [],
+      undefined, undefined,
+    );
+    const elapsed = canvas.nodes[0]!.elapsedSec;
+    expect(elapsed).toBeGreaterThan(590); // 10 dk ~ 600 sn
+  });
+
+  it('stuckReason 5 dakika altinda undefined', () => {
+    const changedAt = new Date(Date.now() - 4 * 60 * 1000).toISOString(); // 4 dk
+    const canvas = buildCanvasProjection(
+      [mkAgent('w1', { status: 'waiting_answer', status_changed_at: changedAt })],
+      [],
+    );
+    expect(canvas.nodes[0]!.stuckReason).toBeUndefined();
+  });
+
+  it('stuckReason 5 dakika ustunde neden metni uretir', () => {
+    const changedAt = new Date(Date.now() - 6 * 60 * 1000).toISOString(); // 6 dk
+    const canvas = buildCanvasProjection(
+      [mkAgent('w1', { status: 'waiting_answer', status_changed_at: changedAt })],
+      [],
+    );
+    expect(canvas.nodes[0]!.stuckReason).toBe('cevap bekliyor');
+  });
+
+  it('atama okunda gorev basligini taskTitle olarak tasir', () => {
+    const canvas = buildCanvasProjection(
+      [mkAgent('pm', { role: 'pm' }), mkAgent('w1')],
+      [mkTask('t1', 'Ana sayfa componenti', { issuer_agent_id: 'pm', worker_agent_id: 'w1' })],
+    );
+    const edge = canvas.edges.find((e) => e.kind === 'assignment')!;
+    expect(edge.taskTitle).toBe('Ana sayfa componenti');
+  });
+});

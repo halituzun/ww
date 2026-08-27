@@ -6,6 +6,7 @@ import {
   canonicalSha256V1,
   type AgentGroup,
   type AgentRole,
+  NIL_UUID,
   type AgentStatus,
   type EntityId,
 } from '@ww/shared';
@@ -201,13 +202,13 @@ function parseAgentRow(value: unknown): AgentRow {
     name: storedString(row['name'], 'agents.name'),
     model_ref: storedString(row['model_ref'], 'agents.model_ref'),
     parent_agent_id: optionalEntityId(
-      storedUuid(row['parent_agent_id'], 'agents.parent_agent_id'),
+      storedUuid(row['parent_agent_id'] ?? NIL_UUID, 'agents.parent_agent_id'),
       'agents.parent_agent_id',
     ),
-    clone_of: optionalEntityId(storedUuid(row['clone_of'], 'agents.clone_of'), 'agents.clone_of'),
+    clone_of: optionalEntityId(storedUuid(row['clone_of'] ?? NIL_UUID, 'agents.clone_of'), 'agents.clone_of'),
     status: storedEnum(row['status'], AGENT_STATUSES, 'agents.status'),
     current_task_id: optionalEntityId(
-      storedUuid(row['current_task_id'], 'agents.current_task_id'),
+      storedUuid(row['current_task_id'] ?? NIL_UUID, 'agents.current_task_id'),
       'agents.current_task_id',
     ),
     prompt_name: storedString(row['prompt_name'], 'agents.prompt_name'),

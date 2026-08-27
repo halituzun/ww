@@ -12,6 +12,12 @@ export interface CanvasNode {
   unresponsive?: boolean;
   cloneOf?: string;
   currentTaskId?: string;
+  /** Şu anki görevin başlığı (varsa); ID değil. */
+  currentTaskTitle?: string;
+  /** Bu durumda kaç saniyedir bekleniyor. */
+  elapsedSec?: number;
+  /** Takılı agent için neden metni; tanımlıysa uyarı rengi gösterilir. */
+  stuckReason?: string;
 }
 
 export interface CanvasEdge {
@@ -22,6 +28,8 @@ export interface CanvasEdge {
   label: string;
   animated: boolean;
   taskId?: string;
+  /** Göreve ait başlık; ok üzerinde görev adı tooltip'i için. */
+  taskTitle?: string;
 }
 
 export interface CanvasData {

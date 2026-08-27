@@ -307,9 +307,6 @@ export class MessageApplicationService implements MessageApplication {
       taskId ??= original.envelope.taskId;
       taskBriefId = original.envelope.taskBriefId;
       assignmentAttemptId = original.envelope.assignmentAttemptId;
-      if (taskId === undefined || taskBriefId === undefined || assignmentAttemptId === undefined) {
-        throw new MessageInputError('cevaplanacak mesaj task baglamini tasimiyor');
-      }
     }
     const payload = input.kind === 'answer'
       ? { type: 'answer' as const, text: input.text }

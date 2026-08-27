@@ -19,6 +19,8 @@ export interface CanvasAgentLike {
   readonly clone_of: string;
   readonly status: string;
   readonly current_task_id: string;
+  /** ISO zaman damgası — durum değiştikten bu yana geçen süreyi hesaplar. */
+  readonly status_changed_at?: string;
 }
 
 export interface CanvasTaskLike {
@@ -29,6 +31,9 @@ export interface CanvasTaskLike {
   readonly worker_agent_id: string;
   readonly verifier_agent_id: string;
 }
+
+/** Takılan agent eşiği (saniye). Tek yerden değiştirilir, uydurma sabit yayılmaz. */
+export const STUCK_THRESHOLD_SEC = 300; // 5 dakika
 
 export interface CanvasNode {
   readonly id: string;
@@ -45,6 +50,15 @@ export interface CanvasNode {
   readonly unresponsive: boolean;
   readonly cloneOf: string | undefined;
   readonly currentTaskId: string | undefined;
+  /** Şu anki görevin başlığı (varsa); ID değil. */
+  readonly currentTaskTitle: string | undefined;
+  /** Bu durumda kaç saniyedir bekleniyor (undefined = bilgi yok). */
+  readonly elapsedSec: number | undefined;
+  /**
+   * Takılı agent için gösterilecek neden metni. Tanımlıysa düğüm uyarı
+   * rengine (#f59e0b) geçer ve bu metin düğümde görünür.
+   */
+  readonly stuckReason: string | undefined;
 }
 
 export type CanvasEdgeKind = 'hierarchy' | 'assignment' | 'verification' | 'clone';
@@ -58,6 +72,8 @@ export interface CanvasEdge {
   /** Yalnızca AKTİF ilişki animasyonlu olur; biten iş hareketli görünmemeli. */
   readonly animated: boolean;
   readonly taskId: string | undefined;
+  /** Göreve ait başlık; ok üzerinde hover tooltip için. */
+  readonly taskTitle: string | undefined;
 }
 
 export interface CanvasProjection {
@@ -94,28 +110,59 @@ const LIVE_EXPECTED: ReadonlySet<string> = new Set([
  */
 export type RoleModelResolver = (role: string) => string | undefined;
 
+/** Durum değişiminden bu yana geçen saniyeyi hesaplar; bilgi yoksa undefined. */
+const elapsedSecOf = (changedAt: string | undefined, nowMs: number): number | undefined => {
+  if (!changedAt) return undefined;
+  const ms = nowMs - new Date(changedAt).getTime();
+  return ms >= 0 ? Math.floor(ms / 1000) : undefined;
+};
+
+/** Takılan agent için neden döndür; takılı değilse undefined. */
+const stuckReasonOf = (
+  status: string,
+  elapsedSec: number | undefined,
+): string | undefined => {
+  if (elapsedSec === undefined || elapsedSec < STUCK_THRESHOLD_SEC) return undefined;
+  if (status === 'waiting_answer') return 'cevap bekliyor';
+  if (status === 'waiting_verify') return 'doğrulama bekliyor';
+  if (status === 'busy') return 'yanıt vermiyor';
+  return undefined;
+};
+
 export function buildCanvasProjection(
   agents: readonly CanvasAgentLike[],
   tasks: readonly CanvasTaskLike[],
   liveAgentIds?: LiveAgentIds,
   modelForRole?: RoleModelResolver,
+  nowMs: number = Date.now(),
 ): CanvasProjection {
   const known = new Set(agents.map((agent) => agent.agent_id));
-  const nodes: CanvasNode[] = agents.map((agent) => ({
-    id: agent.agent_id,
-    label: agent.name === '' ? agent.role : agent.name,
-    role: agent.role,
-    group: agent.group,
-    modelRef: modelForRole?.(agent.role) ?? agent.model_ref,
-    status: agent.status,
-    // Bilgi yoksa suçlamayız: heartbeat kümesi verilmediğinde kimse
-    // "yanıt vermiyor" işaretlenmez.
-    unresponsive: liveAgentIds !== undefined
+  // Görev ID → başlık haritası (düğümde görev başlığı göstermek için)
+  const taskTitleMap = new Map(tasks.map((t) => [t.task_id, t.title]));
+
+  const nodes: CanvasNode[] = agents.map((agent) => {
+    const elapsed = elapsedSecOf(agent.status_changed_at, nowMs);
+    const isUnresponsive = liveAgentIds !== undefined
       && LIVE_EXPECTED.has(agent.status)
-      && !liveAgentIds.has(agent.agent_id),
-    cloneOf: concrete(agent.clone_of),
-    currentTaskId: concrete(agent.current_task_id),
-  }));
+      && !liveAgentIds.has(agent.agent_id);
+    const taskId = concrete(agent.current_task_id);
+    return {
+      id: agent.agent_id,
+      label: agent.name === '' ? agent.role : agent.name,
+      role: agent.role,
+      group: agent.group,
+      modelRef: modelForRole?.(agent.role) ?? agent.model_ref,
+      status: agent.status,
+      // Bilgi yoksa suçlamayız: heartbeat kümesi verilmediğinde kimse
+      // "yanıt vermiyor" işaretlenmez.
+      unresponsive: isUnresponsive,
+      cloneOf: concrete(agent.clone_of),
+      currentTaskId: taskId,
+      currentTaskTitle: taskId !== undefined ? taskTitleMap.get(taskId) : undefined,
+      elapsedSec: elapsed,
+      stuckReason: isUnresponsive ? 'yanıt vermiyor' : stuckReasonOf(agent.status, elapsed),
+    };
+  });
 
   const edges: CanvasEdge[] = [];
   const push = (edge: CanvasEdge): void => {
@@ -132,7 +179,7 @@ export function buildCanvasProjection(
       push({
         id: `hierarchy:${parent}:${agent.agent_id}`,
         source: parent, target: agent.agent_id, kind: 'hierarchy',
-        label: 'hiyerarşi', animated: false, taskId: undefined,
+        label: 'hiyerarşi', animated: false, taskId: undefined, taskTitle: undefined,
       });
     }
     const cloneOf = concrete(agent.clone_of);
@@ -140,7 +187,7 @@ export function buildCanvasProjection(
       push({
         id: `clone:${cloneOf}:${agent.agent_id}`,
         source: cloneOf, target: agent.agent_id, kind: 'clone',
-        label: 'klon', animated: false, taskId: undefined,
+        label: 'klon', animated: false, taskId: undefined, taskTitle: undefined,
       });
     }
   }
@@ -155,14 +202,17 @@ export function buildCanvasProjection(
       push({
         id: `assignment:${task.task_id}`,
         source: issuer, target: worker, kind: 'assignment',
-        label: 'iş verdi', animated: active, taskId: task.task_id,
+        label: task.title ? task.title.slice(0, 40) : 'iş verdi',
+        animated: active, taskId: task.task_id, taskTitle: task.title,
       });
     }
     if (worker !== undefined && verifier !== undefined) {
       push({
         id: `verification:${task.task_id}`,
         source: worker, target: verifier, kind: 'verification',
-        label: 'denetim', animated: active && task.status === 'verifying', taskId: task.task_id,
+        label: 'denetim',
+        animated: active && task.status === 'verifying',
+        taskId: task.task_id, taskTitle: task.title,
       });
     }
   }

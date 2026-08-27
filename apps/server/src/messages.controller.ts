@@ -46,17 +46,25 @@ export class MessagesController {
     }
     const records = await listRecentMessages(this.#ch(), id, parsed);
     return records.map((record) => {
-      const envelope = 'envelope' in record
-        ? (record.envelope as unknown as Record<string, unknown>)
-        : (record as unknown as Record<string, unknown>);
+      if (record.protocolVersion === 1) {
+        return {
+          messageId: record.envelope.messageId,
+          kind: record.envelope.kind,
+          taskId: record.envelope.taskId,
+          from: record.envelope.senderPrincipalId,
+          to: record.envelope.recipient.id,
+          payload: record.envelope.payload,
+          createdAt: record.envelope.createdAt,
+        };
+      }
       return {
-        messageId: envelope['messageId'],
-        kind: envelope['kind'],
-        taskId: envelope['taskId'],
-        from: envelope['from'] ?? envelope['senderPrincipalId'] ?? (record as Record<string, unknown>)['sender_principal_id'] ?? 'agent',
-        to: envelope['to'] ?? envelope['recipientPrincipalId'],
-        payload: envelope['payload'],
-        createdAt: envelope['createdAt'],
+        messageId: record.messageId,
+        kind: record.kind,
+        taskId: record.taskId,
+        from: record.fromId ?? 'agent',
+        to: record.toId ?? 'user',
+        payload: { text: record.content },
+        createdAt: record.createdAt,
       };
     });
   }
@@ -75,21 +83,38 @@ export class MessagesController {
       throw new BadRequestException('alıcı bulunamadı: projede aktif PM yok');
     }
     const messages = await listPendingInboxMessages(this.#ch(), id, recipient);
+    const answeredRes = await this.#ch().query({
+      query: `SELECT DISTINCT reply_to_message_id FROM messages WHERE project_id = {projectId:UUID} AND kind = 'answer'`,
+      query_params: { projectId: id },
+      format: 'JSONEachRow',
+    });
+    const answeredRows = (await answeredRes.json()) as Array<{ reply_to_message_id: string }>;
+    const answeredSet = new Set(answeredRows.map((r) => r.reply_to_message_id));
+    const unAnsweredMessages = messages.filter((record) => {
+      const msgId = record.protocolVersion === 1 ? record.envelope.messageId : record.messageId;
+      return !answeredSet.has(msgId);
+    });
     return {
       recipientId: recipient,
-      count: messages.length,
+      count: unAnsweredMessages.length,
       // Kayıt iki şekilden biri olabilir (protokol v1 zarfı ya da eski
       // projeksiyon); ikisini de aynı okunur şekle indiriyoruz.
-      messages: messages.map((record) => {
-        const envelope = 'envelope' in record
-          ? (record.envelope as unknown as Record<string, unknown>)
-          : (record as unknown as Record<string, unknown>);
+      messages: unAnsweredMessages.map((record) => {
+        if (record.protocolVersion === 1) {
+          return {
+            messageId: record.envelope.messageId,
+            kind: record.envelope.kind,
+            taskId: record.envelope.taskId,
+            payload: record.envelope.payload,
+            createdAt: record.envelope.createdAt,
+          };
+        }
         return {
-          messageId: envelope['messageId'],
-          kind: envelope['kind'],
-          taskId: envelope['taskId'],
-          payload: envelope['payload'],
-          createdAt: envelope['createdAt'],
+          messageId: record.messageId,
+          kind: record.kind,
+          taskId: record.taskId,
+          payload: { text: record.content },
+          createdAt: record.createdAt,
         };
       }),
     };

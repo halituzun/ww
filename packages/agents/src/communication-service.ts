@@ -272,6 +272,7 @@ function taskScopeIsComplete(input: SendMessageInputV1): boolean {
 }
 
 function taskScopeRequired(input: SendMessageInputV1): boolean {
+  if (input.taskId === undefined) return false;
   return ['question', 'answer', 'report', 'verdict'].includes(input.kind);
 }
 

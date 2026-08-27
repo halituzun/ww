@@ -2,6 +2,7 @@ import type { ClickHouseClient } from '@clickhouse/client';
 import {
   PLAN_STATUSES,
   canonicalSha256V1,
+  NIL_UUID,
   type EntityId,
   type JsonValue,
   type PlanStatus,
@@ -171,14 +172,14 @@ function parsePlanRow(value: unknown): PlanRow {
     title: storedString(row['title'], 'plans.title'),
     content_md: storedString(row['content_md'], 'plans.content_md'),
     council_session_id: optionalEntityId(
-      storedUuid(row['council_session_id'], 'plans.council_session_id'),
+      storedUuid(row['council_session_id'] ?? NIL_UUID, 'plans.council_session_id'),
       'plans.council_session_id',
     ),
     team_json: storedJsonValue(row['team_json'], 'plans.team_json'),
     scenarios_json: storedJsonValue(row['scenarios_json'], 'plans.scenarios_json'),
-    replan_reason: storedString(row['replan_reason'], 'plans.replan_reason'),
+    replan_reason: storedString(row['replan_reason'] ?? '', 'plans.replan_reason'),
     supersedes_plan_id: optionalEntityId(
-      storedUuid(row['supersedes_plan_id'], 'plans.supersedes_plan_id'),
+      storedUuid(row['supersedes_plan_id'] ?? NIL_UUID, 'plans.supersedes_plan_id'),
       'plans.supersedes_plan_id',
     ),
     created_by_agent_id: concreteEntityId(

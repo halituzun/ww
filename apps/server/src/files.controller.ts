@@ -54,7 +54,7 @@ export class FilesController {
       return { path: filePath, size: info.size, content: await readFile(absolute, 'utf8') };
     } catch (err) {
       if (err instanceof BadRequestException || err instanceof NotFoundException) throw err;
-      if (err && typeof err === 'object' && (err.code === 'ENOENT' || err.code === 'ENOTDIR')) {
+      if (err && typeof err === 'object' && 'code' in err && (err.code === 'ENOENT' || err.code === 'ENOTDIR')) {
         throw new NotFoundException(`dosya bulunamadı: ${filePath}`);
       }
       throw err;
