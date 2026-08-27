@@ -42,3 +42,17 @@ describe('sweepRecovery', () => {
     expect(onError).toHaveBeenCalledTimes(1);
   });
 });
+
+describe('identifyStuckAgents — C2 Takılan Agent Tespiti', () => {
+  it('5 dakikayi asan meşgul agenti tespit eder', async () => {
+    const { identifyStuckAgents } = await import('./recovery-sweeper.js');
+    const now = Date.now();
+    const agents = [
+      { agent_id: 'a1', status: 'busy', status_changed_at: new Date(now - 6 * 60 * 1000).toISOString() },
+      { agent_id: 'a2', status: 'busy', status_changed_at: new Date(now - 2 * 60 * 1000).toISOString() },
+      { agent_id: 'a3', status: 'idle', status_changed_at: new Date(now - 10 * 60 * 1000).toISOString() },
+    ];
+    const stuck = identifyStuckAgents(agents, now);
+    expect(stuck.map((s) => s.agentId)).toEqual(['a1']);
+  });
+});

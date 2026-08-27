@@ -50,3 +50,19 @@ describe('decideBudgetLimit', () => {
     expect(decideBudgetLimit(5, Number.NaN).alreadyExceeded).toBe(false);
   });
 });
+
+describe('checkTaskTokenBudget — C3 Token Bütçesi Guard', () => {
+  it('token limiti asilmadiginda izin verir', async () => {
+    const { checkTaskTokenBudget } = await import('./budget-limit.js');
+    const res = checkTaskTokenBudget(1000, 2000, 32000);
+    expect(res.allowed).toBe(true);
+    expect(res.totalTokens).toBe(3000);
+  });
+
+  it('token limiti asildiginda reddeder ve neden bildirir', async () => {
+    const { checkTaskTokenBudget } = await import('./budget-limit.js');
+    const res = checkTaskTokenBudget(20000, 15000, 32000);
+    expect(res.allowed).toBe(false);
+    expect(res.reason).toContain('Görev token bütçesi aşıldı');
+  });
+});

@@ -20,3 +20,14 @@ export class InterviewService {
   }
   private snapshot(input: Omit<InterviewSession, 'snapshotHash'>): InterviewSession { return Object.freeze({ ...input, snapshotHash: canonicalSha256V1(input) }); }
 }
+
+export const MAX_INTERVIEW_QUESTIONS = 7;
+
+export function validateQuestionQuality(prompt: string): { valid: boolean; reason?: string } {
+  const trimmed = prompt.trim();
+  if (trimmed.length < 8) return { valid: false, reason: 'soru çok kısa veya anlamsız' };
+  if (trimmed.endsWith('?') === false && trimmed.endsWith('.') === false) {
+    return { valid: false, reason: 'soru soru işaretiyle bitmelidir' };
+  }
+  return { valid: true };
+}

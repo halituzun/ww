@@ -40,3 +40,41 @@ export function decideBudgetLimit(value: unknown, spentUsd: number): BudgetLimit
     alreadyExceeded: limitUsd > 0 && spent >= limitUsd,
   });
 }
+
+export const DEFAULT_TASK_TOKEN_BUDGET = 32_000;
+export const MAX_TASK_TOKEN_BUDGET = 128_000;
+
+export interface TokenBudgetCheck {
+  readonly allowed: boolean;
+  readonly promptTokens: number;
+  readonly completionTokens: number;
+  readonly totalTokens: number;
+  readonly budget: number;
+  readonly reason?: string;
+}
+
+/** Görev veya çağrı bazlı token harcamasını denetler; aşım varsa durdurur */
+export function checkTaskTokenBudget(
+  promptTokens: number,
+  completionTokens: number,
+  budget: number = DEFAULT_TASK_TOKEN_BUDGET,
+): TokenBudgetCheck {
+  const total = promptTokens + completionTokens;
+  if (budget > 0 && total >= budget) {
+    return {
+      allowed: false,
+      promptTokens,
+      completionTokens,
+      totalTokens: total,
+      budget,
+      reason: `Görev token bütçesi aşıldı (${total} / ${budget} token)`,
+    };
+  }
+  return {
+    allowed: true,
+    promptTokens,
+    completionTokens,
+    totalTokens: total,
+    budget,
+  };
+}
