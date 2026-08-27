@@ -1,3 +1,15 @@
+function cleanModelName(modelRef: string | undefined): string {
+  if (!modelRef || modelRef === '' || modelRef === 'unknown') return 'model bilinmiyor';
+  const parts = modelRef.split(':');
+  if (parts.length >= 2) {
+    const name = parts[1] ?? parts[0];
+    if (parts.length >= 3 && parts[2] !== 'latest') {
+      return `${name}:${parts[2]}`;
+    }
+    return name;
+  }
+  return modelRef.slice(0, 24);
+}
 // Agent geçmişi yan paneli — SALT GÖRÜNÜM (docs/08 → "düğüme tık → yan
 // panelde agent geçmişi: görevleri, mesajları, harcadığı token").
 import { agentRoleLabel, agentStatusLabel } from '../services/labels.js';
@@ -28,7 +40,7 @@ export function AgentDetail({ projectId, agentId, ports }: {
     <section className="agent-detail" aria-label="Agent geçmişi">
       <div className="section-heading">
         <h4>{detail.name}</h4>
-        <small>{agentRoleLabel(detail.role)} · {agentStatusLabel(detail.status)} · {detail.modelRef}</small>
+        <small>{agentRoleLabel(detail.role)} · {agentStatusLabel(detail.status)} · {cleanModelName(detail.modelRef)}</small>
       </div>
 
       <dl className="fihrist__meta">

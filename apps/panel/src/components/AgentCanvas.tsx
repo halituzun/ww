@@ -32,7 +32,7 @@ const EDGE_STYLE: Record<string, { stroke: string; strokeWidth: number }> = {
 
 /** Geçen süreyi okunabilir kısa metne çevirir (ör. "3 dk 12 sn"). */
 function formatElapsed(sec: number | undefined): string {
-  if (sec === undefined || sec === null) return "";
+  if (sec === undefined || sec === null || !Number.isFinite(sec)) return "süre bilinmiyor";
   if (sec < 60) return `${sec} sn`;
   const m = Math.floor(sec / 60);
   const s = sec % 60;
@@ -67,32 +67,32 @@ export function computeHierarchicalPositions(
   const nonClones = nodes.filter((n) => !n.cloneOf);
   const clones = nodes.filter((n) => Boolean(n.cloneOf));
 
-  const level0: CanvasNode[] = [];
-  const level1: CanvasNode[] = [];
-  const level2: CanvasNode[] = [];
+  const pmNodes = nonClones.filter((n) => n.role === "pm");
+  const sideRoles = nonClones.filter((n) => n.role === "interviewer" || n.role === "researcher");
+  const groupLeads = nonClones.filter((n) => n.role === "group_lead" || n.role === "council_member");
+  const executionNodes = nonClones.filter(
+    (n) => n.role !== "pm" && n.role !== "interviewer" && n.role !== "researcher" && n.role !== "group_lead" && n.role !== "council_member"
+  );
 
-  for (const node of nonClones) {
-    if (node.role === "pm") {
-      level0.push(node);
-    } else if (node.role === "group_lead" || node.role === "council_member" || node.role === "interviewer") {
-      level1.push(node);
-    } else {
-      level2.push(node);
-    }
-  }
+  // Seviye 0: PM (Ortada)
+  pmNodes.forEach((node, idx) => {
+    positions.set(node.id, { x: 400 + idx * 240, y: 40 });
+  });
 
-  const placeLevel = (list: CanvasNode[], y: number) => {
-    const spacing = 280;
-    const totalWidth = (list.length - 1) * spacing;
-    const startX = 400 - totalWidth / 2;
-    list.forEach((node, idx) => {
-      positions.set(node.id, { x: Math.max(40, startX + idx * spacing), y });
-    });
-  };
+  // Seviye 1: Yan roller (Görüşmeci vb. solda) ve Grup Liderleri (ortada/sağda)
+  sideRoles.forEach((node, idx) => {
+    positions.set(node.id, { x: 100 + idx * 240, y: 180 });
+  });
+  groupLeads.forEach((node, idx) => {
+    positions.set(node.id, { x: 400 + idx * 260, y: 180 });
+  });
 
-  placeLevel(level0, 40);
-  placeLevel(level1, 180);
-  placeLevel(level2, 340);
+  // Seviye 2: Yapanlar ve Denetleyenler (Geniş alt katman, PM'in altına yayılmış)
+  const execSpacing = 240;
+  const execStartX = Math.max(40, 400 - ((executionNodes.length - 1) * execSpacing) / 2);
+  executionNodes.forEach((node, idx) => {
+    positions.set(node.id, { x: execStartX + idx * execSpacing, y: 340 });
+  });
 
   // Klonları kaynaklarının yanına yerleştir
   for (const clone of clones) {

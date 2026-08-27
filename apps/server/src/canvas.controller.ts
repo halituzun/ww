@@ -64,8 +64,9 @@ export class CanvasController {
       throw new NotFoundException(`Agent bulunamadı: ${agentId}`);
     }
 
-    const routing = await loadRoutingIndex(this.database.ch);
-    const effectiveModel = routing.modelForRole(agent.role) ?? agent.model_ref;
+    const roleModels = await listLatestRoleModels(this.database.ch);
+    const roleModelMap = new Map(roleModels.map((r) => [r.role, r.model_ref]));
+    const effectiveModel = roleModelMap.get(agent.role) ?? agent.model_ref;
 
     // Agent ile ilişkili görevler
     const agentTasks: Array<{
@@ -90,11 +91,38 @@ export class CanvasController {
       }
     }
 
-    // Mesaj sayısı
+    // Mesaj sayısı (ClickHouse messages tablosundaki sender_principal_id veya from_id)
     const agentMessages = messages.filter((m) => {
-      const from = m.protocolVersion === 1 ? m.envelope.senderPrincipalId : m.fromId;
+      const from = m.protocolVersion === 1 ? m.envelope.senderPrincipalId : (m as unknown as Record<string, unknown>).from_id ?? (m as unknown as Record<string, unknown>).fromId;
       return from === agentId;
     });
+
+    // API kullanım ve maliyet metrikleri (api_usage tablosundan)
+    let promptTokens = 0;
+    let completionTokens = 0;
+    let costUsd = 0;
+    let calls = 0;
+
+    try {
+      const usageRes = await this.database.ch.query({
+        query: `SELECT count() AS calls, sum(prompt_tokens) AS pt, sum(completion_tokens) AS ct, sum(cost_usd) AS cost FROM api_usage WHERE agent_id = {agentId:UUID}`,
+        query_params: { agentId },
+        format: 'JSONEachRow',
+      });
+      const rawJson = (await usageRes.json()) as unknown;
+      const rows = Array.isArray(rawJson)
+        ? rawJson
+        : ((rawJson as { data?: Array<Record<string, unknown>> } | null)?.data ?? []);
+      const first = rows[0] as Record<string, unknown> | undefined;
+      if (first !== undefined) {
+        calls = Number(first.calls ?? 0);
+        promptTokens = Number(first.pt ?? 0);
+        completionTokens = Number(first.ct ?? 0);
+        costUsd = Number(first.cost ?? 0);
+      }
+    } catch {
+      // api_usage tablosu okunamadıysa sessizce 0 kalır
+    }
 
     return {
       agentId: agent.agent_id,
@@ -107,10 +135,10 @@ export class CanvasController {
       tasksRejected,
       tasks: agentTasks,
       messageCount: agentMessages.length,
-      promptTokens: 0,
-      completionTokens: 0,
-      costUsd: 0,
-      calls: 0,
+      promptTokens,
+      completionTokens,
+      costUsd,
+      calls,
     };
   }
 }

@@ -111,8 +111,11 @@ const LIVE_EXPECTED: ReadonlySet<string> = new Set([
 export type RoleModelResolver = (role: string) => string | undefined;
 
 /** Durum değişiminden bu yana geçen saniyeyi hesaplar; bilgi yoksa undefined. */
-const elapsedSecOf = (changedAt: string | undefined, nowMs: number): number | undefined => {
-  if (!changedAt) return undefined;
+const elapsedSecOf = (agent: CanvasAgentLike, nowMs: number): number | undefined => {
+  const changedAt = agent.status_changed_at
+    ?? (agent as unknown as Record<string, unknown>).updated_at
+    ?? (agent as unknown as Record<string, unknown>).created_at;
+  if (!changedAt || typeof changedAt !== 'string') return undefined;
   const ms = nowMs - new Date(changedAt).getTime();
   return ms >= 0 ? Math.floor(ms / 1000) : undefined;
 };
@@ -141,7 +144,7 @@ export function buildCanvasProjection(
   const taskTitleMap = new Map(tasks.map((t) => [t.task_id, t.title]));
 
   const nodes: CanvasNode[] = agents.map((agent) => {
-    const elapsed = elapsedSecOf(agent.status_changed_at, nowMs);
+    const elapsed = elapsedSecOf(agent, nowMs);
     const isUnresponsive = liveAgentIds !== undefined
       && LIVE_EXPECTED.has(agent.status)
       && !liveAgentIds.has(agent.agent_id);
