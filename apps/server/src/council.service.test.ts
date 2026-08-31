@@ -129,6 +129,10 @@ describe('CouncilApplicationService — 5 Tur ve Org Plan (Faz D)', () => {
             supersedes_plan_id: p.supersedes_plan_id ?? '00000000-0000-0000-0000-000000000000',
             created_by_agent_id: p.created_by_agent_id,
             approved_by: p.approved_by ?? '',
+            // Projeksiyon kolonları ELLE sayıyor: yeni bir kolon eklenince
+            // burada da eklenmezse okuma varsayılana düşer ve uzlaştırma
+            // "aynı kimlik ve sürümde farklı içerik" diye reddeder.
+            provider_diversity: p.provider_diversity ?? 0,
             created_at: p.created_at,
             updated_at: p.updated_at,
             version: 1,
@@ -155,6 +159,11 @@ describe('CouncilApplicationService — 5 Tur ve Org Plan (Faz D)', () => {
             supersedes_plan_id: query_params.supersedesPlanId,
             created_by_agent_id: query_params.createdByAgentId,
             approved_by: query_params.approvedBy ?? '',
+            // Sahte, YAZILAN her kolonu geri döndürmelidir. Yeni kolonu
+            // atlarsa okuma varsayılana düşer ve uzlaştırma hash'i "aynı
+            // kimlik ve sürümde farklı içerik" diye reddeder — gerçek
+            // ClickHouse'ta olmayan bir hata.
+            provider_diversity: query_params.providerDiversity ?? 0,
             created_at: query_params.createdAt,
             updated_at: query_params.createdAt,
             version: query_params.version ?? 1,
