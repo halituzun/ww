@@ -47,6 +47,12 @@ export interface PlanRow {
   readonly supersedes_plan_id: StoredOptionalEntityId;
   readonly created_by_agent_id: EntityId;
   readonly approved_by: string;
+  /**
+   * Konsey oturumundaki FARKLI sağlayıcı sayısı. 0 = ölçülmedi (bu alandan
+   * önce yazılmış planlar). docs/03 en az 3 ister; altındaki plan çapraz
+   * kontrol edilmiş sayılmaz.
+   */
+  readonly provider_diversity: number;
   readonly created_at: string;
   readonly observed_at: string;
   readonly version: UInt64String;
@@ -72,6 +78,7 @@ const PLAN_COLUMNS = `p.plan_id AS plan_id, p.project_id AS project_id,
   p.team_json AS team_json, p.scenarios_json AS scenarios_json,
   p.replan_reason AS replan_reason, p.supersedes_plan_id AS supersedes_plan_id,
   p.created_by_agent_id AS created_by_agent_id, p.approved_by AS approved_by,
+  p.provider_diversity AS provider_diversity,
   p.created_at AS created_at, ${PLAN_OBSERVED_AT} AS observed_at,
   p.version AS version, p.row_hash AS row_hash`;
 function planFrom(acceptanceScope: 'plan' | 'project'): string {
@@ -107,6 +114,9 @@ function planRowHash(row: PlanRow): string {
     row.supersedes_plan_id,
     row.created_by_agent_id,
     row.approved_by,
+    // provider_diversity BİLEREK dışarıda: row_hash SAKLANIR ve bu alandan
+    // önce yazılmış satırların hash'i onsuz hesaplanmıştı. Alanı eklemek,
+    // migration öncesi her planı "bütünlük hatası" ile okunamaz yapardı.
     row.created_at,
     row.version,
   ]);
@@ -127,6 +137,7 @@ function planCallerContentHash(row: PlanRow): string {
     row.supersedes_plan_id,
     row.created_by_agent_id,
     row.approved_by,
+    row.provider_diversity,
     row.created_at,
   ]);
 }
@@ -187,6 +198,7 @@ function parsePlanRow(value: unknown): PlanRow {
       'plans.created_by_agent_id',
     ),
     approved_by: storedString(row['approved_by'], 'plans.approved_by'),
+    provider_diversity: storedUnsignedInteger(row['provider_diversity'] ?? 0, 'plans.provider_diversity', 255),
     created_at: createdAt,
     observed_at: storedObservedAt === EPOCH ? createdAt : storedObservedAt,
     version: storedUInt64(row['version'], 'plans.version'),
@@ -217,7 +229,8 @@ async function insertPlanAtAcceptance(ch: ClickHouseClient, row: PlanRow): Promi
     query: `INSERT INTO plans (
         plan_id, project_id, plan_version, status, title, content_md,
         council_session_id, team_json, scenarios_json, replan_reason,
-        supersedes_plan_id, created_by_agent_id, approved_by, created_at,
+        supersedes_plan_id, created_by_agent_id, approved_by,
+        provider_diversity, created_at,
         observed_at, version, row_hash
       )
       SELECT
@@ -225,6 +238,7 @@ async function insertPlanAtAcceptance(ch: ClickHouseClient, row: PlanRow): Promi
         {title:String}, {contentMd:String}, {councilSessionId:UUID}, {teamJson:String},
         {scenariosJson:String}, {replanReason:String}, {supersedesPlanId:UUID},
         {createdByAgentId:UUID}, {approvedBy:String},
+        {providerDiversity:UInt8},
         {createdAt:DateTime64(3, 'UTC')},
         greatest(
           now64(3, 'UTC'),
@@ -256,6 +270,7 @@ async function insertPlanAtAcceptance(ch: ClickHouseClient, row: PlanRow): Promi
       supersedesPlanId: row.supersedes_plan_id,
       createdByAgentId: row.created_by_agent_id,
       approvedBy: row.approved_by,
+      providerDiversity: row.provider_diversity,
       createdAt: clickHouseDateTime(row.created_at),
       version: row.version,
       rowHash: planRowHash(row),

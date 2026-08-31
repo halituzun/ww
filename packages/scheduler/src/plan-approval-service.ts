@@ -31,7 +31,20 @@ export interface PlanApprovalInput {
   readonly actor: string;
   readonly now: string;
   readonly note?: string;
+  /**
+   * Çapraz kontrolü eksik bir konsey planını BİLEREK onaylamak.
+   *
+   * NEDEN bayrak: docs/03 konseyin farklı sağlayıcılardan 3-4 üye ister.
+   * Eşiğin altındayken koşu durmuyor, yalnız plan markdown'ına bir uyarı
+   * METNİ yazılıyordu ve plan sessizce onaylanabiliyordu — tek modelin
+   * kendisiyle konuştuğu bir koşu gerçek konsey kararından ayırt edilemez
+   * hâle geliyordu. Bayrak, kararı kullanıcının BİLİNÇLİ tercihi yapar.
+   */
+  readonly acknowledgeLowDiversity?: boolean;
 }
+
+/** docs/03: konsey çapraz kontrolü için gereken en az farklı sağlayıcı. */
+export const MIN_COUNCIL_PROVIDERS = 3;
 
 export interface PlanApprovalResult {
   readonly plan: PlanRow;
@@ -117,6 +130,19 @@ export class PlanApprovalService {
     // ÖNCE görev grafiğini doğrula, SONRA statüyü çevir. Ters sırada plan
     // "approved" kalır ama hiçbir görev doğmaz — düzeltmeye çalıştığımız
     // yalanın ta kendisi.
+    // Konsey ürünü bir planın çapraz kontrolü eksikse, onay BİLİNÇLİ olmalı.
+    // Bootstrap/elle yazılmış planlar konsey iddiası taşımaz; kapsam dışı.
+    const fromCouncil = plan.council_session_id !== NIL_UUID;
+    if (fromCouncil
+      && plan.provider_diversity < MIN_COUNCIL_PROVIDERS
+      && input.acknowledgeLowDiversity !== true) {
+      throw new PlanApprovalError(
+        `konsey caprazkontrolu eksik: ${plan.provider_diversity} farkli saglayici `
+        + `(hedef ${MIN_COUNCIL_PROVIDERS}). Bu planin kararlari tek bakis acisiyla `
+        + 'uretilmis olabilir; yine de onaylamak icin acikca kabul edin.',
+      );
+    }
+
     const graph = readPlanTaskGraph(plan.scenarios_json);
     if (graph.tasks.length === 0) {
       throw new PlanApprovalError(

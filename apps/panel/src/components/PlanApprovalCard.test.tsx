@@ -56,6 +56,7 @@ const samplePlan: Plan = {
     org_plan: sampleOrgPlan,
   },
   scenarios_json: { scenarios: [] },
+  provider_diversity: 3,
   created_at: new Date().toISOString(),
 };
 
@@ -119,9 +120,34 @@ describe("PlanApprovalCard", () => {
   it("onayla butonuna basıldığında onApprove callback'ini tetikler", () => {
     const handleApprove = vi.fn();
     render(<PlanApprovalCard plan={samplePlan} onApprove={handleApprove} />);
-    const approveBtn = screen.getByText("Planı ve Organizasyonu Onayla");
-    fireEvent.click(approveBtn);
-    expect(handleApprove).toHaveBeenCalledOnce();
+    fireEvent.click(screen.getByText("Planı ve Organizasyonu Onayla"));
+    // Çapraz kontrol tamsa bilinçli onay bayrağı GEREKMEZ.
+    expect(handleApprove).toHaveBeenCalledWith(false);
+  });
+
+  // docs/03 konsey için en az 3 FARKLI sağlayıcı ister. Eksikliği eskiden
+  // yalnız plan metnine gömülü bir uyarı satırıydı ve plan sessizce
+  // onaylanabiliyordu: tek modelin kendisiyle konuştuğu bir koşu, gerçek
+  // konsey kararından ayırt edilemiyordu.
+  it("caprazkontrolu eksik plani rozetle gosterir ve onayi bilincli kilar", () => {
+    const handleApprove = vi.fn();
+    render(
+      <PlanApprovalCard
+        plan={{ ...samplePlan, provider_diversity: 1 }}
+        onApprove={handleApprove}
+      />,
+    );
+    expect(screen.getByText(/Çapraz kontrol eksik · 1 sağlayıcı/)).toBeDefined();
+    fireEvent.click(screen.getByText("Çapraz kontrol eksik — yine de onayla"));
+    expect(handleApprove).toHaveBeenCalledWith(true);
+  });
+
+  it("olculmemis cesitliligi de eksik sayar", () => {
+    // 0 "ölçülmedi" demektir; ölçülmemişi tam saymak sessiz geçiş olurdu.
+    const withoutDiversity: Plan = { ...samplePlan };
+    delete (withoutDiversity as { provider_diversity?: number }).provider_diversity;
+    render(<PlanApprovalCard plan={withoutDiversity} />);
+    expect(screen.getByText(/Çapraz kontrol eksik · 0 sağlayıcı/)).toBeDefined();
   });
 
   it("revizyon iste butonuna basıldığında gerekçe formunu açar", () => {

@@ -11,6 +11,12 @@ export interface Plan {
   /** Konsey dökümü; sunucu plan gövdesiyle birlikte döndürebilir. */
   readonly transcript?: readonly CouncilRoundData[] | undefined;
   readonly scenarios_json?: unknown;
+  /**
+   * Konsey oturumundaki FARKLI sağlayıcı sayısı (docs/03 en az 3 ister).
+   * 0 = ölçülmedi. Panel bunu rozetle gösterir; eskiden çapraz kontrolün
+   * eksikliği yalnız plan metnine gömülü bir uyarı satırıydı.
+   */
+  readonly provider_diversity?: number;
   readonly plan_version?: number;
   readonly version?: number;
   readonly approved_by?: string;
@@ -38,14 +44,20 @@ export const approvePlan = (
   projectId: string,
   planId: string,
   note?: string,
-  options: RequestOptions = {}
+  options: RequestOptions & { acknowledgeLowDiversity?: boolean } = {}
 ): Promise<PlanApprovalResponse> =>
   requestJson<PlanApprovalResponse>(
     scope(projectId, `/plans/${planId}/approval`),
     {
       ...options,
       method: "POST",
-      body: { approved: true, ...(note ? { note } : {}) },
+      body: {
+        approved: true,
+        ...(note ? { note } : {}),
+        ...(options.acknowledgeLowDiversity === true
+          ? { acknowledgeLowDiversity: true }
+          : {}),
+      },
     },
     "Plan onaylanamadı"
   );

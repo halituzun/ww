@@ -555,6 +555,7 @@ export class CouncilApplicationService {
         status: result.status,
         memberModelRefs: composition.members.map((member) => member.modelRef),
         diversityWarning: composition.diversityWarning,
+        distinctProviders: composition.distinctProviders,
         createdAt: new Date().toISOString(),
       });
       this.#logger.log(`createPlan cagriliyor: planId=${planId}`);

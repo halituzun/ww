@@ -29,7 +29,7 @@ export function PlanApprovalCard({
   loading = false,
 }: {
   readonly plan: Plan | undefined;
-  readonly onApprove?: (() => Promise<void> | void) | undefined;
+  readonly onApprove?: ((acknowledgeLowDiversity: boolean) => Promise<void> | void) | undefined;
   readonly onReject?: ((note: string) => Promise<void> | void) | undefined;
   readonly onReplan?: ((reason: string, summary: string) => Promise<void> | void) | undefined;
   readonly loading?: boolean | undefined;
@@ -45,6 +45,11 @@ export function PlanApprovalCard({
     ? (() => { try { return JSON.parse(plan.team_json); } catch { return undefined; } })()
     : plan.team_json;
   const orgPlan = (parsedTeam as { org_plan?: OrgPlan } | undefined)?.org_plan;
+  // docs/03 konsey için en az 3 FARKLI sağlayıcı ister. Eksikliği eskiden
+  // yalnız plan metnine gömülü bir uyarı satırıydı ve plan sessizce
+  // onaylanabiliyordu.
+  const diversity = plan.provider_diversity ?? 0;
+  const lowDiversity = diversity < 3;
 
   return (
     <div className="card plan-approval-card" role="region" aria-label="Plan onay kartı">
@@ -55,6 +60,11 @@ export function PlanApprovalCard({
             <span className={`pill ${isApproved ? "pill--done" : "pill--warning"}`}>
               {isApproved ? "Onaylandı" : "Kullanıcı Onayı Bekliyor"}
             </span>
+            {lowDiversity ? (
+              <span className="pill pill--warning" title="docs/03: konsey en az 3 farklı sağlayıcı ister">
+                Çapraz kontrol eksik · {diversity} sağlayıcı
+              </span>
+            ) : null}
           </div>
           <h3 className="plan-title">{plan.title || "Proje Mimari ve Görev Planı"}</h3>
         </div>
@@ -186,10 +196,14 @@ export function PlanApprovalCard({
               <button
                 type="button"
                 className="btn btn--primary"
-                onClick={() => void onApprove?.()}
+                onClick={() => void onApprove?.(lowDiversity)}
                 disabled={loading}
               >
-                {loading ? "Onaylanıyor…" : "Planı ve Organizasyonu Onayla"}
+                {loading
+                  ? "Onaylanıyor…"
+                  : lowDiversity
+                    ? "Çapraz kontrol eksik — yine de onayla"
+                    : "Planı ve Organizasyonu Onayla"}
               </button>
               <button
                 type="button"

@@ -36,6 +36,7 @@ export function buildPlanRow(context: PlanRowContext, input: PlanInputValue) {
     council_session_id: NIL_UUID,
     team_json: [],
     scenarios_json: [],
+    provider_diversity: 0,
     replan_reason: '',
     supersedes_plan_id: NIL_UUID,
     // "Bu kararı kim aldı" izlenebilir kalmalı.

@@ -36,11 +36,14 @@ function AppContent() {
     return vm.tasks.find((t) => t.task_id === vm.selectedTaskId);
   }, [vm.tasks, vm.selectedTaskId]);
 
-  const handleApprovePlan = useCallback(async () => {
+  const handleApprovePlan = useCallback(async (acknowledgeLowDiversity = false) => {
     try {
       // BİLDİRİM İŞLEMİN SONUCUNU SÖYLER. Eskiden "Görevler yürütmeye alındı"
       // yazıyordu ama onay hiçbir görev üretmiyordu; kuyruk boş kalıyordu.
-      const { taskCount, agentCount } = await vm.approveCurrentPlan();
+      const { taskCount, agentCount } = await vm.approveCurrentPlan(
+        undefined,
+        acknowledgeLowDiversity,
+      );
       toast.success(
         agentCount > 0
           ? `Plan onaylandı. ${agentCount} agent kuruldu, ${taskCount} görev yürütmeye alındı.`

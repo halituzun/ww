@@ -7,6 +7,12 @@ import { z } from 'zod';
 const ApprovalInput = z.strictObject({
   approved: z.boolean(),
   note: z.string().trim().max(4_000).optional(),
+  /**
+   * Çapraz kontrolü eksik konsey planını bilerek onaylamak (docs/03: en az
+   * 3 farklı sağlayıcı). Varsayılan false: eksik çeşitlilik SESSİZCE
+   * geçilemez.
+   */
+  acknowledgeLowDiversity: z.boolean().optional(),
 });
 
 export type ApprovalInputValue = z.infer<typeof ApprovalInput>;

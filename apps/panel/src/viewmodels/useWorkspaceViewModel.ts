@@ -296,10 +296,12 @@ export function useWorkspaceViewModel() {
 
   const approveCurrentPlan = useCallback(async (
     note?: string,
+    acknowledgeLowDiversity = false,
   ): Promise<{ taskCount: number; agentCount: number }> => {
     if (!projectId || !activePlan) return { taskCount: 0, agentCount: 0 };
     try {
-      const result = await approvePlan(projectId, activePlan.plan_id, note);
+      const result = await approvePlan(projectId, activePlan.plan_id, note,
+        acknowledgeLowDiversity ? { acknowledgeLowDiversity: true } : {});
       const updated = await fetchPlans(projectId);
       setPlans(updated);
       return { taskCount: result.createdTaskCount, agentCount: result.createdAgentCount };

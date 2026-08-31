@@ -43,6 +43,8 @@ export interface CouncilPlanInput {
   readonly status?: 'converged' | 'uncoordinated';
   readonly memberModelRefs: readonly string[];
   readonly diversityWarning: string;
+  /** Konsey oturumundaki FARKLI sağlayıcı sayısı (docs/03 en az 3 ister). */
+  readonly distinctProviders?: number | undefined;
   readonly orgPlan?: OrgPlan;
   readonly supersedesPlanId?: EntityId;
   readonly createdAt: string;
@@ -194,6 +196,9 @@ export function buildCouncilPlan(input: CouncilPlanInput) {
     supersedes_plan_id: input.supersedesPlanId ?? NIL_UUID,
     created_by_agent_id: input.chairAgentId,
     approved_by: '',
+    // Çapraz kontrolün gerçekliği plana VERİ olarak yazılır; uyarı metni
+    // sorgulanamaz ve onay kararında kullanılamazdı.
+    provider_diversity: input.distinctProviders ?? 0,
     created_at: input.createdAt,
   };
 }

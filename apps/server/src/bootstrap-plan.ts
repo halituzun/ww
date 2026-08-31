@@ -38,6 +38,8 @@ export function buildBootstrapPlan(input: BootstrapPlanInput) {
     council_session_id: NIL_UUID,
     team_json: { roles: ['pm', 'worker', 'verifier'] },
     scenarios_json: { scenarios: [] },
+    // Bootstrap planı konsey ürünü değildir: çapraz kontrol ÖLÇÜLMEDİ.
+    provider_diversity: 0,
     replan_reason: '',
     supersedes_plan_id: NIL_UUID,
     created_by_agent_id: input.createdByAgentId,

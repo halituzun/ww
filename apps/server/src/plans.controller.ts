@@ -128,6 +128,9 @@ export class PlanApplicationService {
         actor: 'local-user',
         now: new Date().toISOString(),
         ...(input.note === undefined ? {} : { note: input.note }),
+        ...(input.acknowledgeLowDiversity === undefined
+          ? {}
+          : { acknowledgeLowDiversity: input.acknowledgeLowDiversity }),
       });
       // Panel bildirimi bu sayıları OLDUĞU GİBİ söyler; uydurma metin yok.
       return {
