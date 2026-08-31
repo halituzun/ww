@@ -58,6 +58,14 @@ export interface TaskBriefServiceOptions {
   readonly clock?: ClockPort;
   readonly redis: WwRedis;
   readonly leaseTtlMs?: number;
+  readonly projectMapSnapshotter?: ProjectMapSnapshotterPort;
+}
+
+export interface ProjectMapSnapshotterPort {
+  snapshot(input: {
+    readonly projectId: string;
+    readonly cutoffAt: string;
+  }): Promise<void>;
 }
 
 export function taskBriefIdFor(
@@ -73,6 +81,7 @@ export class TaskBriefService {
   readonly #clock: ClockPort;
   readonly #redis: WwRedis;
   readonly #leaseTtlMs: number;
+  readonly #projectMapSnapshotter: ProjectMapSnapshotterPort | undefined;
 
   constructor(
     projectId: string,
@@ -86,6 +95,7 @@ export class TaskBriefService {
     this.#clock = options.clock ?? systemClock;
     this.#redis = options.redis;
     this.#leaseTtlMs = options.leaseTtlMs ?? 60_000;
+    this.#projectMapSnapshotter = options.projectMapSnapshotter;
   }
 
   async seal(input: SealTaskBriefInput): Promise<TaskBriefV1> {
@@ -201,6 +211,12 @@ export class TaskBriefService {
       version: plan.plan_version,
       hash: planHash,
     });
+    if (this.#projectMapSnapshotter !== undefined) {
+      await guard.after(this.#projectMapSnapshotter.snapshot({
+        projectId: task.project_id,
+        cutoffAt,
+      }));
+    }
     const snapshot = await guard.after(this.#snapshotBuilder.build({
       projectId: task.project_id,
       taskSource,

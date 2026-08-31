@@ -4,6 +4,7 @@ import {
   getTaskAsOf,
   getPlanAsOf,
   getPromptSourceRefAsOf,
+  getLatestProjectMapSourceRefAsOf,
   RepositoryConflictError,
   type ClickHouseClient,
 } from '@ww/db';
@@ -158,6 +159,11 @@ export class TaskContextSnapshotBuilder implements TaskContextSnapshotPort {
 
     const standardRefs = await readKnowledge(input.standardKnowledgeIds, 'standard');
     const requirementRefs = await readKnowledge(input.requirementKnowledgeIds, 'requirement');
+    const projectMapRef = await getLatestProjectMapSourceRefAsOf(
+      this.#ch,
+      input.projectId,
+      cutoff.toISOString(),
+    );
     const ruleManifest = input.rules.map((rule) => VersionedSourceRefV1Schema.parse({
       sourceType: 'rule',
       sourceId: rule.ruleId,
@@ -171,6 +177,7 @@ export class TaskContextSnapshotBuilder implements TaskContextSnapshotPort {
       ...ruleManifest,
       ...standardRefs,
       ...requirementRefs,
+      ...(projectMapRef === null ? [] : [projectMapRef]),
     ];
     assertUniqueManifestIdentities(manifestValues);
     const sourceVersionManifest = SourceVersionManifestV1Schema.parse(manifestValues);

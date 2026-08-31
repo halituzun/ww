@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { appendKnowledgeVersion, createCh, createTask, runMigrations, type ClickHouseClient } from '@ww/db';
+import { appendKnowledgeVersion, createCh, createProjectMapSnapshot, createTask, runMigrations, type ClickHouseClient } from '@ww/db';
 import { NIL_UUID } from '@ww/shared';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { MemoryService } from './memory-service.js';
@@ -170,6 +170,62 @@ describe.skipIf(!up)('MemoryService.appendSummary', () => {
       cutoffAt: '2026-08-18T12:00:00.000Z', tokenBudget: 4_000,
     });
     expect(pack.chunks.map((chunk) => chunk.label)).toContain('[file:src/colors.ts]');
+  });
+
+  it('baglam paketi proje haritasi snapshotini tasir', async () => {
+    const projectId = randomUUID();
+    const taskId = randomUUID();
+    const memory = new MemoryService(ch);
+    await createTask(ch, {
+      task_id: taskId, project_id: projectId, plan_id: randomUUID(),
+      parent_task_id: NIL_UUID, title: 'Saglik ucu', description: 'controller haritasina bak',
+      acceptance_criteria: ['var olan route kullanilir'], status: 'queued', priority: 0,
+      issuer_agent_id: randomUUID(), worker_agent_id: NIL_UUID,
+      verifier_agent_id: NIL_UUID, group: 'coding', depends_on: [],
+      target_files: ['src/api.controller.ts'], attempt: 0, max_attempts: 3,
+      delegation_depth: 0, token_budget: 0, tokens_spent: 0, commit_hash: '',
+      result_summary: '', reject_reason: '', task_brief_id: NIL_UUID,
+      assignment_attempt_id: NIL_UUID,
+      created_at: '2026-08-18T09:00:00.000Z', updated_at: '2026-08-18T09:00:00.000Z',
+    } as never);
+    await createProjectMapSnapshot(ch, {
+      project_map_id: randomUUID(),
+      project_id: projectId,
+      map_json: {
+        fileCount: 1,
+        functionCount: 1,
+        routeCount: 1,
+        routes: [{
+          controller: 'ApiController',
+          methodName: 'health',
+          httpMethod: 'GET',
+          routePath: '/api/health',
+          filePath: 'src/api.controller.ts',
+          line: 12,
+        }],
+        functions: [{
+          name: 'health',
+          filePath: 'src/api.controller.ts',
+          line: 12,
+          exported: true,
+          parent: 'ApiController',
+        }],
+        files: [{ filePath: 'src/api.controller.ts' }],
+      },
+      file_count: 1,
+      function_count: 1,
+      route_count: 1,
+      generated_at: '2026-08-18T09:30:00.000Z',
+      created_at: '2026-08-18T09:30:00.000Z',
+    });
+
+    const pack = await memory.buildContextPack({
+      projectId: projectId as never, taskId: taskId as never,
+      cutoffAt: '2026-08-18T12:00:00.000Z', tokenBudget: 4_000,
+    });
+    const mapChunk = pack.chunks.find((chunk) => chunk.sourceTable === 'project_maps');
+    expect(mapChunk?.text).toContain('GET /api/health');
+    expect(mapChunk?.text).toContain('ApiController.health');
   });
 
   // Kesme anı özetlerde de geçerlidir: yeniden koşan bir görev, KENDİSİNDEN

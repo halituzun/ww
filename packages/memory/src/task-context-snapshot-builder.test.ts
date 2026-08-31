@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import {
   appendKnowledgeVersion,
+  createProjectMapSnapshot,
   createCh,
   createPlan,
   createTask,
@@ -129,6 +130,21 @@ describe.skipIf(!up)('TaskContextSnapshotBuilder ClickHouse integration', () => 
       created_at: new Date().toISOString(),
     });
     const cutoffAt = initial.observed_at;
+    const projectMap = await createProjectMapSnapshot(ch, {
+      project_map_id: randomUUID(),
+      project_id: projectId,
+      map_json: {
+        fileCount: 1,
+        functionCount: 1,
+        routeCount: 1,
+        files: [{ filePath: 'src/api.controller.ts' }],
+      },
+      file_count: 1,
+      function_count: 1,
+      route_count: 1,
+      generated_at: initial.created_at,
+      created_at: initial.created_at,
+    });
     await appendKnowledgeVersion(ch, {
       ...initial,
       content: 'A later standard must not leak into the snapshot.',
@@ -181,7 +197,14 @@ describe.skipIf(!up)('TaskContextSnapshotBuilder ClickHouse integration', () => 
       'prompt',
       'rule',
       'standard',
+      'project_map',
     ]);
+    expect(first.sourceVersionManifest).toContainEqual({
+      sourceType: 'project_map',
+      sourceId: projectMap.project_map_id,
+      version: Number(projectMap.version),
+      hash: canonicalSha256V1(projectMap),
+    });
   });
 
   it('cutoff aninda bulunmayan kaynagi fail-closed reddediyor', async () => {

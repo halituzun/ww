@@ -5,10 +5,10 @@ import {
   canonicalSha256V1,
   type EntityId,
 } from '@ww/shared';
-import { getFileIndex, getPlanAsOf, getTaskAsOf, listFileIndex, listFileIndexAsOf, listLatestKnowledgeByStatus, listLatestKnowledgeByStatusAsOf, listRecentMessages, listRecentSummaries, upsertFileIndex, type FileIndexLayer, type KnowledgeRow } from '@ww/db';
+import { getFileIndex, getLatestProjectMapSnapshotAsOf, getPlanAsOf, getTaskAsOf, listFileIndex, listFileIndexAsOf, listLatestKnowledgeByStatus, listLatestKnowledgeByStatusAsOf, listRecentMessages, listRecentSummaries, upsertFileIndex, type FileIndexLayer, type KnowledgeRow, type ProjectMapSnapshotRow } from '@ww/db';
 
 export interface MemoryChunk {
-  readonly sourceTable: 'plans' | 'knowledge' | 'summaries' | 'file_index' | 'messages';
+  readonly sourceTable: 'plans' | 'knowledge' | 'summaries' | 'file_index' | 'project_maps' | 'messages';
   readonly sourceId: EntityId;
   readonly text: string;
   readonly label: string;
@@ -49,7 +49,7 @@ export interface SummaryInput {
 
 export interface EmbeddingInput {
   readonly projectId: EntityId;
-  readonly sourceTable: 'plans' | 'knowledge' | 'summaries' | 'file_index' | 'messages';
+  readonly sourceTable: 'plans' | 'knowledge' | 'summaries' | 'file_index' | 'project_maps' | 'messages';
   readonly sourceId: EntityId;
   readonly chunkIndex: number;
   readonly text: string;
@@ -94,6 +94,52 @@ function knowledgeChunk(row: KnowledgeRow, score: number): MemoryChunk {
     label: `[knowledge:${row.kind} #${row.knowledge_id}]`,
     score,
   });
+}
+
+function projectMapText(row: ProjectMapSnapshotRow): string {
+  const map = row.map_json as {
+    readonly fileCount?: unknown;
+    readonly functionCount?: unknown;
+    readonly routeCount?: unknown;
+    readonly routes?: readonly {
+      readonly httpMethod?: unknown;
+      readonly routePath?: unknown;
+      readonly filePath?: unknown;
+      readonly line?: unknown;
+      readonly controller?: unknown;
+      readonly methodName?: unknown;
+    }[];
+    readonly functions?: readonly {
+      readonly name?: unknown;
+      readonly filePath?: unknown;
+      readonly line?: unknown;
+      readonly parent?: unknown;
+      readonly exported?: unknown;
+    }[];
+  };
+  const routes = Array.isArray(map.routes) ? map.routes : [];
+  const functions = Array.isArray(map.functions) ? map.functions : [];
+  const routeLines = routes.slice(0, 20).map((route) => [
+    typeof route.httpMethod === 'string' ? route.httpMethod : '',
+    typeof route.routePath === 'string' ? route.routePath : '',
+    '->',
+    `${typeof route.filePath === 'string' ? route.filePath : ''}:${typeof route.line === 'number' ? route.line : '?'}`,
+    `(${typeof route.controller === 'string' ? route.controller : ''}.${typeof route.methodName === 'string' ? route.methodName : ''})`,
+  ].filter(Boolean).join(' '));
+  const functionLines = functions
+    .filter((item) => item.exported === true)
+    .slice(0, 40)
+    .map((item) => [
+      typeof item.parent === 'string' && item.parent !== '' ? `${item.parent}.` : '',
+      typeof item.name === 'string' ? item.name : '',
+      '->',
+      `${typeof item.filePath === 'string' ? item.filePath : ''}:${typeof item.line === 'number' ? item.line : '?'}`,
+    ].join(''));
+  return [
+    `Dosya: ${String(map.fileCount ?? row.file_count)} · Fonksiyon: ${String(map.functionCount ?? row.function_count)} · Route: ${String(map.routeCount ?? row.route_count)}`,
+    routeLines.length === 0 ? '' : `Route haritası:\n${routeLines.join('\n')}`,
+    functionLines.length === 0 ? '' : `Export haritası:\n${functionLines.join('\n')}`,
+  ].filter((line) => line !== '').join('\n');
 }
 
 function validCutoff(value: string): string {
@@ -349,11 +395,20 @@ export class MemoryService {
         label: `[message:${row.protocolVersion === 1 ? row.envelope.kind : row.kind}]`,
         score: RECENT_SUMMARY_SCORE,
       }));
+    const projectMap = await getLatestProjectMapSnapshotAsOf(this.#ch, input.projectId, cutoffAt);
+    const projectMapChunks = projectMap === null ? [] : [Object.freeze({
+      sourceTable: 'project_maps' as const,
+      sourceId: projectMap.project_map_id,
+      text: projectMapText(projectMap),
+      label: `[project-map #${projectMap.project_map_id}]`,
+      score: 3,
+    })];
     const chunks = [
       ...planChunk,
       { sourceTable: 'summaries' as const, sourceId: input.taskId, text: taskText, label: `[task #${input.taskId}]`, score: 4 },
       ...knowledge,
       ...targetFileChunks,
+      ...projectMapChunks,
       ...(input.query === undefined ? [] : await this.query({ projectId: input.projectId, query: input.query, cutoffAt, limit: 12 })),
       ...relatedSummaries,
       ...recent,
