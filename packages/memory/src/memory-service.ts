@@ -480,7 +480,23 @@ export class MemoryService {
   }
 
   async appendSummary(input: SummaryInput): Promise<EntityId> {
-    const summaryId = id('summary-v1', input);
+    // KİMLİK createdAt İÇERMEZ. Eskiden `id('summary-v1', input)` çağrılıyordu
+    // ve `input.createdAt` kimliğe giriyordu; çağıran taraf her seferinde
+    // `new Date().toISOString()` verdiği için AYNI görevin özeti her
+    // yeniden koşuda FARKLI kimlikle ikinci bir satır yazıyordu.
+    //
+    // Tablo `MergeTree` (ReplacingMergeTree değil) ve `summary_id` üzerinde
+    // benzersizlik yok; yani kopya sessizce birikiyordu. Bağlam paketi son
+    // BEŞ özeti alır — kopyalar o pencereyi doldurup gerçek geçmişi dışarı
+    // itiyordu. Üstelik yığın tekilleştirmesi `sourceTable:sourceId:text`
+    // anahtarını kullanır: farklı kimlikli ama aynı metinli satırlar
+    // BİRLEŞMİYORDU.
+    const summaryId = id('summary-v1', {
+      projectId: input.projectId,
+      scope: input.scope,
+      refId: input.refId,
+      content: input.content,
+    });
     // Kolonlar AÇIKÇA eşlenir. Eskiden `{ summary_id, ...input }` yazılıyordu
     // ve `input` alanları camelCase (projectId/refId/...), tablo ise
     // snake_case ister: satır yazılıyor ama kimlik kolonları BOŞ kalıyordu.

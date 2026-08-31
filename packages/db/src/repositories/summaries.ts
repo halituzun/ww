@@ -42,6 +42,12 @@ function parse(value: unknown): SummaryRow {
  * gelişmeler"). `cutoffAt` verilirse o andan sonra yazılanlar elenir:
  * yeniden koşan bir görev, kendisinden sonra oluşmuş bilgiyi görmemelidir.
  */
+/**
+ * Son N özet. `LIMIT 1 BY summary_id` NEDEN VAR: tablo `MergeTree` (yani
+ * ReplacingMergeTree DEĞİL) ve `summary_id` üzerinde benzersizlik yok. Aynı
+ * özet iki kez yazılırsa kopya kalıcıdır; bağlam paketi son beş özeti aldığı
+ * için kopyalar o pencereyi doldurup gerçek geçmişi dışarı iterdi.
+ */
 export async function listRecentSummaries(
   ch: ClickHouseClient,
   projectId: string,
@@ -55,7 +61,9 @@ export async function listRecentSummaries(
   const result = await ch.query({
     query: `SELECT ${COLUMNS} FROM summaries WHERE project_id = {projectId:UUID}
       ${cutoffAt === undefined ? '' : 'AND created_at <= parseDateTime64BestEffort({cutoff:String}, 3)'}
-      ORDER BY created_at DESC, summary_id ASC LIMIT {limit:UInt32}`,
+      ORDER BY created_at DESC, summary_id ASC
+      LIMIT 1 BY summary_id
+      LIMIT {limit:UInt32}`,
     query_params: {
       projectId: id,
       limit,

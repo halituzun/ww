@@ -50,4 +50,28 @@ describe.skipIf(!up)('summaries repository', () => {
     await expect(listRecentSummaries(ch, randomUUID(), 0)).rejects.toThrow(/limiti gecersiz/);
     await expect(listRecentSummaries(ch, randomUUID(), 1_001)).rejects.toThrow(/limiti gecersiz/);
   });
+
+  // KOPYA ÖZET MÜHÜRÜ: tablo MergeTree (ReplacingMergeTree DEĞİL) ve
+  // summary_id üzerinde benzersizlik yok. Kimlik eskiden createdAt içerdiği
+  // için aynı özet her yeniden koşuda FARKLI kimlikle yazılıyordu; bağlam
+  // paketi son beş özeti aldığı için kopyalar pencereyi doldurup gerçek
+  // geçmişi dışarı itiyordu.
+  it('ayni summary_id iki kez yazilirsa okumada bir kez doner', async () => {
+    const projectId = randomUUID();
+    const summaryId = randomUUID();
+    const row = {
+      summary_id: summaryId,
+      project_id: projectId,
+      scope: 'task',
+      ref_id: randomUUID(),
+      content: 'ayni ozet',
+      created_by_agent_id: randomUUID(),
+      created_at: '2026-08-31T09:00:00.000Z',
+    };
+    await ch.insert({ table: 'summaries', values: [row], format: 'JSONEachRow' });
+    await ch.insert({ table: 'summaries', values: [row], format: 'JSONEachRow' });
+
+    const rows = await listRecentSummaries(ch, projectId, 10);
+    expect(rows.filter((item) => item.summary_id === summaryId)).toHaveLength(1);
+  });
 });
