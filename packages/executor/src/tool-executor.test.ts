@@ -171,6 +171,7 @@ function harness(
       externalIdempotencyKey: input.stableEffectId,
     }) as T,
   };
+  const memory = { query: vi.fn(async () => [] as never) };
   return {
     access,
     audit,
@@ -180,11 +181,13 @@ function harness(
     intents: intentOverride,
     sandboxInputs,
     sandbox,
+    memory,
     executor: new ToolExecutor({
       access,
       audit,
       communication,
       effects,
+      memory,
       intents: intentOverride,
       sandboxInputs,
       sandbox,
@@ -561,5 +564,21 @@ describe('ToolExecutor', () => {
     })).rejects.toMatchObject({ code: 'FENCE_LOST' });
     expect(observedAbort).toBe(true);
     expect(await readFile(path.join(ctx.workspaceRoot, 'a.ts'), 'utf8')).toBe('old\n');
+  });
+
+  // AS-OF SIZINTISININ MÜHÜRÜ: `memory_query` cutoff'suz koşuyordu. Tek bir
+  // tool çağrısı, bütün mühür makinesinin kapattığı zaman sızıntısını
+  // yeniden açıyordu: yeniden denenen bir görev, mühürden SONRA yazılmış
+  // kararları görebiliyordu.
+  it('memory_query mühürlü cutoff ile sorgular', async () => {
+    const ctx = await context(['memory_query']);
+    const test = harness();
+    await test.executor.execute(ctx, {
+      callId: id(), occurredAt, name: 'memory_query', args: { question: 'bunu nasil yaptik' },
+    });
+    expect(test.memory.query).toHaveBeenCalledWith(expect.objectContaining({
+      question: 'bunu nasil yaptik',
+      cutoffAt: ctx.brief.baseContextCutoffAt,
+    }));
   });
 });

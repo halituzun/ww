@@ -504,9 +504,11 @@ export function createPhase9RuntimeComposition(
     // Araç olmadan geçmiş kararlar görünmüyor, agent aynı işi baştan
     // tasarlıyor ya da kullanıcıya soruyordu.
     memory: {
-      query: async ({ projectId, question, limit }) => {
+      query: async ({ projectId, question, limit, cutoffAt }) => {
         const chunks = await new MemoryService(input.ch).query({
-          projectId: projectId as never, query: question, limit,
+          // MÜHÜRLÜ KESİT: cutoff'suz sorgu, yeniden denenen bir göreve
+          // mühürden SONRA yazılmış kararları gösteriyordu.
+          projectId: projectId as never, query: question, limit, cutoffAt,
         });
         // Kaynağı da döneriz: kanıtsız bir cevap agent'ın uydurmasına
         // zemin hazırlar.

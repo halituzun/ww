@@ -142,6 +142,17 @@ export interface ExecutorMemoryPort {
     projectId: string;
     question: string;
     limit: number;
+    /**
+     * Mühürlü brief'in bağlam kesiti.
+     *
+     * NEDEN ZORUNLU: bu alan HİÇ YOKTU ve sorgu cutoff'suz koşuyordu. Tek
+     * bir tool çağrısı, bütün as-of mühür makinesinin kapattığı zaman
+     * sızıntısını yeniden açıyordu: yeniden denenen bir görev, mühürden
+     * SONRA yazılmış kararları ve özetleri görebiliyordu. Bu, doğrudan
+     * runtime-context-service'teki "retries see future decisions" uyarısına
+     * aykırıydı ve docs/06'nın yeniden oynatma garantisini boşa çıkarıyordu.
+     */
+    cutoffAt: string;
   }>): Promise<JsonValue>;
 }
 

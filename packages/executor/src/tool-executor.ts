@@ -429,6 +429,9 @@ export class ToolExecutor {
           projectId: context.brief.projectId,
           question: text(args, 'question'),
           limit: optionalInteger(args, 'limit') ?? 5,
+          // Mühürlü kesit: agent kendi brief'inden SONRA yazılmış kararları
+          // göremez. Cutoff'suz sorgu, as-of mührünü tek çağrıda deliyordu.
+          cutoffAt: context.brief.baseContextCutoffAt,
         });
       }
       case 'create_subtask': {
