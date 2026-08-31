@@ -150,16 +150,26 @@ export class PlanApplicationService {
   async replan(projectId: string, input: ReturnType<typeof parseReplanInput>) {
     const service = new ReplanningService(this.database.ch);
     try {
-      return await service.replan({
+      const result = await service.replan({
         projectId: projectId as EntityId,
         reason: input.reason,
         summary: input.summary,
         now: new Date().toISOString(),
       });
+      // Panel bu değerleri OLDUĞU GİBİ söyler ve konsey turunu `councilGoal`
+      // ile başlatır; yeni plan sürümü o turdan doğar.
+      return {
+        ...result.supersededPlan,
+        cancelledTaskCount: result.cancelledTasks.length,
+        councilGoal: result.councilGoal,
+        nextPlanVersion: result.nextPlanVersion,
+      };
     } catch (reason) {
       // "aktif plan yok" kullanıcı durumudur; 500 sebebi gizler.
       const message = reason instanceof Error ? reason.message : String(reason);
-      if (message.includes('aktif plan bulunamadi')) throw new BadRequestException(message);
+      if (message.includes('aktif plan bulunamadi') || message.includes('gerekcesi bos')) {
+        throw new BadRequestException(message);
+      }
       throw reason;
     }
   }

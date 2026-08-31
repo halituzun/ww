@@ -78,13 +78,21 @@ export const rejectPlan = (
     "Plan reddedilemedi"
   );
 
+/** Yeniden planlamanın gerçek sonucu; panel bunu olduğu gibi söyler. */
+export interface ReplanResponse {
+  readonly cancelledTaskCount: number;
+  /** Yeni plan sürümünü üretecek konsey turunun hedefi. */
+  readonly councilGoal: string;
+  readonly nextPlanVersion: number;
+}
+
 export const requestReplan = (
   projectId: string,
   reason: string,
   summary: string,
   options: RequestOptions = {}
-): Promise<unknown> =>
-  requestJson(
+): Promise<ReplanResponse> =>
+  requestJson<ReplanResponse>(
     scope(projectId, "/plans/replan"),
     {
       ...options,

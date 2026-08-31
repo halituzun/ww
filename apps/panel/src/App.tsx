@@ -57,8 +57,15 @@ function AppContent() {
 
   const handleReplan = useCallback(async (reason: string, summary: string) => {
     try {
-      await vm.replanCurrentProject(reason, summary);
-      toast.success("Yeniden planlama talebi PM agent'a iletildi.", "Revizyon Talebi");
+      // BİLDİRİM İŞLEMİN SONUCUNU SÖYLER. Eskiden "PM agent'a iletildi"
+      // yazıyordu ama PM'e hiçbir mesaj gitmiyordu; plan sürümü artmıyor,
+      // görevler iptal edilmiyordu.
+      const { cancelledTaskCount, planVersion } = await vm.replanCurrentProject(reason, summary);
+      toast.success(
+        `Plan devre dışı bırakıldı, ${cancelledTaskCount} görev iptal edildi. `
+        + `Konsey v${planVersion} için yeniden müzakere ediyor.`,
+        "Revizyon Talebi",
+      );
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Revizyon talebi iletilemedi", "Hata");
     }

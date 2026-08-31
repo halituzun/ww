@@ -17,6 +17,7 @@ import { describeLoadFailures } from './workspace-load.js';
 import type { ConnectionState } from './live-connection.js';
 import { fetchBudgetReport, EMPTY_BUDGET_REPORT, type BudgetReport } from '../services/budget.js';
 import { fetchPendingQuestions } from '../services/questions.js';
+import { runCouncil } from "../services/council.js";
 import { fetchPlans, approvePlan, requestReplan, type Plan } from '../services/plans.js';
 import { fetchAuditReport, EMPTY_AUDIT_REPORT, type AuditReport } from '../services/audit.js';
 import { fetchProviders, type Provider } from '../services/providers.js';
@@ -311,12 +312,23 @@ export function useWorkspaceViewModel() {
     }
   }, [projectId, activePlan]);
 
-  const replanCurrentProject = useCallback(async (reason: string, summary: string) => {
-    if (!projectId) return;
+  const replanCurrentProject = useCallback(async (
+    reason: string,
+    summary: string,
+  ): Promise<{ cancelledTaskCount: number; planVersion: number }> => {
+    if (!projectId) return { cancelledTaskCount: 0, planVersion: 0 };
     try {
-      await requestReplan(projectId, reason, summary);
+      const result = await requestReplan(projectId, reason, summary);
+      // YENİ PLAN SÜRÜMÜ KONSEY TURUNDAN DOĞAR (docs/03: aynı protokol).
+      // Eskiden burada hiçbir şey yoktu; panel "PM agent'a iletildi" diyor
+      // ama PM'e hiçbir mesaj gitmiyordu.
+      await runCouncil(projectId, result.councilGoal);
       const updated = await fetchPlans(projectId);
       setPlans(updated);
+      return {
+        cancelledTaskCount: result.cancelledTaskCount,
+        planVersion: result.nextPlanVersion,
+      };
     } catch (err) {
       console.error("Yeniden planlama talebi gönderilemedi:", err);
       throw err;
