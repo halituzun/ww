@@ -27,6 +27,19 @@ export interface Phase1SchedulerPort {
    * yetenek zorunlu bağımlılığa dönüşmemeli.
    */
   resetWorkspace?(input: Readonly<{ taskId: EntityId; attempt: AssignmentAttemptV1 }>): Promise<void>;
+  /**
+   * ATAMA düşerse çağrılır. `handleExecutionError` bir DENEME ister; atama
+   * düştüğünde deneme yoktur, bu yüzden ayrı bir yol gerekir.
+   *
+   * NEDEN VAR: `assign()` try bloğunun DIŞINDAYDI. `#selectAgents`
+   * "idle worker bulunamadi" ile fırlattığında hiçbir yere satır yazılmıyor,
+   * pompa yalnız bir uyarı basıyor, mesaj 5 teslimden sonra kuyruktan
+   * siliniyordu. Görev 'queued' kalıyor ve yalnız 60 saniyelik kurtarma
+   * süpürücüsü onu geri koyabiliyordu — yani sebebi görünmeyen bir duraklama.
+   *
+   * İSTEĞE BAĞLI: bağlanmamışsa hata eskisi gibi yukarı fırlatılır.
+   */
+  recordAssignmentFailure?(input: Readonly<{ taskId: EntityId; error: unknown }>): Promise<void>;
 }
 
 export interface Phase1OrchestratorInput {
@@ -181,7 +194,18 @@ async function runAssignedLifecycle(input: Phase1OrchestratorInput & { brief: Ta
 /** Executes one serial task lifecycle. All state changes remain scheduler-owned. */
 export async function runPhase1Orchestrator(input: Phase1OrchestratorInput): Promise<Phase1OrchestratorResult> {
   const maxAttempts = boundedAttempts(input.maxAttempts);
-  const attempt = await input.scheduler.assign(input.taskId);
+
+  // ATAMA da bir hata yoludur. Eskiden bu çağrı try bloğunun DIŞINDAYDI:
+  // "idle worker bulunamadi" gibi bir hata hiçbir yere yazılmıyor, görev
+  // sebebi görünmeden 'queued'da bekliyordu.
+  let attempt: AssignmentAttemptV1;
+  try {
+    attempt = await input.scheduler.assign(input.taskId);
+  } catch (error) {
+    await input.scheduler.recordAssignmentFailure?.({ taskId: input.taskId, error });
+    throw error;
+  }
+
   // Aşama SABİT 'working' bildiriliyordu; hata kaydedicisi FSM'de geçerli
   // eylemi aşamaya göre seçtiği için yanlış aşama görevi takılı bırakıyordu.
   const phase = { current: 'working' as 'working' | 'verifying' | 'testing' | 'committing' };

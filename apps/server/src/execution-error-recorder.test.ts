@@ -29,9 +29,40 @@ const recorder = (over: Partial<Parameters<typeof createExecutionErrorRecorder>[
 };
 
 describe('createExecutionErrorRecorder', () => {
-  it('failed durumunu döner', async () => {
+  it('gecis sonucu okunamazsa failed varsayar', async () => {
     const { handle } = recorder();
     expect(await handle(call())).toBe('failed');
+  });
+
+  // ASIL KUSUR (2026-08-31): bu fonksiyon KOŞULSUZ 'failed' dönüyordu, ama
+  // uyguladığı geçiş her zaman 'failed' üretmez: 'verifier_rejected' ve
+  // 'gate_failed' görevi (deneme hakkı bitmedikçe) 'working'e geri döndürür.
+  // Görev pompası 'failed'i "kapanabilir" sayıp mesajı kuyruktan SİLİYORDU:
+  // tasks satırı 'working', kuyrukta kayıt yok, agent'lar 'busy' kilitli,
+  // panel "çalışıyor" diyor — görev sessizce asılı kalıyordu.
+  it('gecisin GERCEK sonucunu dondurur (working ise failed demez)', async () => {
+    const transition = vi.fn(async () => ({ status: 'working' }));
+    const { handle } = recorder({ transition });
+    expect(await handle(call({ phase: 'verifying' }))).toBe('working');
+    expect(transition).toHaveBeenCalledWith(
+      expect.objectContaining({ action: 'verifier_rejected' }),
+    );
+  });
+
+  it('kapi hatasinda gate_failed gecisi uygular ve sonucunu dondurur', async () => {
+    const transition = vi.fn(async () => ({ status: 'escalated' }));
+    const { handle } = recorder({ transition });
+    expect(await handle(call({ phase: 'testing' }))).toBe('escalated');
+    expect(transition).toHaveBeenCalledWith(
+      expect.objectContaining({ action: 'gate_failed' }),
+    );
+  });
+
+  it('gecis reddedilirse failed dondurur ve sessiz kalmaz', async () => {
+    const transition = vi.fn(async () => { throw new Error('gecersiz FSM gecisi'); });
+    const { handle, log } = recorder({ transition });
+    expect(await handle(call())).toBe('failed');
+    expect(log.mock.calls.flat().join(' ')).toContain('geçirilemedi');
   });
 
   // ASIL KUSUR: handleExecutionError sabit 'failed' dönen bir taslaktı ve
@@ -74,8 +105,10 @@ describe('createExecutionErrorRecorder', () => {
   it('operatöre de bildirir', async () => {
     const { log, handle } = recorder();
     await handle(call());
-    expect(log).toHaveBeenCalledTimes(1);
+    // İLK satır düşme sebebidir. Tanı amaçlı ek satırlar (ör. "geçiş sonucu
+    // okunamadı") gelebilir; sayıyı sabitlemek, teşhis eklemeyi cezalandırırdı.
     expect(String(log.mock.calls[0]![0])).toMatch(/429/);
+    expect(log.mock.calls.length).toBeGreaterThanOrEqual(1);
   });
 
   // Kayıt yazılamazsa bile görev 'failed' olmalı: kaydedici, hata yolunu

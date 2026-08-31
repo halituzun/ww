@@ -28,6 +28,7 @@ export interface ExecutionErrorRecorderInput {
     action: string;
     resultSummary?: string;
   }>): Promise<unknown>;
+  /* Geçişin SONUCU okunur; bkz. aşağıdaki "durum gerçeği" notu. */
   log(message: string): void;
   now(): string;
 }
@@ -90,19 +91,32 @@ export function createExecutionErrorRecorder(input: ExecutionErrorRecorderInput)
       input.log(`hata olayı yazılamadı: ${reasonText(writeError)}`);
     }
 
+    // DURUM GERÇEĞİ: burada uygulanan geçiş her zaman 'failed' ÜRETMEZ.
+    // 'verifier_rejected' ve 'gate_failed' görevi (deneme hakkı bitmedikçe)
+    // 'working'e geri döndürür. Buna rağmen bu fonksiyon koşulsuz 'failed'
+    // dönüyordu ve görev pompası 'failed'i "kapanabilir" sayıp mesajı
+    // kuyruktan SİLİYORDU. Sonuç: tasks satırı 'working', kuyrukta kayıt yok,
+    // worker/verifier 'busy' kilitli, panel "çalışıyor" diyor — görev sessizce
+    // asılı kalıyordu. Artık geçişin GERÇEK sonucu döner; 'working' dönünce
+    // pompa mesajı ack'lemez ve görev yeniden denenir.
     try {
-      await input.transition({
+      const result = await input.transition({
         taskId: call.taskId,
         attempt: call.attempt,
         action: ACTION_BY_PHASE[call.phase] ?? 'fail',
         resultSummary: reason,
       });
+      const status = (result as { status?: unknown } | null)?.status;
+      if (typeof status === 'string') return status as TaskStatus;
+      // Geçiş sonucu okunamıyorsa durum belirsizdir; belirsizi 'failed'
+      // saymak, kuyrukta sonsuza dek dönen bir mesajdan iyidir.
+      input.log(`görev ${call.taskId} geçiş sonucu okunamadı; 'failed' varsayıldı`);
+      return 'failed';
     } catch (transitionError) {
       // Geçiş reddedilse bile çağıranın gördüğü sonuç 'failed' olmalı;
       // sessizce başarılı görünmek durumu belirsiz bırakırdı.
       input.log(`görev ${call.taskId} 'failed' durumuna geçirilemedi: ${reasonText(transitionError)}`);
+      return 'failed';
     }
-
-    return 'failed';
   };
 }

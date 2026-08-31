@@ -434,6 +434,30 @@ export async function createOrchestrationComposition(
         log: (message) => console.warn(`[ww] ${message}`),
         now: () => new Date().toISOString(),
       }),
+      // Atama düşerse SEBEBİ görünür olsun. Eskiden hiçbir yere satır
+      // yazılmıyordu: pompa yalnız bir uyarı basıyor, mesaj beş teslimden
+      // sonra kuyruktan siliniyor ve görev sebebi bilinmeden 'queued'da
+      // kalıyordu.
+      recordAssignmentFailure: async ({ taskId, error }: { taskId: EntityId; error: unknown }) => {
+        const reason = error instanceof Error ? `${error.name}: ${error.message}` : String(error);
+        console.warn(`[ww] görev ${taskId} atanamadı: ${reason}`);
+        try {
+          await appendEvent(input.ch, {
+            event_id: randomUUID(),
+            seq: '0',
+            project_id: input.projectId,
+            task_id: taskId,
+            agent_id: null,
+            event_type: 'error',
+            tool_name: '',
+            payload: { phase: 'assignment', reason },
+            duration_ms: 0,
+            created_at: new Date().toISOString(),
+          } as never);
+        } catch (writeError) {
+          console.warn(`[ww] atama hatası yazılamadı: ${String(writeError)}`);
+        }
+      },
       };
     })(),
   };

@@ -309,4 +309,39 @@ describe('runPhase1Orchestrator brief kaynağı', () => {
     });
     expect(result.status).toBe('failed');
   });
+
+// ATAMA da bir hata yoludur. `assign()` try bloğunun DIŞINDAYDI: hata
+// hiçbir yere yazılmıyor, pompa yalnız uyarı basıyor, mesaj beş teslimden
+// sonra kuyruktan siliniyor ve görev sebebi görünmeden 'queued'da kalıyordu.
+describe('atama hatası görünürlüğü', () => {
+  it('atama duserse sebebi kaydeder ve hatayi yutmaz', async () => {
+    const recorded: unknown[] = [];
+    const scheduler = {
+      assign: async () => { throw new Error('idle worker bulunamadi'); },
+      recordAssignmentFailure: async (call: unknown) => { recorded.push(call); },
+    } as never;
+
+    await expect(runPhase1Orchestrator({
+      taskId: '00000000-0000-4000-8000-000000000002' as never,
+      scheduler,
+      runtime: {} as never,
+    })).rejects.toThrow('idle worker bulunamadi');
+
+    expect(recorded).toHaveLength(1);
+    // Error nesnesi JSON.stringify ile serileşmez; mesajı doğrudan okuyoruz.
+    const call = recorded[0] as { taskId: string; error: unknown };
+    expect((call.error as Error).message).toContain('idle worker');
+  });
+
+  it('kayit portu baglanmamissa akis eskisi gibi calisir', async () => {
+    const scheduler = {
+      assign: async () => { throw new Error('idle worker bulunamadi'); },
+    } as never;
+    await expect(runPhase1Orchestrator({
+      taskId: '00000000-0000-4000-8000-000000000002' as never,
+      scheduler,
+      runtime: {} as never,
+    })).rejects.toThrow('idle worker bulunamadi');
+  });
+});
 });
