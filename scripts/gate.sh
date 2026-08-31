@@ -41,9 +41,14 @@ node packages/wiring-check/dist/cli.js >/dev/null
 
 echo "[kapı] durum kaydı (docs/DURUM.md)"
 # Durum üç ayrı dosyada elle tutuluyordu ve üçü de bayatladı. Sayılar artık
-# üretiliyor; bayat kalırsa kapı düşer. Ölçümler nadiren değişir (dal konumu
-# ve commit sayısı bilerek dışarıda), yani bu adım gürültü üretmez.
-node scripts/durum.mjs --check
+# üretiliyor.
+#
+# YERELDE ÜRETİR, DÜŞÜRMEZ: ilk sürüm `--check` ile kapıyı düşürüyordu ve tek
+# bir test eklemek bile kapıyı kırmızıya çeviriyordu — bu, kapıyı atlamayı
+# öğreten türden bir gürültüdür. Burada dosya güncellenir ve değişiklik
+# operatörün commit'ine katılır; bayat bir DURUM.md'nin PR'a girmesini
+# CI'daki `durum.mjs --check` adımı engeller.
+node scripts/durum.mjs
 
 echo "[kapı] lint"
 pnpm lint >/dev/null

@@ -20,7 +20,7 @@
 | Ölçüm | Değer |
 |---|---|
 | Paket sayısı | 8 paket + 2 uygulama |
-| Üretim kaynağı | 407 dosya, 56.368 satır |
+| Üretim kaynağı | 407 dosya, 56.382 satır |
 | Test dosyası | 290 |
 | Test durumu (`it(` sayımı) | 1992 |
 | Servis gerektirdiği için atlanabilen test dosyası | 45 (`skipIf`) |

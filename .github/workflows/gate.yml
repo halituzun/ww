@@ -75,5 +75,11 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
+      # Kapıdan ÖNCE koşar: kapı docs/DURUM.md'yi kendisi üretir, dolayısıyla
+      # kapıdan sonra bakmak her zaman yeşil görünürdü. Bayat bir durum kaydı
+      # PR'a burada takılır.
+      - name: durum kaydı güncel mi
+        run: node scripts/durum.mjs --check
+
       - name: tam kapı
         run: ./scripts/gate.sh
