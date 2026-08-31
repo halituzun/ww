@@ -20,12 +20,12 @@
 | Ölçüm | Değer |
 |---|---|
 | Paket sayısı | 8 paket + 2 uygulama |
-| Üretim kaynağı | 410 dosya, 57.522 satır |
-| Test dosyası | 295 |
-| Test durumu (`it(` sayımı) | 2030 |
-| Servis gerektirdiği için atlanabilen test dosyası | 47 (`skipIf`) |
+| Üretim kaynağı | 410 dosya, 57.487 satır |
+| Test dosyası | 296 |
+| Test durumu (`it(` sayımı) | 2034 |
+| Servis gerektirdiği için atlanabilen test dosyası | 48 (`skipIf`) |
 | Colocation ile testsiz kaynak dosya | 141 / 410 |
-| ClickHouse migration | 11 |
+| ClickHouse migration | 12 |
 | wiring-baseline girdisi | 40 |
 
 <!-- ÜRETİLEN:SON -->

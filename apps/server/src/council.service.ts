@@ -14,10 +14,12 @@ import {
 import {
   createPlan,
   createDecision,
+  getActivePrompt,
   getLatestProject,
   listLatestAgents,
   listLatestApiProviders,
   listLatestPlansByStatus,
+  type ClickHouseClient,
 } from '@ww/db';
 import { buildProviderRegistry, chUsageSink, Keystore, ModelRouter, ProviderRateLimiter, resolveKeystoreFile } from '@ww/providers';
 import { type EntityId, type OrgPlan } from '@ww/shared';
@@ -136,21 +138,42 @@ function isEnglishOrObserverText(text: string): boolean {
   return englishPatterns.test(text);
 }
 
+/** Konsey turu promptlarının tablo adları (docs/03 rolleri). */
+export const COUNCIL_PROMPT_NAMES = [
+  'council.turn.envelope',
+  'council.turn.proposal',
+  'council.turn.objection',
+  'council.turn.draft_synthesis',
+  'council.turn.red_team',
+  'council.turn.final_synthesis',
+  'council.turn.research',
+  'council.turn.debate_round',
+] as const;
+
+export type CouncilPromptTemplates = ReadonlyMap<string, string>;
+
+/**
+ * Konsey turu promptu.
+ *
+ * NEDEN ŞABLON DIŞARIDAN GELİYOR: prompt metinleri bu dosyada SABİT STRINGDİ
+ * ve dosya `prompts` tablosuna hiç bakmıyordu — rol promptları sürümlüyken
+ * konsey promptları denetlenemiyordu. Faz H'nin birinci kök nedeni buydu:
+ * sürümlenmeyen bir yönergedeki proje-dışı örnek başka projenin kararına
+ * sızmıştı. Metinler artık migration 0012 ile tabloda; burada yalnız DİNAMİK
+ * bağlam (önceki turlar) kurulur.
+ */
 export function buildCouncilTurnPrompt(
+  templates: CouncilPromptTemplates,
   kind: CouncilTurnKind,
   goal: string,
   prior: readonly CouncilTurn[],
   memberRole: string = 'Grup Lideri'
 ): string {
   let contextSection = '';
-  let roleInstruction = '';
 
   switch (kind) {
     case 'proposal': {
       contextSection = 'Henüz önceki tur yok.';
-      roleInstruction = `Sen ${memberRole} rolündesin. Hedefe ulaşmak için bağımsız plan önerini Türkçe yaz. Teknoloji seçimi, gereken departmanlar, görevler ve kabul kriterlerini belirt.
-KAPSAM KURALI: SADECE verilen kullanıcı isteğindeki özellikleri planla. İstekte olmayan seslendirme, AI botu, ekstra harici servis veya uydurma özellikleri KESİNLİKLE ekleme. Gerekli gördüğün ek fikirleri plana koyma, 'Öneri/Soru' başlığı altında belirt.
-Kısa, somut ve net ol (maksimum 150 kelime). Kesinlikle standart Türkçe karakterler (ç, ğ, ı, ö, ş, ü) kullan.`;
       break;
     }
 
@@ -158,24 +181,12 @@ Kısa, somut ve net ol (maksimum 150 kelime). Kesinlikle standart Türkçe karak
       const lastPrior = prior[prior.length - 1];
       const issueText = lastPrior ? lastPrior.text : goal;
       contextSection = `Araştırılacak Teknik İhtiyaç / Belirsizlik:\n${issueText}`;
-      roleInstruction = `Sen ARAŞTIRMA VE KOD İNCELEME LİDERİSİN (Researcher). Görevin projenin teknik fizibilitesini, bağımlılıklarını ve yerel kod tabanını incelemektir.
-Eğer dış kaynak veya kütüphane doğrulaması internet olmadan yapılamıyorsa bunu DÜRÜSTÇE belirt ("dış kaynak doğrulanamadı, varsayım: ...").
-Doğrudan şu formatta Türkçe araştırma raporu üret:
-1. Teknik Bulgular ve Uyumluluk: ...
-2. Yerel Kod ve Bağımlılık İncelemesi: ...
-3. Konseye Öneri ve Çözüm Yolu: ...
-Kesinlikle standart Türkçe karakterler (ç, ğ, ı, ö, ş, ü) kullan.`;
       break;
     }
 
     case 'debate_round': {
       const priorSummaries = prior.slice(-3).map((p) => `- ${p.turnTitle}: ${summarizeTurnForContext(p, 180)}`).join('\n');
       contextSection = `Açık Kalan İtirazlar ve Çelişkiler:\n${priorSummaries}`;
-      roleInstruction = `Sen MÜZAKERE ELEŞTİRMENİSİN. Görevin açık kalan zıt talepleri ve çelişkileri masaya yatırıp uzlaşma için net alternatifler sunmaktır.
-1. Çelişki / İtiraz Analizi: Neden uzlaşılamadı?
-2. Taviz ve Çözüm Önerisi: Hangi taraf nasıl esnemeli?
-3. Sentez Önerisi: ...
-Kesinlikle standart Türkçe karakterler (ç, ğ, ı, ö, ş, ü) kullan.`;
       break;
     }
 
@@ -187,15 +198,6 @@ Kesinlikle standart Türkçe karakterler (ç, ğ, ı, ö, ş, ü) kullan.`;
         .join('\n\n');
 
       contextSection = `Tur 1 Plan Önerileri:\n${propList}`;
-      roleInstruction = `Sen ${memberRole} rolündesin. Görevin Tur 1'deki önerileri ELEŞTİRMEK ve somut İTİRAZLAR sunmaktır. Asla genel asistan konuşması yapma!
-
-ÖNEMLİ: İtirazların SADECE yukarıdaki plan önerilerindeki gerçek sorunlara dayanmalıdır. Planda olmayan sorunları uydurmak yasaktır.
-
-Doğrudan şu 3 başlıkta Türkçe itiraz et (her birini plandaki gerçek metne dayandır):
-1. Teknik Riskler: Plandaki teknoloji seçimleri veya mimari kararlardan doğan somut riskler.
-2. Kapsam ve Rol İsrafı: Brief'e göre fazladan olan veya eksik olan unsurlar.
-3. Önerin: Daha sade ve güvenli bir alternatif.
-Kesinlikle standart Türkçe karakterler (ç, ğ, ı, ö, ş, ü) kullan.`;
       break;
     }
 
@@ -211,11 +213,6 @@ Kesinlikle standart Türkçe karakterler (ç, ğ, ı, ö, ş, ü) kullan.`;
         .join('\n');
 
       contextSection = `Öneriler:\n${propSummary}\n\nİtirazlar:\n${objSummary}`;
-      roleInstruction = `Sen PROJE YÖNETİCİSİ (PM) rolündesin. Jenerik selamlaşma yapma. Tur 2'deki itirazları tek tek çözerek tek bir BİRLEŞİK TASLAK PLAN hazırla:
-1. İtiraz Değerlendirmesi: Her itiraz için alınan somut karar. Kararlar yalnızca bu projenin brief'i ve önceki turlardaki gerçek itirazlardan türesin.
-2. Kapsam Arındırması: Brief dışı uydurma eklentilerin elenmesi.
-3. Birleşik Taslak Plan: Teknoloji, Departmanlar (küçük projede en fazla 2 departman) ve Görevler.
-Kesinlikle standart Türkçe karakterler (ç, ğ, ı, ö, ş, ü) kullan.`;
       break;
     }
 
@@ -225,16 +222,6 @@ Kesinlikle standart Türkçe karakterler (ç, ğ, ı, ö, ş, ü) kullan.`;
       const draftText = draft ? draft.text : prior.map((p) => p.text).join('\n');
 
       contextSection = `İncelenecek Taslak Plan:\n${draftText}\n\nAsıl Kullanıcı İsteği (Brief):\n${goal}`;
-      roleInstruction = `Sen KIRMIZI TAKIM LİDERİSİN. Görevin taslak planı SAVUNMAK DEĞİL, KIRMAKTIR.
-
-ÖNEMLİ KURAL: Bulgularını SADECE yukarıdaki taslak plan metnine ve brief'e dayandır. Planda geçmeyen kavramları ekleme.
-Brief'teki gerçek çelişkileri ve plandaki gerçek sorunları bul:
-- Brief 'hem X hem Y' istiyorsa bunların mimaride aynı anda mümkün olup olmadığını sorgula.
-- Taslakta belirsiz kalan, araştırılmamış veya riskli unsurları somutlaştır.
-- Planda testlenmemiş veya edge case'leri atlanmış alanları işaret et.
-
-En az 3 somut zafiyet yaz, her birini taslak plandaki somut bir cümle veya karara bağla.
-Kesinlikle standart Türkçe karakterler (ç, ğ, ı, ö, ş, ü) kullan.`;
       break;
     }
 
@@ -248,70 +235,43 @@ Kesinlikle standart Türkçe karakterler (ç, ğ, ı, ö, ş, ü) kullan.`;
       const research = prior.filter((p) => p.kind === 'research').map((p) => `- ${summarizeTurnForContext(p, 220)}`).join('\n');
       const debate = prior.filter((p) => p.kind === 'debate_round').map((p) => `- ${summarizeTurnForContext(p, 220)}`).join('\n');
       contextSection = `Taslak Plan:\n${draft ? draft.text : ''}\n\nKırmızı Takım Raporu:\n${red ? red.text : ''}\n\nAraştırma Bulguları:\n${research || '(Araştırma turu yok)'}\n\nEk Müzakere:\n${debate || '(Ek müzakere yok)'}\n\nİtiraz Özeti:\n${objections}`;
-      roleInstruction = `DİL VE KİMLİK KURALI:
-- YANITINI KESİNLİKLE VE YALNIZCA TÜRKÇE YAZ. İngilizce veya başka dil KESİNLİKLE YASAKTIR.
-- Sen konseyin nihai karar merciisisin (Proje Yöneticisi). Dışarıdan durum anlatan bir gözlemci asla olmayacaksın.
-- Kararlarını birinci çoğul şahısla ('Kabul ediyoruz', 'Reddediyoruz') yaz.
-
-GÖREVİN: Kırmızı takımın BU PROJEYİ inceleyen gerçek bulgularından her birini ele al. Brief'teki her çelişkiyi çöz veya 'uzlaşılamadı' de.
-
-ZORUNLU FORMAT (her kırmızı takım bulgusu için):
-BULGU N: [Kırmızı takımın bu projeye özgü somut bulgusu]
-KARAR: KABUL / RED / KISMI
-GEREKÇE: [Bu projenin bağlamında neden bu karar]
-PLANA YANSIMASI: [Planda nasıl değişti]
-
-Eğer brief'teki iki gereksinim aynı anda sağlanamıyorsa:
-BULGU N: [Çelişki adı]
-KARAR: UZLAŞILAMADI
-GEREKÇE: [Neden çözümsüz]
-ÖNERİ: [Kullanıcıya sunulacak seçenek]
-
-Son olarak GENEL DURUM satırını ekle.
-
-ZORUNLU: Yanıtının SONUNA makine tarafından okunacak İKİ bölüm ekle.
-Bu bölümler olmadan plan onaylanamaz.
-
-## DEPARTMANLAR
-### DEPARTMAN dept-<kisa-ad> — [departman adı]
-GRUP: coding | design | db | research | ui_audit
-DOSYALAR: [bu departmanın sorumlu olduğu dosya desenleri]
-YAPAN: [kaç worker]
-DENETLEYEN: [kaç verifier]
-GEREKÇE: [neden ayrı bir departman]
-
-Departman sayısını PROJENİN gerçek kapsamına göre belirle; küçük bir iş için
-tek departman yeterlidir, sırf şablonu doldurmak için departman uydurma.
-Bu bölüm olmadan plan onaylanamaz — onay hiçbir görev üretemez.
-
-## GÖREVLER
-### GÖREV g1 — [kısa görev başlığı]
-DOSYALAR: [virgülle ayrılmış GERÇEK dosya yolları, en az bir tane]
-KABUL: [kriter 1 | kriter 2]
-BAĞIMLI: [önceki görev anahtarı ya da -]
-GRUP: coding
-AÇIKLAMA: [tek cümle]
-
-Kurallar:
-- Her görevin EN AZ BİR hedef dosyası olmalı; hedefsiz görev hiçbir şey yazamaz.
-- Anahtarlar g1, g2, g3 ... biçiminde olmalı ve BAĞIMLI yalnız daha önce
-  tanımlanmış bir anahtara referans verebilir.
-- Yalnız bu projede gerçekten yapılacak işleri yaz; uydurma görev ekleme.`;
       break;
     }
   }
 
-  return `DİL KURALI: SADECE VE YALNIZCA TÜRKÇE YAZ.
+  const instruction = requireTemplate(templates, `council.turn.${kind}`)
+    .replaceAll('{{member_role}}', memberRole);
 
-Hedef: ${goal}
+  return requireTemplate(templates, 'council.turn.envelope')
+    .replaceAll('{{goal}}', goal)
+    .replaceAll('{{context}}', contextSection)
+    .replaceAll('{{instruction}}', instruction);
+}
 
-Bağlam:
-${contextSection}
+/** Aktif konsey promptlarını tablodan okur; eksik varsa fail-closed düşer. */
+export async function loadCouncilPromptTemplates(
+  ch: ClickHouseClient,
+): Promise<CouncilPromptTemplates> {
+  const templates = new Map<string, string>();
+  const missing: string[] = [];
+  for (const name of COUNCIL_PROMPT_NAMES) {
+    const active = await getActivePrompt(ch, name);
+    if (active === null || active.content.trim() === '') missing.push(name);
+    else templates.set(name, active.content);
+  }
+  if (missing.length > 0) {
+    throw new CouncilRunError(`konsey promptlari eksik: ${missing.join(', ')}`);
+  }
+  return templates;
+}
 
-Talimat:
-${roleInstruction}
-
-Cevap:`;
+function requireTemplate(templates: CouncilPromptTemplates, name: string): string {
+  const template = templates.get(name);
+  // Eksik promptla model çalıştırmak, talimatsız çalıştırmaktır.
+  if (template === undefined || template.trim() === '') {
+    throw new CouncilRunError(`konsey promptu bulunamadi: ${name}`);
+  }
+  return template;
 }
 
 function roleNameFor(member: CouncilMember, members: readonly CouncilMember[]): string {
@@ -405,6 +365,11 @@ export class CouncilApplicationService {
       this.#logger.warn(composition.diversityWarning);
     }
 
+    // Promptlar tablodan okunur (migration 0012). Eksik prompt sessizce
+    // atlanmaz: talimatsız model çalıştırmak, konseyi yalnız isimden ibaret
+    // bırakır.
+    const promptTemplates = await loadCouncilPromptTemplates(this.#database.ch);
+
     const store = await Keystore.open(resolveKeystoreFile());
     const registry = await buildProviderRegistry(providerRows.map((row) => ({
       provider_id: row.provider_id, base_url: row.base_url,
@@ -448,11 +413,11 @@ export class CouncilApplicationService {
       { sessionId, members: composition.members, prompt: trimmedGoal },
       async ({ kind, turnNumber, member, prior }) => {
         if (overrideCompleter !== undefined) {
-          const comp = await overrideCompleter({ member, kind, prompt: buildCouncilTurnPrompt(kind, trimmedGoal, prior, roleNameFor(member as CouncilMember, composition.members)) });
+          const comp = await overrideCompleter({ member, kind, prompt: buildCouncilTurnPrompt(promptTemplates, kind, trimmedGoal, prior, roleNameFor(member as CouncilMember, composition.members)) });
           return { text: comp.text, dissenting: kind === 'red_team' };
         }
         const routed = await router.complete(member.modelRef, {
-          messages: [{ role: 'user', content: buildCouncilTurnPrompt(kind, trimmedGoal, prior, roleNameFor(member as CouncilMember, composition.members)) }],
+          messages: [{ role: 'user', content: buildCouncilTurnPrompt(promptTemplates, kind, trimmedGoal, prior, roleNameFor(member as CouncilMember, composition.members)) }],
           // Nihai sentez BULGU/KARAR bloklarına EK OLARAK makine okunur bir
           // iş kırılımı taşır; 600 token bunu doldurmaya yetmiyor ve kesik
           // çıktı [SENTEZLEME_BASARISIZ] sayılıyordu.
@@ -481,7 +446,7 @@ export class CouncilApplicationService {
             // Tekrar dene
             const retryRouted = await router.complete(member.modelRef, {
               messages: [
-                { role: 'user', content: buildCouncilTurnPrompt(kind, trimmedGoal, prior, roleNameFor(member as CouncilMember, composition.members)) },
+                { role: 'user', content: buildCouncilTurnPrompt(promptTemplates, kind, trimmedGoal, prior, roleNameFor(member as CouncilMember, composition.members)) },
                 { role: 'assistant', content: text },
                 { role: 'user', content: "Lütfen yanıtını SADECE TÜRKÇE yaz, BULGU/KARAR/GEREKÇE/PLANA YANSIMASI şablonunu aynen doldur ve sonuna ## DEPARTMANLAR ve ## GÖREVLER bölümlerini zorunlu biçimde ekle." }
               ],

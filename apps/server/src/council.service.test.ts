@@ -1,7 +1,7 @@
     const plans: unknown[] = [];
 import { describe, expect, it } from 'vitest';
 import { randomUUID } from 'node:crypto';
-import { buildCouncilTurnPrompt, councilMessageForTurn, CouncilApplicationService } from './council.service.js';
+import { councilMessageForTurn, CouncilApplicationService } from './council.service.js';
 import type { ServerDatabase } from './orchestration.module.js';
 
 describe('CouncilApplicationService — 5 Tur ve Org Plan (Faz D)', () => {
@@ -112,6 +112,23 @@ describe('CouncilApplicationService — 5 Tur ve Org Plan (Faz D)', () => {
               version: 1,
             },
           ] };
+        }
+        if (query.includes('FROM prompts')) {
+          // Konsey promptları artık TABLODAN okunuyor (migration 0012).
+          // İçerik burada denenmez; o iş council-prompts.integration.test.ts'te.
+          const name = String(query_params?.promptName ?? '');
+          return { json: async () => [{
+            prompt_name: name,
+            prompt_version: 1,
+            content: name.endsWith('envelope')
+              ? '{{goal}}\n{{context}}\n{{instruction}}'
+              : `${name} talimati BULGU KARAR: GÖREVLER DEPARTMANLAR`,
+            variables: [],
+            changelog: '',
+            is_active: 1,
+            created_at: '2026-08-27 10:00:00.000',
+            version: 1,
+          }] };
         }
         if (query.includes('plans') || query.includes('plan_mutations')) {
           const list = query_params?.planId ? plans.filter(p => p.plan_id === query_params.planId) : plans;
@@ -230,34 +247,10 @@ describe('Tur 5 Dil ve Şablon Doğrulaması (Epistemik Dürüstlük)', () => {
     });
   });
 
-  it('oyun projesi Tur 4 ve Tur 5 promptlarına hesap makinesi örnek bulgusu gömmez', () => {
-    const goal = 'Tamamen çevrimdışı çalışan VE canlı çok oyunculu küresel anlık skor tablosu olan web oyunu geliştir.';
-    const prior = [
-      {
-        memberId: '11111111-1111-4111-8111-111111111111' as never,
-        kind: 'draft_synthesis' as const,
-        turnNumber: 3,
-        turnTitle: 'Tur 3 · Birleşik Taslak',
-        text: 'HTML5 oyun, offline önbellek ve canlı skor için seçenekler tartışılıyor.',
-        evidenceRefs: [],
-      },
-      {
-        memberId: '22222222-2222-4222-8222-222222222222' as never,
-        kind: 'red_team' as const,
-        turnNumber: 4,
-        turnTitle: 'Tur 4 · Kırmızı Takım',
-        text: 'Çevrimdışı çalışma ile canlı skor tablosu aynı anda mutlak garanti edilemez.',
-        evidenceRefs: [],
-      },
-    ];
-
-    const redPrompt = buildCouncilTurnPrompt('red_team', goal, prior.slice(0, 1));
-    const finalPrompt = buildCouncilTurnPrompt('final_synthesis', goal, prior);
-
-    expect(`${redPrompt}\n${finalPrompt}`).toContain('çevrimdışı');
-    expect(`${redPrompt}\n${finalPrompt}`).toContain('canlı');
-    expect(`${redPrompt}\n${finalPrompt}`).not.toMatch(/0\.1 \+ 0\.2|IEEE 754|eval\/regex|Matematik Motoru/i);
-  });
+  // NOT: "hesap makinesi örneği sızmasın" mührü artık
+  // council-prompts.integration.test.ts içinde, GERÇEK tohumlanmış promptlara
+  // karşı koşuyor. Metni buraya kopyalamak, tabloya taşıdığımız kaynağı
+  // yeniden ikiye bölerdi.
 
   // KALDIRILAN DAVRANIŞIN MÜHÜRÜ: eskiden proje ADINDAKİ kelimeye göre
   // ('hesap', 'tetris', 'pomodoro' ...) iki sabit şablondan biri seçiliyor,
