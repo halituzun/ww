@@ -433,7 +433,14 @@ export class CouncilApplicationService {
         });
         let text = cleanLlmResponse(routed.result.content ?? '');
         if (text === null || text.trim() === '') {
-          throw new CouncilRunError(`konsey turu bos dondu: ${member.modelRef} (${kind})`);
+          // TEK ÜYENİN SESSİZLİĞİ KONSEYİ DÜŞÜRMEZ. Burada fırlatmak iki
+          // sorun üretiyordu: (1) bir üyenin boş cevabı tüm oturumu iptal
+          // ediyordu, (2) protokolün "bir kez yeniden dene, sonra
+          // [KATILMADI] yaz" yedeği üretimde ERİŞİLEMEZ ölü koddu.
+          // Boş metni protokole geri veriyoruz; o yeniden dener ve ısrar
+          // ederse katılmama olarak kaydeder. Hiçbir üye konuşmazsa
+          // protokolün katılım tabanı zaten fırlatır.
+          return { text: '' };
         }
 
         // Dil ve Şablon Doğrulaması (Tur 5 / final_synthesis)

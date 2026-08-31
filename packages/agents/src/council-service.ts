@@ -76,6 +76,13 @@ export interface CouncilResult {
   readonly convergenceLog: readonly ConvergenceCheckResult[];
 }
 
+/**
+ * Bir üye iki denemede de boş dönerse turu bu metinle kaydederiz: konsey
+ * susan üyeyi yutmaz, ama tek üyenin sessizliği de tüm oturumu düşürmez.
+ */
+export const NON_PARTICIPATION_TEXT =
+  "[KATILMADI] Bu üye bu turda geçerli cevap üretmedi; konsensüs hesabına katılmadı.";
+
 export class CouncilProtocolError extends Error {
   constructor(message: string) {
     super(message);
@@ -332,7 +339,7 @@ export class CouncilService {
       const second = await generate(request);
       if (second.text.trim().length > 0) return second;
       return {
-        text: "[KATILMADI] Bu üye bu turda geçerli cevap üretmedi; konsensüs hesabına katılmadı.",
+        text: NON_PARTICIPATION_TEXT,
         evidenceRefs: [],
         dissenting: true,
       };
@@ -373,6 +380,15 @@ export class CouncilService {
         sessionId: input.sessionId,
         recipient: member.agentId,
       });
+    }
+
+    // KATILIM TABANI: tek bir üyenin susması konseyi düşürmez ama HİÇBİR üye
+    // konuşmadıysa ortada müzakere yoktur. Bunu yakalamazsak bozuk bir
+    // sağlayıcı, tamamı [KATILMADI] olan turlardan "plan" üretirdi.
+    if (proposals.every((turn) => turn.text.startsWith("[KATILMADI]"))) {
+      throw new CouncilProtocolError(
+        "konsey uyelerinin hicbiri oneri turunda cevap uretmedi",
+      );
     }
 
     // TUR 2: Karşılıklı Eleştiriler

@@ -52,15 +52,44 @@ describe('konsey taşıması', () => {
     )).rejects.toThrow(/mesaj yazilamadi/);
   });
 
-  // Boş tur kaydedilirse tartışma okunamaz hâle gelir.
-  it('bos turu reddeder ve tasimaya vermez', async () => {
+  // BOŞ TUR SÖZLEŞMESİ (Faz H).
+  //
+  // Bu test eskiden "boş turu reddeder ve taşımaya vermez" diyordu ve
+  // KIRMIZIYDI: protokol Faz H'de bilerek değiştirilmişti — bir üyenin
+  // susması tüm konseyi düşürmemeli. Üç ayrı politika yan yana duruyordu
+  // (uygulama katmanı fırlatıyor, protokol [KATILMADI] yazıyor, test
+  // reddedilmesini bekliyor). Sözleşme artık tek: bir kez yeniden dene,
+  // ısrar ederse katılmama olarak KAYDET; ama hiç kimse konuşmazsa fırlat.
+  it('bos donen uyeyi bir kez yeniden dener ve israr ederse [KATILMADI] olarak kaydeder', async () => {
+    const send = vi.fn(async () => ({ messageId: 'm1' as never }));
+    const protocol = new CouncilProtocol({ send });
+    let calls = 0;
+
+    const result = await protocol.run(
+      { sessionId, members: [member(1), member(2), member(3)], prompt: 'hedef', maxCycles: 1 },
+      async ({ kind, member: m }) => {
+        calls += 1;
+        // Yalnız 1 numaralı üye susuyor; diğerleri konuşuyor.
+        const silent = String(m.agentId).endsWith('000000000001');
+        return { text: silent ? '   ' : `${kind} gerekcesi` };
+      },
+    );
+
+    const silentTurns = result.allTurns.filter((t) => t.text.startsWith('[KATILMADI]'));
+    expect(silentTurns.length).toBeGreaterThan(0);
+    // Susan üye için iki kez soruldu (ilk deneme + bir yeniden deneme).
+    expect(calls).toBeGreaterThan(result.allTurns.length);
+    // Kayıt yine de taşımaya verildi: konsey susan üyeyi YUTMAZ.
+    expect(send).toHaveBeenCalled();
+  });
+
+  it('hicbir uye konusmazsa konseyi fail-closed dusurur', async () => {
     const send = vi.fn(async () => ({ messageId: 'm1' as never }));
     const protocol = new CouncilProtocol({ send });
 
     await expect(protocol.run(
       { sessionId, members: [member(1), member(2), member(3)], prompt: 'hedef', maxCycles: 1 },
       async () => ({ text: '   ' }),
-    )).rejects.toThrow();
-    expect(send).not.toHaveBeenCalled();
+    )).rejects.toThrow(/hicbir/i);
   });
 });
