@@ -64,17 +64,31 @@ export interface RuntimeContextInput {
 
 export function createRuntimeContextService(input: RuntimeContextInput) {
   return {
-    async load({ brief, attempt }: Readonly<{ brief: TaskBriefV1; attempt: AssignmentAttemptV1 }>) {
+    async load({ brief, attempt, role = 'worker' }: Readonly<{
+      brief: TaskBriefV1;
+      attempt: AssignmentAttemptV1;
+      role?: 'worker' | 'verifier';
+    }>) {
       const refs = (brief as unknown as {
         promptRefs: readonly { sourceId: string; version: number }[];
         sourceVersionManifest: unknown;
       });
-      const primary = refs.promptRefs[0];
-      if (primary === undefined) throw new Error('brief prompt referansı taşımıyor');
+      // MÜHÜR NE DİYORSA O KOŞAR. Brief promptRefs'i [worker, verifier]
+      // olarak mühürlüyor, ama burada her iki rol için de promptRefs[0]
+      // açılıyordu: doğrulayıcı worker'ın prompt'uyla koşuyor, mühürlenen ve
+      // manifest'e hash'lenen verifier referansı ölü kalıyordu.
+      //
+      // Tek referans varsa bu bir hata DEĞİLDİR: snapshot builder aynı
+      // ad@sürüm çiftini tekilleştirir, yani iki rol gerçekten aynı prompt'u
+      // paylaşıyordur.
+      const selected = role === 'verifier'
+        ? refs.promptRefs[1] ?? refs.promptRefs[0]
+        : refs.promptRefs[0];
+      if (selected === undefined) throw new Error('brief prompt referansı taşımıyor');
 
-      const template = await input.prompts.load(primary.sourceId, primary.version);
+      const template = await input.prompts.load(selected.sourceId, selected.version);
       if (template === null) {
-        throw new Error(`prompt bulunamadı: ${primary.sourceId} v${primary.version}`);
+        throw new Error(`prompt bulunamadı: ${selected.sourceId} v${selected.version}`);
       }
 
       const contextPack = await input.loadContextPack({

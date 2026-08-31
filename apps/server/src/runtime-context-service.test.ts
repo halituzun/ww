@@ -131,4 +131,35 @@ describe('createRuntimeContextService', () => {
     const withEmpty = await service({ loadPriorFailure: async () => null }).load({ brief, attempt });
     expect(withEmpty.snapshot.promptMessages).toHaveLength(withoutPort.snapshot.promptMessages.length);
   });
+
+  // MÜHÜRÜN GERÇEKTEN KOŞMASI: brief promptRefs'i [worker, verifier] olarak
+  // mühürlüyor, ama yükleyici her iki rol için de promptRefs[0]'ı açıyordu.
+  // Doğrulayıcı worker'ın prompt'uyla koşuyor; mühürlenen ve manifest'e
+  // hash'lenen verifier referansı ÖLÜYDÜ ve provenance koşmamış bir prompt'u
+  // iddia ediyordu.
+  it('dogrulayici rolunde IKINCI prompt referansini yukler', async () => {
+    const load = vi.fn(async () => 'şablon {{task_description}}');
+    const ikiRefli = {
+      ...(brief as unknown as Record<string, unknown>),
+      promptRefs: [
+        { sourceType: 'prompt', sourceId: 'role.worker.coding', version: 1, hash: 'h' },
+        { sourceType: 'prompt', sourceId: 'role.verifier', version: 2, hash: 'h' },
+      ],
+    } as never;
+
+    await service({ prompts: { load } }).load({ brief: ikiRefli, attempt, role: 'verifier' });
+    expect(load).toHaveBeenCalledWith('role.verifier', 2);
+
+    load.mockClear();
+    await service({ prompts: { load } }).load({ brief: ikiRefli, attempt, role: 'worker' });
+    expect(load).toHaveBeenCalledWith('role.worker.coding', 1);
+  });
+
+  // Tek referans HATA DEĞİLDİR: snapshot builder aynı ad@sürüm çiftini
+  // tekilleştirir, yani iki rol gerçekten aynı prompt'u paylaşıyordur.
+  it('tek referansta dogrulayici da onu kullanir', async () => {
+    const load = vi.fn(async () => 'şablon {{task_description}}');
+    await service({ prompts: { load } }).load({ brief, attempt, role: 'verifier' });
+    expect(load).toHaveBeenCalledWith('role.worker.coding', 1);
+  });
 });

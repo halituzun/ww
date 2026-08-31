@@ -9,8 +9,22 @@ import { canonicalSha256V1, EntityIdSchema } from '@ww/shared';
 import type { AgentRuntime } from './agent-runtime.js';
 import type { WorkerCommunicationPort, WorkerToolPort } from './worker-loop.js';
 
+/** Mühürlü brief hangi rol için açılıyor: prompt seçimi buna bağlıdır. */
+export type Phase1ContextRole = 'worker' | 'verifier';
+
 export interface Phase1RuntimeContextPort {
-  load(input: Readonly<{ brief: TaskBriefV1; attempt: AssignmentAttemptV1 }>): Promise<Readonly<{
+  load(input: Readonly<{
+    brief: TaskBriefV1;
+    attempt: AssignmentAttemptV1;
+    /**
+     * NEDEN VAR: brief `promptRefs`'i [worker, verifier] olarak mühürlüyor
+     * ama yükleyici HER İKİ rol için de `promptRefs[0]`'ı açıyordu. Yani
+     * doğrulayıcı, worker'ın prompt'uyla koşuyordu; mühürlenen ve
+     * manifest'e hash'lenen verifier referansı ÖLÜYDÜ ve provenance
+     * koşmamış bir prompt'u iddia ediyordu.
+     */
+    role?: Phase1ContextRole;
+  }>): Promise<Readonly<{
     snapshot: PromptInputSnapshotV1;
     workspaceRoot: string;
     workerModelRef: string;
@@ -51,7 +65,7 @@ export function createPhase1RuntimeBridge(input: Readonly<{
 }>): Phase1RuntimeBridgePort {
   return Object.freeze({
     work: async ({ brief, attempt }: Readonly<{ brief: TaskBriefV1; attempt: AssignmentAttemptV1 }>) => {
-      const sealed = await input.context.load({ brief, attempt });
+      const sealed = await input.context.load({ brief, attempt, role: 'worker' });
       const result = await input.runtime.worker({
         brief,
         attempt,
@@ -70,7 +84,7 @@ export function createPhase1RuntimeBridge(input: Readonly<{
       });
     },
     verify: async ({ brief, attempt, summary }: Readonly<{ brief: TaskBriefV1; attempt: AssignmentAttemptV1; summary: string }>) => {
-      const sealed = await input.context.load({ brief, attempt });
+      const sealed = await input.context.load({ brief, attempt, role: 'verifier' });
       if (input.tools.forVerifier === undefined) throw new Error('verifier tool factory zorunludur');
       const diffTool = input.tools.forVerifier({ brief, attempt, workspaceRoot: sealed.workspaceRoot });
       const diff = await readDiff(diffTool, sealed.snapshot, brief, attempt);
