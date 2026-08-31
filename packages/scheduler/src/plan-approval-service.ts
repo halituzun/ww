@@ -37,6 +37,8 @@ export interface PlanApprovalResult {
   readonly plan: PlanRow;
   /** Onayın ÜRETTİĞİ görevler. Panel bu sayıyı olduğu gibi söyler. */
   readonly createdTasks: readonly TaskRow[];
+  /** Onayın KURDUĞU agent sayısı (org planı kadrosu). */
+  readonly createdAgentCount: number;
 }
 
 /**
@@ -45,6 +47,19 @@ export interface PlanApprovalResult {
  */
 export interface PlanTaskEnqueuePort {
   enqueue(projectId: EntityId, taskId: EntityId): Promise<void>;
+}
+
+/**
+ * Konseyin organizasyon planından agent kadrosunu kuran dış bağımlılık.
+ *
+ * NEDEN port: kadro kurulumu kanonik prompt okuması ve prompt yazımı ister;
+ * bunlar sunucu katmanının işidir, scheduler'ın değil. Port ZORUNLUDUR:
+ * panel "agent kadrosu kuruldu" dediği için, o cümleyi doğru kılan işlem
+ * onayın parçası olmalıdır.
+ */
+export interface PlanAgentRosterPort {
+  /** Kurulan agent sayısını döndürür. Var olan kadroyu ÇOĞALTMAZ. */
+  ensureRoster(projectId: EntityId, plan: PlanRow): Promise<number>;
 }
 
 export interface PlanApprovalDeps {
@@ -67,11 +82,18 @@ export interface PlanApprovalDeps {
 export class PlanApprovalService {
   readonly #ch: ClickHouseClient;
   readonly #enqueue: PlanTaskEnqueuePort;
+  readonly #roster: PlanAgentRosterPort;
   readonly #newTaskId: () => EntityId;
 
-  constructor(ch: ClickHouseClient, enqueue: PlanTaskEnqueuePort, deps: PlanApprovalDeps) {
+  constructor(
+    ch: ClickHouseClient,
+    enqueue: PlanTaskEnqueuePort,
+    roster: PlanAgentRosterPort,
+    deps: PlanApprovalDeps,
+  ) {
     this.#ch = ch;
     this.#enqueue = enqueue;
+    this.#roster = roster;
     this.#newTaskId = deps.newTaskId;
   }
 
@@ -81,15 +103,15 @@ export class PlanApprovalService {
     if (plan.status !== 'debating' && plan.status !== 'proposed') {
       if (input.approved && plan.status === 'approved') {
         // Yeniden onay idempotenttir: görev üretmez, mevcut planı döner.
-        return { plan, createdTasks: [] };
+        return { plan, createdTasks: [], createdAgentCount: 0 };
       }
-      if (!input.approved && plan.status === 'rejected') return { plan, createdTasks: [] };
+      if (!input.approved && plan.status === 'rejected') return { plan, createdTasks: [], createdAgentCount: 0 };
       throw new PlanApprovalError('plan bu durumda onaylanamaz');
     }
 
     if (!input.approved) {
       const rejected = await this.#writeStatus(plan, 'rejected', '', input.note);
-      return { plan: rejected, createdTasks: [] };
+      return { plan: rejected, createdTasks: [], createdAgentCount: 0 };
     }
 
     // ÖNCE görev grafiğini doğrula, SONRA statüyü çevir. Ters sırada plan
@@ -105,8 +127,11 @@ export class PlanApprovalService {
     const ordered = topologicalPlanTaskOrder(graph.tasks);
 
     const approved = await this.#writeStatus(plan, 'approved', input.actor, input.note);
+    // Kadro ÖNCE kurulur: görevler departman agent'larına atanacaksa o
+    // agent'ların var olması gerekir.
+    const createdAgentCount = await this.#roster.ensureRoster(approved.project_id as EntityId, approved);
     const createdTasks = await this.#createTasks(approved, ordered, input.now);
-    return { plan: approved, createdTasks };
+    return { plan: approved, createdTasks, createdAgentCount };
   }
 
   async #findPlan(projectId: EntityId, planId: EntityId): Promise<PlanRow> {

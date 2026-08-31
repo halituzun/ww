@@ -71,7 +71,7 @@ function fakeCh(options: {
 
 const service = (ch: never, enqueue = vi.fn(async () => undefined)) => ({
   enqueue,
-  instance: new PlanApprovalService(ch, { enqueue: enqueue as never }, {
+  instance: new PlanApprovalService(ch, { enqueue: enqueue as never }, { ensureRoster: async () => 0 }, {
     newTaskId: (() => {
       let n = 0;
       return () => `44444444-4444-4444-8444-${String(++n).padStart(12, '0')}` as EntityId;

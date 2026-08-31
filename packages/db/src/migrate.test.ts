@@ -202,6 +202,7 @@ describe.skipIf(!up)('runMigrations', () => {
       '0007_provider_error_signal.sql',
       '0008_decisions_ledger.sql',
       '0009_project_maps.sql',
+      '0010_org_roles_prompt_seed.sql',
     ]);
     expect(secondApplied).toHaveLength(0);
   });

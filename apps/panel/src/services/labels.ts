@@ -140,12 +140,3 @@ export function formatElapsed(sec?: number): string {
   return remMin > 0 ? `${hours} sa ${remMin} dk` : `${hours} sa`;
 }
 
-export function cleanRoleName(role: string): string {
-  if (role === "pm") return "PM";
-  if (role === "interviewer") return "Görüşmeci";
-  if (role === "standards_auditor") return "Standart Denetçisi";
-  if (role === "group_lead") return "Grup Lideri";
-  if (role === "worker") return "Yapan";
-  if (role === "verifier") return "Denetleyen";
-  return agentRoleLabel(role);
-}

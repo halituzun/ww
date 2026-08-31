@@ -78,6 +78,7 @@ describe.skipIf(probe === undefined)('plan onayı görev üretir', () => {
         enqueued.push(taskId);
       },
     },
+    { ensureRoster: async () => 0 },
     { newTaskId: () => randomUUID() as EntityId },
   );
 

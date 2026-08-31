@@ -294,13 +294,15 @@ export function useWorkspaceViewModel() {
     return plans.find((p) => p.status === "proposed") ?? plans.find((p) => p.status === "approved") ?? plans[0];
   }, [plans]);
 
-  const approveCurrentPlan = useCallback(async (note?: string): Promise<number> => {
-    if (!projectId || !activePlan) return 0;
+  const approveCurrentPlan = useCallback(async (
+    note?: string,
+  ): Promise<{ taskCount: number; agentCount: number }> => {
+    if (!projectId || !activePlan) return { taskCount: 0, agentCount: 0 };
     try {
       const result = await approvePlan(projectId, activePlan.plan_id, note);
       const updated = await fetchPlans(projectId);
       setPlans(updated);
-      return result.createdTaskCount;
+      return { taskCount: result.createdTaskCount, agentCount: result.createdAgentCount };
     } catch (err) {
       console.error("Plan onaylanamadı:", err);
       throw err;

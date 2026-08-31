@@ -31,6 +31,7 @@ export const fetchPlans = (
 export interface PlanApprovalResponse {
   readonly createdTaskCount: number;
   readonly createdTaskIds: readonly string[];
+  readonly createdAgentCount: number;
 }
 
 export const approvePlan = (

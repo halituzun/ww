@@ -128,10 +128,6 @@
     "reason": "GERÇEK BOŞLUK: plan reddi servis katmanında var ama hiçbir View çağırmıyor; PlanApprovalCard yalnız onay ve revizyon sunuyor. Faz B9'da (panel bildirimleri gerçek işlemi söylesin) ele alınacak."
   },
   {
-    "symbol": "apps/server/src/agent-bootstrap.ts:buildAgentsFromOrgPlan",
-    "reason": "GERÇEK BOŞLUK: konseyin org planından agent kadrosu üretiliyor ama üretim yolu hâlâ sabit BOOTSTRAP_AGENTS kullanıyor; group_lead ve professor rolleri bu yüzden hiç doğmuyor ve docs/13 tırmandırma zinciri erişilemez kalıyor. Faz B3'te bağlanacak."
-  },
-  {
     "symbol": "apps/server/src/budget-limit.ts:checkTaskTokenBudget",
     "reason": "GERÇEK BOŞLUK ve MUHTEMEL FAZLALIK: token freni zaten packages/scheduler/brake-ports üzerinden sumTaskTokensSpent ile bağlı. Bu, commit 9ebf0a5'te eklenen İKİNCİ ve ölü kopya. Faz C'de ya tek frene indirgenecek ya silinecek."
   },

@@ -1,6 +1,8 @@
 import { randomUUID } from 'node:crypto';
 import { BadRequestException, Body, Controller, Get, Inject, Injectable, Param, Post, Req } from '@nestjs/common';
-import { createPlan, createRedis, enqueueTask, getLatestProject, listLatestAgents, listLatestPlansByStatus, type WwRedis } from '@ww/db';
+import { appendPromptVersion, createAgent, createPlan, createRedis, enqueueTask, getActivePrompt, getLatestProject, listLatestAgents, listLatestPlansByStatus, type PlanRow, type WwRedis } from '@ww/db';
+import { NIL_UUID, type OrgPlan } from '@ww/shared';
+import { planOrgRoster, rosterCanonicalPromptNames } from './agent-roster.js';
 import { PlanApprovalError, PlanApprovalService, ReplanningService } from '@ww/scheduler';
 import { parseApprovalInput } from './plan-approval.service.js';
 import { parseReplanInput } from './replan.service.js';
@@ -13,6 +15,70 @@ import { buildPlanRow, parsePlanInput } from './plans.service.js';
 export class PlanApplicationService {
   #redis: Promise<WwRedis> | undefined;
   constructor(@Inject(SERVER_DATABASE) private readonly database: ServerDatabase) {}
+
+  /**
+   * Konseyin organizasyon planından agent kadrosunu kurar.
+   *
+   * NEDEN BURADA: kadro kurulumu kanonik prompt okumasını ve prompt yazımını
+   * gerektirir; scheduler paketi bunları bilmez. Planlama SAF fonksiyondadır
+   * (agent-roster.ts), burada yalnız okuma/yazma yapılır.
+   */
+  async #ensureRoster(projectId: EntityId, plan: PlanRow): Promise<number> {
+    const rawTeam = typeof plan.team_json === 'string'
+      ? (() => { try { return JSON.parse(plan.team_json); } catch { return undefined; } })()
+      : plan.team_json;
+    const orgPlan = (rawTeam as { org_plan?: OrgPlan } | undefined)?.org_plan;
+    // Org planı olmayan plan (ör. bootstrap planı) kadro kurmaz; bu bir hata
+    // değil, o planın organizasyon iddiası yoktur.
+    if (orgPlan === undefined) return 0;
+
+    const canonical = new Map<string, { prompt_name: string; prompt_version: number; content: string }>();
+    for (const name of rosterCanonicalPromptNames(orgPlan)) {
+      const active = await getActivePrompt(this.database.ch, name);
+      if (active !== null) canonical.set(name, active);
+    }
+
+    const existing = await listLatestAgents(this.database.ch, projectId);
+    const roster = planOrgRoster({
+      projectId,
+      orgPlan,
+      existingAgentNames: new Set(existing.map((agent) => agent.name)),
+      canonical,
+    });
+
+    if (roster.missingPrompts.length > 0) {
+      // Sessizce yarım kadro kurmak, "kadro kuruldu" demenin yalan biçimidir.
+      throw new PlanApprovalError(
+        `kadro kurulamadi, kanonik prompt eksik: ${roster.missingPrompts.join(', ')}`,
+      );
+    }
+
+    const now = new Date().toISOString();
+    for (const prompt of roster.prompts) {
+      await appendPromptVersion(this.database.ch, { ...prompt, created_at: now } as never);
+    }
+    for (const agent of roster.agents) {
+      await createAgent(this.database.ch, {
+        agent_id: randomUUID(),
+        project_id: projectId,
+        role: agent.role,
+        group: agent.group,
+        name: agent.name,
+        model_ref: agent.model,
+        parent_agent_id: NIL_UUID,
+        clone_of: NIL_UUID,
+        status: 'idle',
+        current_task_id: NIL_UUID,
+        prompt_name: agent.promptName,
+        prompt_version: 1,
+        tasks_done: 0,
+        tasks_rejected: 0,
+        created_at: now,
+        updated_at: now,
+      } as never);
+    }
+    return roster.agents.length;
+  }
 
   async create(projectId: string, input: ReturnType<typeof parsePlanInput>) {
     const project = await getLatestProject(this.database.ch, projectId);
@@ -50,6 +116,7 @@ export class PlanApplicationService {
           await enqueueTask(await this.#redis, `ww:queue:${pid}`, taskId);
         },
       },
+      { ensureRoster: (projectId, plan) => this.#ensureRoster(projectId, plan) },
       { newTaskId: () => randomUUID() as EntityId },
     );
     try {
@@ -62,11 +129,12 @@ export class PlanApplicationService {
         now: new Date().toISOString(),
         ...(input.note === undefined ? {} : { note: input.note }),
       });
-      // Panel bildirimi bu sayıyı OLDUĞU GİBİ söyler; uydurma metin yok.
+      // Panel bildirimi bu sayıları OLDUĞU GİBİ söyler; uydurma metin yok.
       return {
         ...result.plan,
         createdTaskCount: result.createdTasks.length,
         createdTaskIds: result.createdTasks.map((task) => task.task_id),
+        createdAgentCount: result.createdAgentCount,
       };
     } catch (reason) {
       // Geçersiz durum geçişi kullanıcı hatasıdır; 500 sebebi gizler.

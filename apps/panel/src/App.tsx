@@ -40,9 +40,11 @@ function AppContent() {
     try {
       // BİLDİRİM İŞLEMİN SONUCUNU SÖYLER. Eskiden "Görevler yürütmeye alındı"
       // yazıyordu ama onay hiçbir görev üretmiyordu; kuyruk boş kalıyordu.
-      const createdTaskCount = await vm.approveCurrentPlan();
+      const { taskCount, agentCount } = await vm.approveCurrentPlan();
       toast.success(
-        `Plan onaylandı. ${createdTaskCount} görev yürütmeye alındı.`,
+        agentCount > 0
+          ? `Plan onaylandı. ${agentCount} agent kuruldu, ${taskCount} görev yürütmeye alındı.`
+          : `Plan onaylandı. ${taskCount} görev yürütmeye alındı.`,
         "Plan Onaylandı",
       );
     } catch (err) {
