@@ -181,7 +181,9 @@ describe('CouncilApplicationService — 5 Tur ve Org Plan (Faz D)', () => {
     // 3 üye x Tur 1 (3) + 3 üye x Tur 2 (3) + Tur 3 (1) + Tur 4 (1) + Tur 5 (1) = 9 tur
     expect(result.turns).toBe(9);
     expect(result.orgPlan).toBeDefined();
-    expect(result.orgPlan.departments).toHaveLength(2); // Tetris -> 2 departman
+    // Sahte sentez '## DEPARTMANLAR' taşımıyor: yedek tek departmanlı
+    // yerleşim kullanılır ve bu plan gövdesinde GÖRÜNÜR yazılır.
+    expect(result.orgPlan.departments).toHaveLength(1);
     expect(result.orgPlan.concurrency_limit).toBe(2);
     expect(sentTurns.map(t => t.kind)).toContain('proposal');
     expect(sentTurns.map(t => t.kind)).toContain('objection');
@@ -248,13 +250,26 @@ describe('Tur 5 Dil ve Şablon Doğrulaması (Epistemik Dürüstlük)', () => {
     expect(`${redPrompt}\n${finalPrompt}`).not.toMatch(/0\.1 \+ 0\.2|IEEE 754|eval\/regex|Matematik Motoru/i);
   });
 
-  it('Hesap makinesi gibi küçük projeler için deriveOrgPlan tam 2 departman üretir', async () => {
-    const { deriveOrgPlan } = await import("./council-plan.js");
-    const plan = deriveOrgPlan("Hesap Makinesi Projesi", "Kullanıcıların basit hesaplamalar yapabileceği web tabanlı hesap makinesi");
-    expect(plan.departments).toHaveLength(2);
-    expect(plan.concurrency_limit).toBe(2);
-    expect(plan.departments[0].name).toContain("Arayüz");
-    expect(plan.departments[1].name).toContain("Motor");
+  // KALDIRILAN DAVRANIŞIN MÜHÜRÜ: eskiden proje ADINDAKİ kelimeye göre
+  // ('hesap', 'tetris', 'pomodoro' ...) iki sabit şablondan biri seçiliyor,
+  // konseyin nihai sentezi HİÇ okunmuyordu. Artık departmanlar sentezden
+  // gelir; sentez söylemiyorsa uydurulmaz.
+  it('org planini proje adindan DEGIL nihai sentezden turetir', async () => {
+    const { orgPlanFromSynthesis } = await import("./org-plan-parse.js");
+    const sentez = [
+      'BULGU 1: bir sey',
+      'KARAR: KABUL',
+      '',
+      '## DEPARTMANLAR',
+      '### DEPARTMAN dept-hesap — Hesaplama Cekirdegi',
+      'GRUP: coding',
+      'DOSYALAR: src/core/**',
+    ].join('\n');
+    const plan = orgPlanFromSynthesis(sentez);
+    expect(plan?.departments).toHaveLength(1);
+    expect(plan?.departments[0]?.name).toContain('Hesaplama');
+    // Sentezde departman yoksa şablon uydurulmaz.
+    expect(orgPlanFromSynthesis('Hesap Makinesi Projesi icin plan')).toBeUndefined();
   });
 
   it('Tur 5 nihai karar şablonu BULGU, KARAR, GEREKÇE ve PLANA YANSIMASI alanlarını eksiksiz içerir', () => {

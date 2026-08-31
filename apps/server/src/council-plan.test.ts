@@ -56,16 +56,47 @@ describe('buildCouncilPlan', () => {
     });
   });
 
-  it('deriveOrgPlan kucuk projede (Tetris, Pomodoro) 2 departman onerir', () => {
-    const org = buildCouncilPlan({ ...input, projectName: 'Tetris' }).team_json.org_plan;
-    expect(org.departments).toHaveLength(2);
-    expect(org.concurrency_limit).toBe(2);
+  // ORG PLANI ARTIK SENTEZDEN OKUNUR. Eskiden proje ADINDAKİ kelimeye göre
+  // ('tetris', 'pomodoro', 'hesap' ...) iki sabit şablondan biri seçiliyor,
+  // konseyin nihai sentezi HİÇ okunmuyordu.
+  it('departmanlari nihai sentezden okur', () => {
+    const synthesis = {
+      ...input.synthesis,
+      text: [
+        input.synthesis.text,
+        '',
+        '## DEPARTMANLAR',
+        '### DEPARTMAN dept-api — Servis Katmani',
+        'GRUP: coding',
+        'DOSYALAR: src/api/**',
+        'YAPAN: 2',
+        'DENETLEYEN: 1',
+        '',
+        '### DEPARTMAN dept-ui — Arayuz',
+        'GRUP: design',
+        'DOSYALAR: src/views/**',
+      ].join('\n'),
+    };
+    const plan = buildCouncilPlan({ ...input, synthesis: synthesis as never });
+    const org = plan.team_json.org_plan;
+    expect(org.departments.map((d) => d.id)).toEqual(['dept-api', 'dept-ui']);
+    expect(org.departments[1]?.group).toBe('design');
+    // Proje adı 'Tetris' bile olsa sonuç sentezden gelir.
+    expect(buildCouncilPlan({ ...input, projectName: 'Tetris', synthesis: synthesis as never })
+      .team_json.org_plan.departments).toHaveLength(2);
   });
 
-  it('deriveOrgPlan buyuk projede 4 departman onerir', () => {
-    const org = buildCouncilPlan({ ...input, projectName: 'E-Ticaret Paneli' }).team_json.org_plan;
-    expect(org.departments).toHaveLength(4);
-    expect(org.concurrency_limit).toBe(3);
+  it('sentezde departman yoksa yedege duser ve bunu GORUNUR yazar', () => {
+    const plan = buildCouncilPlan(input);
+    expect(plan.team_json.org_plan.departments).toHaveLength(1);
+    expect(plan.content_md).toContain('Organizasyon planı nihai sentezden okunamadı');
+  });
+
+  // Sabit 18000 token / $0.045 panelde gerçek tahmin gibi gösteriliyordu.
+  it('uydurma butce tahmini yazmaz', () => {
+    const org = buildCouncilPlan(input).team_json.org_plan;
+    expect(org.estimated_tokens).toBe(0);
+    expect(org.estimated_cost_usd).toBe(0);
   });
 
   // ÇEŞİTLİLİK UYARISI plana yazılmazsa, tek modelin kendini onayladığı bir
@@ -76,7 +107,12 @@ describe('buildCouncilPlan', () => {
   });
 
   it('uyari yokken govdeye uyari eklemez', () => {
-    expect(buildCouncilPlan(input).content_md).not.toContain('⚠️');
+    const synthesis = {
+      ...input.synthesis,
+      text: `${input.synthesis.text}\n\n## DEPARTMANLAR\n### DEPARTMAN d1 — Uygulama\nGRUP: coding\nDOSYALAR: src/**\n`,
+    };
+    expect(buildCouncilPlan({ ...input, synthesis: synthesis as never }).content_md)
+      .not.toContain('⚠️');
   });
 
   it('yeniden planlamada onceki plani devralir', () => {

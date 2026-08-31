@@ -131,7 +131,15 @@ export function PlanApprovalCard({
                 <div className="org-stats-bar" style={{ display: "flex", gap: "16px", background: "#0b111c", padding: "10px 14px", borderRadius: "8px", border: "1px solid rgba(255,255,255,0.08)" }}>
                   <div><strong>Departmanlar:</strong> {orgPlan.departments.length}</div>
                   <div><strong>Eşzamanlılık Sınırı:</strong> {orgPlan.concurrency_limit} LLM çağrısı</div>
-                  <div><strong>Tahmini Bütçe:</strong> ~{orgPlan.estimated_tokens.toLocaleString()} token (${orgPlan.estimated_cost_usd})</div>
+                  {/* SIFIR "hesaplanmadı" demektir. Eskiden org planı sabit
+                      18000 token / $0.045 taşıyordu ve burada gerçek bir
+                      tahmin gibi gösteriliyordu. */}
+                  <div>
+                    <strong>Tahmini Bütçe:</strong>{" "}
+                    {orgPlan.estimated_tokens > 0
+                      ? `~${orgPlan.estimated_tokens.toLocaleString()} token ($${orgPlan.estimated_cost_usd})`
+                      : "hesaplanmadı"}
+                  </div>
                 </div>
 
                 <div className="org-departments-list" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: "12px" }}>

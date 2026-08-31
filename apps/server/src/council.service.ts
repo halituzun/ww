@@ -23,7 +23,7 @@ import { buildProviderRegistry, chUsageSink, Keystore, ModelRouter, ProviderRate
 import { type EntityId, type OrgPlan } from '@ww/shared';
 import { buildAgentCapabilities } from './agent-capabilities.js';
 import { loadRoutingIndex } from './routing.loader.js';
-import { buildCouncilPlan, deriveOrgPlan } from './council-plan.js';
+import { buildCouncilPlan } from './council-plan.js';
 import { composeCouncil } from './council-members.js';
 import { providerRequestsPerMinute } from './provider-rate.js';
 import { SERVER_DATABASE, type ServerDatabase } from './orchestration.module.js';
@@ -267,9 +267,21 @@ KARAR: UZLAŞILAMADI
 GEREKÇE: [Neden çözümsüz]
 ÖNERİ: [Kullanıcıya sunulacak seçenek]
 
-Son olarak NİHAİ DEPARTMANLAR ve GENEL DURUM satırını ekle.
+Son olarak GENEL DURUM satırını ekle.
 
-ZORUNLU: Yanıtının SONUNA makine tarafından okunacak iş kırılımını ekle.
+ZORUNLU: Yanıtının SONUNA makine tarafından okunacak İKİ bölüm ekle.
+Bu bölümler olmadan plan onaylanamaz.
+
+## DEPARTMANLAR
+### DEPARTMAN dept-<kisa-ad> — [departman adı]
+GRUP: coding | design | db | research | ui_audit
+DOSYALAR: [bu departmanın sorumlu olduğu dosya desenleri]
+YAPAN: [kaç worker]
+DENETLEYEN: [kaç verifier]
+GEREKÇE: [neden ayrı bir departman]
+
+Departman sayısını PROJENİN gerçek kapsamına göre belirle; küçük bir iş için
+tek departman yeterlidir, sırf şablonu doldurmak için departman uydurma.
 Bu bölüm olmadan plan onaylanamaz — onay hiçbir görev üretemez.
 
 ## GÖREVLER
@@ -444,7 +456,7 @@ export class CouncilApplicationService {
           // Nihai sentez BULGU/KARAR bloklarına EK OLARAK makine okunur bir
           // iş kırılımı taşır; 600 token bunu doldurmaya yetmiyor ve kesik
           // çıktı [SENTEZLEME_BASARISIZ] sayılıyordu.
-          maxTokens: kind === 'final_synthesis' ? 1_400 : 600,
+          maxTokens: kind === 'final_synthesis' ? 2_000 : 600,
           meta: {
             purpose: 'council',
             projectId: project.project_id,
@@ -465,22 +477,22 @@ export class CouncilApplicationService {
 
         // Dil ve Şablon Doğrulaması (Tur 5 / final_synthesis)
         if (kind === 'final_synthesis') {
-          if (isEnglishOrObserverText(text) || !text.includes('BULGU') || !text.includes('KARAR:') || !text.includes('GÖREVLER')) {
+          if (isEnglishOrObserverText(text) || !text.includes('BULGU') || !text.includes('KARAR:') || !text.includes('GÖREVLER') || !text.includes('DEPARTMANLAR')) {
             // Tekrar dene
             const retryRouted = await router.complete(member.modelRef, {
               messages: [
                 { role: 'user', content: buildCouncilTurnPrompt(kind, trimmedGoal, prior, roleNameFor(member as CouncilMember, composition.members)) },
                 { role: 'assistant', content: text },
-                { role: 'user', content: "Lütfen yanıtını SADECE TÜRKÇE yaz, BULGU/KARAR/GEREKÇE/PLANA YANSIMASI şablonunu aynen doldur ve sonuna ## GÖREVLER bölümünü zorunlu biçimde ekle." }
+                { role: 'user', content: "Lütfen yanıtını SADECE TÜRKÇE yaz, BULGU/KARAR/GEREKÇE/PLANA YANSIMASI şablonunu aynen doldur ve sonuna ## DEPARTMANLAR ve ## GÖREVLER bölümlerini zorunlu biçimde ekle." }
               ],
               // Görev kırılımı da bu yanıta sığmalı; 600 token şablonu
               // doldurmaya çoğu zaman yetmiyordu ve kesik çıktı
               // [SENTEZLEME_BASARISIZ] sayılıyordu.
-              maxTokens: kind === 'final_synthesis' ? 1_400 : 600,
+              maxTokens: kind === 'final_synthesis' ? 2_000 : 600,
               meta: { purpose: 'council', projectId: project.project_id, agentId: member.agentId }
             });
             const retryText = cleanLlmResponse(retryRouted.result.content ?? '');
-            if (retryText && !isEnglishOrObserverText(retryText) && retryText.includes('BULGU') && retryText.includes('GÖREVLER')) {
+            if (retryText && !isEnglishOrObserverText(retryText) && retryText.includes('BULGU') && retryText.includes('GÖREVLER') && retryText.includes('DEPARTMANLAR')) {
               text = retryText;
             } else {
               // Model iki denemede de başarısız — sabit metin YASAK, failed_synthesis işareti koy.
@@ -514,7 +526,6 @@ export class CouncilApplicationService {
       }
     }
 
-    const orgPlan = deriveOrgPlan(project.name, trimmedGoal);
 
     const existing = [
       ...await listLatestPlansByStatus(this.#database.ch, project.project_id, 'approved'),
@@ -523,8 +534,9 @@ export class CouncilApplicationService {
     const planVersion = existing.reduce((max, plan) => Math.max(max, plan.plan_version), 0) + 1;
     const planId = randomUUID() as EntityId;
 
+    let planPayload: ReturnType<typeof buildCouncilPlan>;
     try {
-      const planPayload = buildCouncilPlan({
+      planPayload = buildCouncilPlan({
         projectId: project.project_id as EntityId,
         projectName: project.name,
         planId,
@@ -543,7 +555,6 @@ export class CouncilApplicationService {
         status: result.status,
         memberModelRefs: composition.members.map((member) => member.modelRef),
         diversityWarning: composition.diversityWarning,
-        orgPlan,
         createdAt: new Date().toISOString(),
       });
       this.#logger.log(`createPlan cagriliyor: planId=${planId}`);
@@ -565,7 +576,9 @@ export class CouncilApplicationService {
       totalRounds: result.totalRounds,
       decisions: result.decisions,
       convergenceLog: result.convergenceLog,
-      orgPlan,
+      // Org planı artık nihai sentezden çözülür; planın İÇİNDEKİ değeri
+      // döndürürüz ki çağıran taraf uydurma bir kopya görmesin.
+      orgPlan: (planPayload.team_json as { org_plan: OrgPlan }).org_plan,
     });
   }
 }

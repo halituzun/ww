@@ -6,6 +6,7 @@
 //
 // Faz D: Konsey çıktısı artık 'org_plan' (departmanlar, liderler, sorumluluk
 // dosya desenleri, eşzamanlılık sınırı) ve 5 turluk müzakere dökümünü içerir.
+import { orgPlanFromSynthesis } from './org-plan-parse.js';
 import { parsePlanTasksFromMarkdown, type PlanTaskSpecV1, NIL_UUID, type EntityId, type OrgPlan } from '@ww/shared';
 
 export interface CouncilTurnLike {
@@ -88,109 +89,44 @@ const convergenceTable = (rows: NonNullable<CouncilPlanInput['convergenceLog']>)
  * Küçük proje (Tetris, Pomodoro, sayaç) → 2 departman, 4-6 agent.
  * Büyük proje (10+ ekran, tam stack) → 4-5 departman, 8-12 agent.
  */
-export function deriveOrgPlan(projectName: string, goal: string): OrgPlan {
-  const lower = `${projectName} ${goal}`.toLowerCase();
-  const isSmall = lower.includes('tetris') || lower.includes('pomodoro') || lower.includes('zamanlayıcı') || lower.includes('sayac') || lower.includes('calculator') || lower.includes('hesap') || lower.includes('makine');
-
-  if (isSmall) {
-    return {
-      departments: [
-        {
-          id: 'dept-ui',
-          name: 'Kullanıcı Arayüzü & Sunum',
-          group: 'design',
-          lead_role: 'group_lead',
-          members: [
-            { role: 'worker', count: 1, model_tier: 'medium' },
-            { role: 'verifier', count: 1, model_tier: 'medium' },
-          ],
-          responsibility_patterns: ['src/views/**', 'src/components/**', 'src/styles/**', 'public/**'],
-          rationale: 'Kullanıcı etkileşimleri, tuş kontrolleri ve stil düzenlemeleri',
-        },
-        {
-          id: 'dept-core',
-          name: 'Oyun Mantığı & Çekirdek Motor',
-          group: 'coding',
-          lead_role: 'group_lead',
-          members: [
-            { role: 'worker', count: 1, model_tier: 'heavy' },
-            { role: 'verifier', count: 1, model_tier: 'medium' },
-          ],
-          responsibility_patterns: ['src/core/**', 'src/logic/**', 'src/engine/**', 'src/state/**'],
-          rationale: 'Zamanlama döngüsü, durum yönetimi ve temel kurallar',
-        },
-      ],
-      non_department_roles: [
-        { role: 'pm', reports_to: 'user', rationale: 'Genel koordinasyon, kullanıcı iletişimi ve plan onayı' },
-        { role: 'interviewer', reports_to: 'pm', rationale: 'Gereksinim analizi ve kullanıcı görüşmesi' },
-        { role: 'standards_auditor', reports_to: 'pm', rationale: 'MVVM ve kod kalite denetimi' },
-      ],
-      concurrency_limit: 2,
-      estimated_tokens: 18000,
-      estimated_cost_usd: 0.045,
-    };
-  }
-
+/**
+ * Konsey sentezinden departman okunamadığında kullanılan YEDEK plan.
+ *
+ * NEDEN kelime listesi kaldırıldı: eski `deriveOrgPlan` proje büyüklüğünü
+ * `includes('tetris') || includes('pomodoro') || includes('hesap') ...`
+ * ile tahmin ediyor ve konseyin nihai sentezini HİÇ okumuyordu. Model ne
+ * derse desin sonuç iki sabit şablondan biriydi; "Zamanlayıcı servisini
+ * yeniden yaz" gibi büyük bir backend işi "küçük proje" sayılıp iki
+ * departmana indirgeniyordu.
+ *
+ * Yedek plan artık proje büyüklüğü hakkında BİR ŞEY İDDİA ETMEZ: tek bir
+ * kodlama departmanı açar ve planın gövdesine bunun yedek olduğu yazılır.
+ */
+export function fallbackOrgPlan(): OrgPlan {
   return {
     departments: [
       {
-        id: 'dept-frontend',
-        name: 'Arayüz & Kullanıcı Deneyimi',
-        group: 'design',
-        lead_role: 'group_lead',
-        members: [
-          { role: 'worker', count: 2, model_tier: 'medium' },
-          { role: 'verifier', count: 1, model_tier: 'medium' },
-        ],
-        responsibility_patterns: ['src/views/**', 'src/components/**', 'src/styles/**', 'public/**'],
-        rationale: 'Bileşen hiyerarşisi, responsive düzen ve panel etkileşimleri',
-      },
-      {
-        id: 'dept-backend',
-        name: 'Arka Uç & Servis Katmanı',
+        id: 'dept-core',
+        name: 'Uygulama',
         group: 'coding',
-        lead_role: 'group_lead',
-        members: [
-          { role: 'worker', count: 2, model_tier: 'heavy' },
-          { role: 'verifier', count: 1, model_tier: 'medium' },
-        ],
-        responsibility_patterns: ['src/services/**', 'src/api/**', 'src/controllers/**'],
-        rationale: 'İş mantığı, REST uçları ve servis protokolleri',
-      },
-      {
-        id: 'dept-db',
-        name: 'Veritabanı & Kalıcılık',
-        group: 'db',
         lead_role: 'group_lead',
         members: [
           { role: 'worker', count: 1, model_tier: 'heavy' },
           { role: 'verifier', count: 1, model_tier: 'medium' },
         ],
-        responsibility_patterns: ['src/db/**', 'src/schema/**', 'migrations/**'],
-        rationale: 'Şema yönetimi, indeksler ve veri bütünlüğü',
-      },
-      {
-        id: 'dept-qa',
-        name: 'Kalite Güvence & E2E Test',
-        group: 'ui_audit',
-        lead_role: 'group_lead',
-        members: [
-          { role: 'worker', count: 1, model_tier: 'medium' },
-          { role: 'verifier', count: 1, model_tier: 'medium' },
-        ],
-        responsibility_patterns: ['tests/**', 'src/**/*.test.ts', 'src/**/*.spec.ts'],
-        rationale: 'Regresyon testleri, uçtan uca senaryolar ve standart denetimi',
+        responsibility_patterns: ['src/**'],
+        rationale: 'Konsey sentezinden departman okunamadı; tek departmanlı yedek yerleşim',
       },
     ],
     non_department_roles: [
-      { role: 'pm', reports_to: 'user', rationale: 'Proje yönetimi ve kaynak tahsisi' },
-      { role: 'interviewer', reports_to: 'pm', rationale: 'Gereksinim mühendisliği' },
-      { role: 'narrator', reports_to: 'pm', rationale: 'Olay izleme ve süreç anlatımı' },
-      { role: 'standards_auditor', reports_to: 'pm', rationale: 'Mimari standart denetimi' },
+      { role: 'pm', reports_to: 'user', rationale: 'Genel koordinasyon ve plan onayı' },
+      { role: 'interviewer', reports_to: 'pm', rationale: 'Gereksinim analizi' },
+      { role: 'standards_auditor', reports_to: 'pm', rationale: 'MVVM ve kod kalite denetimi' },
     ],
-    concurrency_limit: 3,
-    estimated_tokens: 45000,
-    estimated_cost_usd: 0.12,
+    concurrency_limit: 2,
+    // Elimizde gerçek tahmin yok; sıfır "hesaplanmadı" demektir.
+    estimated_tokens: 0,
+    estimated_cost_usd: 0,
   };
 }
 
@@ -205,7 +141,11 @@ export function buildCouncilPlan(input: CouncilPlanInput) {
   } catch (reason) {
     planTaskError = reason instanceof Error ? reason.message : String(reason);
   }
-  const effectiveOrgPlan = input.orgPlan ?? deriveOrgPlan(input.projectName, input.goal);
+  const parsedOrgPlan = input.orgPlan ?? orgPlanFromSynthesis(finalTurn.text);
+  const effectiveOrgPlan = parsedOrgPlan ?? fallbackOrgPlan();
+  const orgPlanWarning = parsedOrgPlan === undefined
+    ? 'Organizasyon planı nihai sentezden okunamadı ("## DEPARTMANLAR" bölümü yok); tek departmanlı yedek yerleşim kullanıldı.'
+    : '';
   const allTurns = input.allTurns ?? [
     ...input.proposals,
     ...input.objections,
@@ -223,6 +163,7 @@ export function buildCouncilPlan(input: CouncilPlanInput) {
     `**Durum:** ${input.status ?? 'converged'}`,
     ...(input.diversityWarning === '' ? [] : ['', `> ⚠️ ${input.diversityWarning}`]),
     ...(planTaskError === '' ? [] : ['', `> ⚠️ Görev kırılımı okunamadı: ${planTaskError}`]),
+    ...(orgPlanWarning === '' ? [] : ['', `> ⚠️ ${orgPlanWarning}`]),
     '',
     '## Sentez (Nihai Karar & Görevler)',
     '',

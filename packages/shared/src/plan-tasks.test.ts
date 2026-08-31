@@ -108,6 +108,16 @@ BAĞIMLI: g1
     expect(tasks.map((t) => t.key)).toEqual(['g1', 'g2']);
   });
 
+  // Tireli anahtar: eski regex kimliği ilk tireden bölüyordu ('g-1' -> 'g').
+  // Testler yalnız 'g1' kullandığı için hata kaçmıştı.
+  it('tireli gorev anahtarini bolmez', () => {
+    const tasks = parsePlanTasksFromMarkdown(
+      '## GÖREVLER\n\n### GÖREV oyun-tahtasi — Tahtayi ciz\nDOSYALAR: src/board.ts\nKABUL: cizilir\n',
+    );
+    expect(tasks[0]?.key).toBe('oyun-tahtasi');
+    expect(tasks[0]?.title).toBe('Tahtayi ciz');
+  });
+
   it('GOREVLER bolumu yoksa bos doner', () => {
     expect(parsePlanTasksFromMarkdown('## Sentez\n\nmetin')).toEqual([]);
   });

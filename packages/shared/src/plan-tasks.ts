@@ -129,7 +129,9 @@ export function topologicalPlanTaskOrder(
   return Object.freeze(ordered);
 }
 
-const TASK_HEADING = /^###\s*GÖREV\s+([^\s—-]+)\s*[—-]\s*(.+)$/u;
+// Ayırıcı BOŞLUKLA çevrilidir; aksi hâlde `g-1` gibi tireli bir anahtar
+// ilk tireden bölünür ve 'g' olarak okunurdu.
+const TASK_HEADING = /^###\s*GÖREV\s+(\S+)\s+[—–-]\s+(.+)$/u;
 const FIELD = /^([A-ZÇĞİÖŞÜ]+):\s*(.*)$/u;
 
 /**
