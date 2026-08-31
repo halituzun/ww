@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React from "react";
 import type { Plan } from "../services/plans.js";
 import { usePlanApprovalViewModel } from "../viewmodels/usePlanApprovalViewModel.js";
 import { agentRoleLabel, modelTierLabel, reportsToLabel } from "../services/labels.js";
@@ -36,7 +36,7 @@ export function PlanApprovalCard({
   readonly loading?: boolean | undefined;
 }) {
   const vm = usePlanApprovalViewModel({ onReplan });
-  const [activeTab, setActiveTab] = useState<"tasks" | "org">("tasks");
+  const { activeTab, setActiveTab } = vm;
 
   if (!plan) return null;
 

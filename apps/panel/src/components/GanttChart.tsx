@@ -1,7 +1,8 @@
-import React, { useRef, useState, useEffect } from "react";
+import React from "react";
 import type { Task } from "../services/projects.js";
 import type { OrgPlan } from "@ww/shared";
 import { useGanttViewModel } from "../viewmodels/useGanttViewModel.js";
+import { useGanttRowCoordsViewModel } from "../viewmodels/useGanttRowCoordsViewModel.js";
 import { formatElapsed } from "../services/labels.js";
 
 export function GanttChart({
@@ -14,29 +15,8 @@ export function GanttChart({
   readonly onSelectTask?: ((taskId: string) => void) | undefined;
 }) {
   const { groups, totalMinutes, currentMinute } = useGanttViewModel(tasks, orgPlan);
-  const containerRef = useRef<HTMLDivElement>(null);
-  const [rowCoords, setRowCoords] = useState<Map<string, { top: number; left: number; right: number; height: number }>>(new Map());
-
-  // Satır koordinatlarını hesaplayarak SVG bağımlılık oklarını bağla
-  useEffect(() => {
-    if (!containerRef.current) return;
-    const map = new Map<string, { top: number; left: number; right: number; height: number }>();
-    const rootRect = containerRef.current.getBoundingClientRect();
-
-    const barEls = containerRef.current.querySelectorAll<HTMLElement>("[data-gantt-task-id]");
-    barEls.forEach((el) => {
-      const taskId = el.getAttribute("data-gantt-task-id");
-      if (!taskId) return;
-      const rect = el.getBoundingClientRect();
-      map.set(taskId, {
-        top: rect.top - rootRect.top + rect.height / 2,
-        left: rect.left - rootRect.left,
-        right: rect.right - rootRect.left,
-        height: rect.height,
-      });
-    });
-    setRowCoords(map);
-  }, [groups, totalMinutes]);
+  // Satır koordinatları SVG bağımlılık oklarını bağlar; ölçüm ve durum ViewModel'de.
+  const { containerRef, rowCoords } = useGanttRowCoordsViewModel(`${groups.length}:${totalMinutes}`);
 
   const timeTicks: number[] = [];
   const tickStep = totalMinutes <= 40 ? 5 : 10;

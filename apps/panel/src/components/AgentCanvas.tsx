@@ -1,7 +1,8 @@
-import React, { useState, useMemo } from "react";
+import React, { useMemo } from "react";
 import { CanvasContainer } from "./CanvasContainer.js";
 import { DeptFrameNode } from "./DeptFrameNode.js";
 import { useCanvasViewModel, type RoleFilter } from "../viewmodels/useCanvasViewModel.js";
+import { useDeptCollapseViewModel } from "../viewmodels/useDeptCollapseViewModel.js";
 import { computeOrgLayout, cleanRoleTitle } from "../viewmodels/canvas-layout.js";
 import type { CanvasNode } from "../viewmodels/canvas-edges.js";
 import { agentStatusLabel, formatElapsed } from "../services/labels.js";
@@ -78,21 +79,7 @@ export function AgentCanvas({
     highlightSet,
   } = useCanvasViewModel(projectId);
 
-  const [collapsedDepts, setCollapsedDepts] = useState<Set<string>>(new Set());
-
-  const handleToggleCollapse = (deptId: string) => {
-    setCollapsedDepts((prev) => {
-      const next = new Set(prev);
-      if (next.has(deptId)) {
-        next.delete(deptId);
-        next.add(`open-${deptId}`);
-      } else {
-        next.add(deptId);
-        next.delete(`open-${deptId}`);
-      }
-      return next;
-    });
-  };
+  const { collapsedDepts, toggleCollapse: handleToggleCollapse } = useDeptCollapseViewModel();
 
   // E1 & E2: Deterministik organizasyon yerleşimi ve kenarlar
   const layout = useMemo(

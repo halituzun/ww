@@ -1,7 +1,6 @@
-import React, { useState, useEffect } from "react";
+import React from "react";
+import { useCouncilTranscriptViewModel } from "../viewmodels/useCouncilTranscriptViewModel.js";
 import type { OrgPlan } from "@ww/shared";
-import { fetchPlans } from "../services/plans.js";
-import { currentSessionToken } from "../services/http.js";
 
 function getStoredPid(): string | null {
   try {
@@ -230,71 +229,31 @@ export function CouncilTranscriptViewer({
   readonly transcript?: readonly CouncilRoundData[] | undefined;
   readonly planContentMd?: string | undefined;
 }) {
-  const [activeRound, setActiveRound] = useState<number>(1);
-  const [activeView, setActiveView] = useState<"rounds" | "decisions">("rounds");
-  const [fetchedContentMd, setFetchedContentMd] = useState<string | undefined>(undefined);
-  const [decisions, setDecisions] = useState<readonly DecisionRowData[]>([]);
-  const [additionalTopic, setAdditionalTopic] = useState<string>("");
-  const [requestingRound, setRequestingRound] = useState<boolean>(false);
-  const [roundFeedback, setRoundFeedback] = useState<string | null>(null);
+  const targetPid = projectId ?? getStoredPid() ?? undefined;
+  const {
+    activeRound,
+    selectRound,
+    activeView,
+    selectView,
+    fetchedContentMd,
+    decisions,
+    additionalTopic,
+    setAdditionalTopic,
+    requestingRound,
+    roundFeedback,
+    submitRound,
+  } = useCouncilTranscriptViewModel({
+    projectId: targetPid,
+    hasInitialContent: Boolean(initialPlanContentMd),
+  });
 
-  const targetPid = projectId || getStoredPid();
-
-  useEffect(() => {
-    if (!initialPlanContentMd && targetPid) {
-      fetchPlans(targetPid).then((plans) => {
-        if (plans.length > 0 && plans[0]?.content_md) {
-          setFetchedContentMd(plans[0].content_md);
-        }
-      }).catch(() => {});
-    }
-
-    if (targetPid) {
-      const apiBase = import.meta.env.VITE_API_URL ?? "http://localhost:4000";
-      fetch(`${apiBase}/projects/${targetPid}/decisions`, {
-        headers: { authorization: `Bearer ${currentSessionToken()}` },
-      })
-        .then((res) => (res.ok ? res.json() : []))
-        .then((data) => {
-          if (Array.isArray(data) && data.length > 0) {
-            setDecisions(data);
-          }
-        })
-        .catch(() => {});
-    }
-  }, [projectId, initialPlanContentMd, targetPid]);
+  const handleRequestRound = async (e: React.FormEvent): Promise<void> => {
+    e.preventDefault();
+    await submitRound();
+  };
 
   const effectiveMd = initialPlanContentMd || fetchedContentMd;
   const transcript = (initialTranscript && initialTranscript.length > 0) ? initialTranscript : (effectiveMd ? parseTranscriptFromMarkdown(effectiveMd) : undefined);
-
-  const handleRequestRound = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!additionalTopic.trim() || !targetPid) return;
-    setRequestingRound(true);
-    setRoundFeedback(null);
-    try {
-      const apiBase = import.meta.env.VITE_API_URL ?? "http://localhost:4000";
-      const res = await fetch(`${apiBase}/projects/${targetPid}/council/rounds`, {
-        method: "POST",
-        headers: {
-          "content-type": "application/json",
-          authorization: `Bearer ${currentSessionToken()}`,
-        },
-        body: JSON.stringify({ focusTopic: additionalTopic.trim() }),
-      });
-      if (res.ok) {
-        setRoundFeedback("Ek müzakere turu başarıyla başlatıldı.");
-        setAdditionalTopic("");
-      } else {
-        const err = await res.json().catch(() => ({ message: "İstek başarısız" }));
-        setRoundFeedback(`Hata: ${err.message || "Ek tur açılamadı"}`);
-      }
-    } catch (err) {
-      setRoundFeedback("Bağlantı hatası: Sunucuya ulaşılamadı.");
-    } finally {
-      setRequestingRound(false);
-    }
-  };
 
   if (!transcript || transcript.length === 0) {
     return (
@@ -331,7 +290,7 @@ export function CouncilTranscriptViewer({
               type="button"
               className={`canvas-tab-pill ${activeView === "rounds" ? "active" : ""}`}
               style={{ fontSize: "11px", padding: "4px 10px" }}
-              onClick={() => setActiveView("rounds")}
+              onClick={() => selectView("rounds")}
             >
               Müzakere Tutanakları ({transcript.length} Tur)
             </button>
@@ -339,7 +298,7 @@ export function CouncilTranscriptViewer({
               type="button"
               className={`canvas-tab-pill ${activeView === "decisions" ? "active" : ""}`}
               style={{ fontSize: "11px", padding: "4px 10px" }}
-              onClick={() => setActiveView("decisions")}
+              onClick={() => selectView("decisions")}
             >
               Karar Defteri ({decisions.length > 0 ? decisions.length : 3})
             </button>
@@ -388,7 +347,7 @@ export function CouncilTranscriptViewer({
                     borderRadius: 6,
                     cursor: "pointer",
                   }}
-                  onClick={() => setActiveRound(r.round)}
+                  onClick={() => selectRound(r.round)}
                 >
                   Tur {r.round}: {r.badge}
                 </button>
@@ -508,6 +467,7 @@ export function CouncilTranscriptViewer({
         <form onSubmit={handleRequestRound} style={{ display: "flex", gap: "8px", alignItems: "center" }}>
           <input
             type="text"
+            aria-label="Ek müzakere turu konusu"
             placeholder="Örn: Klavye kısayollarının erişilebilirlik ve performans etkisini tartışın..."
             value={additionalTopic}
             onChange={(e) => setAdditionalTopic(e.target.value)}

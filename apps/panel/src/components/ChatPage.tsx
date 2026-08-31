@@ -1,8 +1,9 @@
-import React, { useEffect, useRef } from "react";
+import React from "react";
 import { messageKindLabel, agentRoleLabel } from "../services/labels.js";
 import { PendingQuestions } from "./PendingQuestions.js";
 import { ChatComposer } from "./ChatComposer.js";
 import { useChatViewModel } from "../viewmodels/useChatViewModel.js";
+import { useAutoScroll } from "../viewmodels/useAutoScroll.js";
 import { Skeleton } from "./Skeleton.js";
 import { Alert } from "./Alert.js";
 import { EmptyState } from "./EmptyState.js";
@@ -54,12 +55,8 @@ export function ChatPage({
   readonly projectId: string;
 }) {
   const { messages, agentMap, loading, error, draft, setDraft, send, sending } = useChatViewModel(projectId);
-  const messagesEndRef = useRef<HTMLDivElement>(null);
-
-  // Yeni mesaj geldiğinde veya ilk yüklemede aşağı kaydır
-  useEffect(() => {
-    if (typeof messagesEndRef.current?.scrollIntoView === "function") { messagesEndRef.current.scrollIntoView({ behavior: "smooth" }); }
-  }, [messages.length]);
+  // Yeni mesaj geldiğinde veya ilk yüklemede aşağı kaydır (yan etki ViewModel'de).
+  const messagesEndRef = useAutoScroll<HTMLDivElement>(messages.length);
 
   return (
     <div className="chat-page">

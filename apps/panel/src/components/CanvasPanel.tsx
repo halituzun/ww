@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React from "react";
 import type { OrgPlan } from "@ww/shared";
 import type { ReplayEvent } from "../viewmodels/timeline-replay.js";
 import type { Task } from "../services/projects.js";
@@ -9,8 +9,12 @@ import { CouncilTranscriptViewer, parseTranscriptFromMarkdown } from "./CouncilT
 import { TimelineScrubber } from "./TimelineScrubber.js";
 import { AgentDetail } from "./AgentDetail.js";
 import { ProjectMapPanel } from "./ProjectMapPanel.js";
+import {
+  useCanvasPanelViewModel,
+  type CanvasTab,
+} from "../viewmodels/useCanvasPanelViewModel.js";
 
-export type CanvasTab = "org" | "tasks" | "gantt" | "council" | "map";
+export type { CanvasTab } from "../viewmodels/useCanvasPanelViewModel.js";
 
 export interface CanvasPanelProps {
   readonly projectId: string;
@@ -59,31 +63,15 @@ export function CanvasPanel({
   selectedAgent: controlledSelectedAgent,
   onSelectAgent,
 }: CanvasPanelProps) {
-  const getInitialTab = (): CanvasTab => {
-    try {
-      const search = window.location.search || "";
-      const hash = window.location.hash || "";
-      const params = new URLSearchParams(
-        search.startsWith("?") ? search : (hash.includes("?") ? hash.slice(hash.indexOf("?")) : "")
-      );
-      const tabParam = params.get("tab");
-      if (tabParam === "council" || tabParam === "gantt" || tabParam === "tasks" || tabParam === "org" || tabParam === "map") {
-        return tabParam as CanvasTab;
-      }
-    } catch {}
-    return "org";
-  };
-
-  const [activeTab, setActiveTab] = useState<CanvasTab>(getInitialTab());
-  const [localSelectedAgent, setLocalSelectedAgent] = useState<string | undefined>(undefined);
+  const { activeTab, selectTab, selectedAgent, selectAgent } = useCanvasPanelViewModel({
+    controlledSelectedAgent,
+    onSelectAgent,
+    search: window.location.search,
+    hash: window.location.hash,
+  });
 
   const activePlan = plans[0];
   const effectiveTranscript = transcript || buildTranscriptFromPlan(activePlan, planContentMd ?? activePlan?.content_md);
-  const selectedAgent = controlledSelectedAgent ?? localSelectedAgent;
-  const selectAgent = (agentId: string | undefined): void => {
-    setLocalSelectedAgent(agentId);
-    onSelectAgent?.(agentId);
-  };
 
   const showSidebar = (activeTab === "org" || activeTab === "tasks") && selectedAgent !== undefined;
 
@@ -121,7 +109,7 @@ export function CanvasPanel({
             role="tab"
             aria-selected={activeTab === "org"}
             style={tabStyle("org")}
-            onClick={() => setActiveTab("org")}
+            onClick={() => selectTab("org")}
           >
             Agent Organizasyonu
           </button>
@@ -130,7 +118,7 @@ export function CanvasPanel({
             role="tab"
             aria-selected={activeTab === "tasks"}
             style={tabStyle("tasks")}
-            onClick={() => setActiveTab("tasks")}
+            onClick={() => selectTab("tasks")}
           >
             Görev Akışı
           </button>
@@ -139,7 +127,7 @@ export function CanvasPanel({
             role="tab"
             aria-selected={activeTab === "gantt"}
             style={tabStyle("gantt")}
-            onClick={() => setActiveTab("gantt")}
+            onClick={() => selectTab("gantt")}
           >
             Zaman Planı
           </button>
@@ -148,7 +136,7 @@ export function CanvasPanel({
             role="tab"
             aria-selected={activeTab === "council"}
             style={tabStyle("council")}
-            onClick={() => setActiveTab("council")}
+            onClick={() => selectTab("council")}
           >
             Konsey Müzakeresi
           </button>
@@ -157,7 +145,7 @@ export function CanvasPanel({
             role="tab"
             aria-selected={activeTab === "map"}
             style={tabStyle("map")}
-            onClick={() => setActiveTab("map")}
+            onClick={() => selectTab("map")}
           >
             Proje Haritası
           </button>

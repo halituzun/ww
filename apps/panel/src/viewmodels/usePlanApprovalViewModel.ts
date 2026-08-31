@@ -1,5 +1,8 @@
 import { useState, useCallback } from "react";
 
+/** Plan kartındaki sekmeler. View bu birlikten başka değer üretemez. */
+export type PlanApprovalTab = "tasks" | "org";
+
 export function usePlanApprovalViewModel({
   onReplan,
 }: {
@@ -9,6 +12,8 @@ export function usePlanApprovalViewModel({
   const [revisionReason, setRevisionReason] = useState("");
   const [revisionSummary, setRevisionSummary] = useState("");
   const [showFullContent, setShowFullContent] = useState(false);
+  // docs/09: sekme seçimi de durumdur ve View'da duramaz.
+  const [activeTab, setActiveTab] = useState<PlanApprovalTab>("tasks");
 
   const openRevision = useCallback(() => setShowRevisionInput(true), []);
   const closeRevision = useCallback(() => {
@@ -33,6 +38,8 @@ export function usePlanApprovalViewModel({
     revisionSummary,
     setRevisionSummary,
     showFullContent,
+    activeTab,
+    setActiveTab,
     openRevision,
     closeRevision,
     toggleContent,
