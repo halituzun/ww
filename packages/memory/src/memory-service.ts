@@ -5,7 +5,7 @@ import {
   canonicalSha256V1,
   type EntityId,
 } from '@ww/shared';
-import { getFileIndex, getLatestProjectMapSnapshotAsOf, getPlanAsOf, getTaskAsOf, listFileIndex, listFileIndexAsOf, listLatestKnowledgeByStatus, listLatestKnowledgeByStatusAsOf, listRecentMessages, listRecentSummaries, upsertFileIndex, type FileIndexLayer, type KnowledgeRow, type ProjectMapSnapshotRow } from '@ww/db';
+import { getFileIndex, getLatestProjectMapSnapshotAsOf, getPlanAsOf, getTaskAsOf, listFileIndex, listFileIndexAsOf, listFileIndexByPathsAsOf, listLatestKnowledgeByStatus, listLatestKnowledgeByStatusAsOf, listRecentMessages, listRecentSummaries, upsertFileIndex, type FileIndexLayer, type KnowledgeRow, type ProjectMapSnapshotRow } from '@ww/db';
 
 export interface MemoryChunk {
   readonly sourceTable: 'plans' | 'knowledge' | 'summaries' | 'file_index' | 'project_maps' | 'messages';
@@ -336,15 +336,18 @@ export class MemoryService {
     // Hedef dosyalar mühürlü görev sözleşmesinin parçasıdır; açıkça
     // eklenmelidir. Amaç "özelliği uygula" dediğinde anahtar kelime
     // eşleşmesine güvenmek dosya fihristini sessizce düşürür.
-    const targetPaths = new Set(task.target_files);
-    const targetFileChunks = (await listFileIndexAsOf(
+    const targetPaths = [...new Set(task.target_files)];
+    // Hedef dosyalar YOLLARIYLA sorgulanır. Eskiden `listFileIndexAsOf(...,
+    // limit = hedefSayisi * 2)` çağrılıp sonra filtreleniyordu; o sorgu
+    // `ORDER BY file_path LIMIT n` olduğu için projenin ALFABETİK İLK n
+    // satırı geliyordu ve hedefler o pencereye çoğu zaman hiç düşmüyordu.
+    const targetFileChunks = (await listFileIndexByPathsAsOf(
       this.#ch,
       input.projectId,
       cutoffAt,
-      Math.min(1_000, Math.max(1, targetPaths.size * 2)),
+      targetPaths,
     ))
-      .filter((row) => targetPaths.has(row.file_path))
-      .map((row) => Object.freeze({
+      .map((row: { file_path: string; summary: string }) => Object.freeze({
         sourceTable: 'file_index' as const,
         sourceId: id('file-index', { projectId: input.projectId, path: row.file_path }),
         text: `${row.file_path}\n${row.summary}`,

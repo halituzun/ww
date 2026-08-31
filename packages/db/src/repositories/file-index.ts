@@ -67,6 +67,45 @@ export async function listFileIndexAsOf(
   return (await result.json<unknown>()).map(parse);
 }
 
+/**
+ * Belirli dosya YOLLARININ cutoff anındaki fihrist satırları.
+ *
+ * NEDEN VAR: çağıran taraf hedef dosyaları `listFileIndexAsOf(..., limit =
+ * hedefSayisi * 2)` ile çekip sonra filtreliyordu. O sorgu `ORDER BY
+ * file_path LIMIT n` olduğu için üç hedef dosya için projenin ALFABETİK İLK
+ * ALTI satırı geliyordu; birkaç dosyadan büyük her projede hedef dosyalar o
+ * pencereye hiç düşmüyordu. Yani "hedef dosyalar bağlama açıkça eklenir"
+ * vaadi sessizce boşa çıkıyordu.
+ */
+export async function listFileIndexByPathsAsOf(
+  ch: ClickHouseClient,
+  projectId: string,
+  cutoffAt: string,
+  paths: readonly string[],
+): Promise<readonly FileIndexRow[]> {
+  const wanted = [...new Set(paths.map((path) => path.trim()).filter((path) => path !== ''))];
+  if (wanted.length === 0) return [];
+  if (wanted.length > 1_000) throw new Error('file_index yol listesi cok uzun');
+  const id = concreteEntityId(projectId, 'projectId');
+  const result = await ch.query({
+    query: `SELECT ${COLUMNS} FROM file_index
+      WHERE project_id = {projectId:UUID}
+        AND file_path IN {paths:Array(String)}
+        AND updated_at <= parseDateTime64BestEffort({cutoff:String}, 3)
+        AND (project_id,file_path,version) IN (
+          SELECT project_id,file_path,max(version) FROM file_index
+          WHERE project_id = {projectId:UUID}
+            AND file_path IN {paths:Array(String)}
+            AND updated_at <= parseDateTime64BestEffort({cutoff:String}, 3)
+          GROUP BY project_id,file_path
+        )
+      ORDER BY file_path`,
+    query_params: { projectId: id, cutoff: cutoffAt, paths: wanted },
+    format: 'JSONEachRow',
+  });
+  return (await result.json<unknown>()).map(parse);
+}
+
 export async function upsertFileIndex(ch: ClickHouseClient, input: UpsertFileIndexInput): Promise<FileIndexRow> {
   const projectId = concreteEntityId(input.project_id, 'projectId');
   const path = input.file_path.trim();

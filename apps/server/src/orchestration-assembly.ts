@@ -25,6 +25,7 @@ import { createExecutionErrorRecorder } from './execution-error-recorder.js';
 import { renderContextPack } from './context-pack-render.js';
 import { classifyArtifact, classifyLayer } from './artifact-classify.js';
 import { buildAgentCapabilities } from './agent-capabilities.js';
+import { contextTokenBudget } from './context-budget.js';
 import { appendArtifact, appendEvent, appendPromptInputSnapshot, createProjectMapSnapshot, getMessage, getTaskHandoff, listTaskCausalEntriesThroughCursor, listKnowledgeIdsBySourceTask, getPromptVersion, getTaskCausalCursor, getAssignmentAttempt, getLatestTask, listLatestAgents, listLatestApiProviders } from '@ww/db';
 import type { RuntimeModels } from './runtime-context.js';
 import type { Phase9RuntimeCompositionInput } from './runtime-composition.js';
@@ -400,9 +401,11 @@ export async function createOrchestrationComposition(
           // The brief is already sealed. Using wall-clock time here made a
           // retry observe knowledge and summaries created after that seal.
           cutoffAt: scope.baseContextCutoffAt ?? new Date().toISOString(),
-            // Bağlam bütçesi görevin toplam bütçesinin küçük bir dilimidir;
-            // tamamını bağlama harcamak işe yer bırakmaz.
-            tokenBudget: Math.max(500, Math.floor((scope.tokenBudget ?? 4_000) / 4)),
+            // Bağlam bütçesi görevin toplam bütçesinin bir dilimidir; hesap
+            // context-budget.ts'te (0 = "belirtilmedi", sınırsız DEĞİL).
+            // Rol brief kapsamında taşınmıyor; worker varsayılanı kullanılır
+            // (bağlam paketini en çok worker tüketir).
+            tokenBudget: contextTokenBudget(scope.tokenBudget, 'worker'),
             ...(scope.goal === undefined ? {} : { query: scope.goal }),
           });
           return renderContextPack(pack.chunks as never);

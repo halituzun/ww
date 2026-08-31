@@ -5,6 +5,7 @@
 // acceptanceCriteria/targetFiles/allowedTools taşır. Bu modül o mühürlü
 // veriden modele gidecek mesajları üretir; hiçbir şeyi yeniden keşfetmez.
 import type { TaskBriefV1 } from '@ww/shared';
+import { describeTaskBudget } from './context-budget.js';
 
 export interface PromptMessage {
   role: 'system' | 'user';
@@ -101,7 +102,9 @@ export function assemblePromptMessages(input: AssembleInput): PromptMessage[] {
       '- (hedef dosya bildirilmedi — yazma araçları bu görevde kullanılamaz)',
     )}`,
     `İzinli araçlar:\n${list(brief.allowedTools, '- (kısıt yok)')}`,
-    `Token bütçesi: ${brief.tokenBudget === 0 ? 'sınırsız' : brief.tokenBudget}`,
+    // SIFIR "SINIRSIZ" DEĞİLDİR. Modele "sınırsız" denirken bağlam kurucuya
+    // asgari bütçe veriliyordu; yani aynı sayı iki yerde zıt okunuyordu.
+    `Token bütçesi: ${describeTaskBudget(brief.tokenBudget)}`,
   ].join('\n\n');
 
   const messages: PromptMessage[] = [
