@@ -78,3 +78,58 @@ export function planBootstrapPrompts(
     };
   });
 }
+
+import type { OrgPlan } from '@ww/shared';
+
+export interface DynamicAgentSpec {
+  readonly role: string;
+  readonly group: string;
+  readonly name: string;
+  readonly model: string;
+  readonly canonicalPrompt: string;
+}
+
+export function buildAgentsFromOrgPlan(orgPlan: OrgPlan): readonly DynamicAgentSpec[] {
+  const specs: DynamicAgentSpec[] = [];
+
+  // 1. Departman dışı roller
+  for (const nonDept of orgPlan.non_department_roles) {
+    if (nonDept.role === 'pm') {
+      specs.push({ role: 'pm', group: 'management', name: 'PM', model: 'mock:pm', canonicalPrompt: 'role.pm' });
+    } else if (nonDept.role === 'interviewer') {
+      specs.push({ role: 'interviewer', group: 'analysis', name: 'Görüşmeci', model: 'mock:interviewer', canonicalPrompt: 'role.interviewer' });
+    } else if (nonDept.role === 'standards_auditor') {
+      specs.push({ role: 'standards_auditor', group: 'ui_audit', name: 'Standart Denetçisi', model: 'mock:auditor', canonicalPrompt: 'role.standards_auditor' });
+    } else if (nonDept.role === 'narrator') {
+      specs.push({ role: 'narrator', group: 'management', name: 'Anlatıcı', model: 'mock:narrator', canonicalPrompt: 'role.narrator' });
+    }
+  }
+
+  // 2. Departmanlar ve üyeleri
+  for (const dept of orgPlan.departments) {
+    // Departman lideri
+    specs.push({
+      role: dept.lead_role || 'group_lead',
+      group: dept.group,
+      name: `${dept.name} Lideri`,
+      model: 'mock:group_lead',
+      canonicalPrompt: 'role.group_lead',
+    });
+
+    // Departman üyeleri (worker ve verifier)
+    for (const member of dept.members) {
+      for (let i = 1; i <= member.count; i++) {
+        const title = member.role === 'verifier' ? 'Denetleyen' : 'Yapan';
+        specs.push({
+          role: member.role,
+          group: dept.group,
+          name: `${dept.name} ${title} ${i}`,
+          model: `mock:${member.role}`,
+          canonicalPrompt: member.role === 'verifier' ? 'role.verifier' : `role.worker.${dept.group}`,
+        });
+      }
+    }
+  }
+
+  return Object.freeze(specs);
+}

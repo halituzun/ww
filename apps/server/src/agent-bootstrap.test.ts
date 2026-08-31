@@ -70,3 +70,35 @@ describe('planBootstrapPrompts', () => {
     expect(() => planBootstrapPrompts(projectId, missing as never)).toThrow(/role\.worker\.coding/);
   });
 });
+
+import { buildAgentsFromOrgPlan } from './agent-bootstrap.js';
+
+describe('buildAgentsFromOrgPlan', () => {
+  it('dinamik departman ve rolleri kurar', () => {
+    const orgPlan = {
+      departments: [
+        {
+          id: 'dept-ui',
+          name: 'Arayüz',
+          group: 'design',
+          lead_role: 'group_lead',
+          members: [
+            { role: 'worker', count: 2, model_tier: 'medium' as const },
+            { role: 'verifier', count: 1, model_tier: 'medium' as const },
+          ],
+          responsibility_patterns: ['src/views/**'],
+          rationale: 'UI',
+        },
+      ],
+      non_department_roles: [{ role: 'pm', reports_to: 'user', rationale: 'Yönetim' }],
+      concurrency_limit: 2,
+      estimated_tokens: 10000,
+      estimated_cost_usd: 0.03,
+    };
+    const agents = buildAgentsFromOrgPlan(orgPlan);
+    expect(agents.find((a) => a.role === 'pm')).toBeDefined();
+    expect(agents.find((a) => a.name === 'Arayüz Lideri')).toBeDefined();
+    expect(agents.filter((a) => a.role === 'worker' && a.group === 'design')).toHaveLength(2);
+    expect(agents.filter((a) => a.role === 'verifier' && a.group === 'design')).toHaveLength(1);
+  });
+});

@@ -33,11 +33,32 @@ export class CanvasController {
       }
     }
 
-    const roleModels = await listLatestRoleModels(this.database.ch);
+    const [roleModels, latestPlans] = await Promise.all([
+      listLatestRoleModels(this.database.ch),
+      this.database.ch.query({
+        query: `SELECT team_json, content_md FROM plans WHERE project_id = {projectId:UUID} ORDER BY created_at DESC LIMIT 1`,
+        query_params: { projectId },
+        format: 'JSONEachRow',
+      }).then((res) => res.json<any>()).catch(() => []),
+    ]);
+
     const roleModelMap = new Map(roleModels.map((r) => [r.role, r.model_ref]));
-    return buildCanvasProjection(
+    const projection = buildCanvasProjection(
       agents as never, tasks as never, live, (role) => roleModelMap.get(role),
     );
+
+    let orgPlan: any = undefined;
+    if (latestPlans.length > 0) {
+      try {
+        const team = typeof latestPlans[0].team_json === 'string' ? JSON.parse(latestPlans[0].team_json) : latestPlans[0].team_json;
+        orgPlan = team.org_plan || team;
+      } catch {}
+    }
+
+    return {
+      ...projection,
+      orgPlan,
+    };
   }
 
   /** docs/08: Düğüme tıklandığında sağ panelde agent geçmişini gösteren uç */
@@ -50,8 +71,9 @@ export class CanvasController {
     parseLocalSession(request);
     const pId = EntityIdSchema.safeParse(projectId);
     if (!pId.success) throw new BadRequestException('geçersiz proje kimliği');
-    const aId = EntityIdSchema.safeParse(agentId);
-    if (!aId.success) throw new BadRequestException('geçersiz agent kimliği');
+    if (!agentId || typeof agentId !== 'string' || agentId.length > 100) {
+      throw new BadRequestException('geçersiz agent kimliği');
+    }
 
     const [agents, tasks, messages] = await Promise.all([
       listLatestAgents(this.database.ch, projectId as EntityId),
@@ -59,7 +81,7 @@ export class CanvasController {
       listRecentMessages(this.database.ch, projectId as EntityId, 1000).catch(() => []),
     ]);
 
-    const agent = agents.find((a) => a.agent_id === agentId);
+    const agent = agents.find((a) => a.agent_id === agentId || a.role === agentId || a.name === agentId);
     if (!agent) {
       throw new NotFoundException(`Agent bulunamadı: ${agentId}`);
     }
@@ -91,10 +113,25 @@ export class CanvasController {
       }
     }
 
-    // Mesaj sayısı (ClickHouse messages tablosundaki sender_principal_id veya from_id)
-    const agentMessages = messages.filter((m) => {
-      const from = m.protocolVersion === 1 ? m.envelope.senderPrincipalId : (m as unknown as Record<string, unknown>).from_id ?? (m as unknown as Record<string, unknown>).fromId;
-      return from === agentId;
+    // Çift yönlü mesajlar (gönderilen + alınan)
+    const agentMessages = messages.filter((m: any) => {
+      const from = m.protocolVersion === 1 ? m.envelope?.senderPrincipalId : m.from_id ?? m.fromId;
+      const to = m.protocolVersion === 1 ? m.envelope?.recipientPrincipalId : m.to_id ?? m.toId;
+      return from === agentId || to === agentId || from === agent?.role || to === agent?.role;
+    });
+
+    const conversationHistory = agentMessages.slice(0, 15).map((m: any) => {
+      const from = m.protocolVersion === 1 ? m.envelope?.senderPrincipalId : String(m.from_id ?? m.fromId ?? 'Bilinmeyen');
+      const to = m.protocolVersion === 1 ? m.envelope?.recipientPrincipalId : String(m.to_id ?? m.toId ?? 'Genel');
+      const content = m.protocolVersion === 1 ? JSON.stringify(m.payload ?? m.envelope?.payload) : String(m.content ?? m.message ?? '');
+      const isOutgoing = from === agentId || from === agent?.role;
+      return {
+        id: m.message_id || m.messageId || `msg-${Math.random()}`,
+        direction: isOutgoing ? 'outgoing' : 'incoming',
+        counterpart: isOutgoing ? to : from,
+        summary: content.slice(0, 140),
+        timestamp: m.created_at || m.createdAt || new Date().toISOString(),
+      };
     });
 
     // API kullanım ve maliyet metrikleri (api_usage tablosundan)
@@ -135,6 +172,7 @@ export class CanvasController {
       tasksRejected,
       tasks: agentTasks,
       messageCount: agentMessages.length,
+      conversations: conversationHistory,
       promptTokens,
       completionTokens,
       costUsd,

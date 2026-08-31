@@ -1,10 +1,15 @@
+import { listDecisions } from '@ww/db';
+import { SERVER_DATABASE, type ServerDatabase } from './orchestration.module.js';
 import { Body, Controller, Get, Inject, NotFoundException, Param, Patch, Post, Req } from '@nestjs/common';
 import { parseLocalSession, type LocalSessionRequest } from './auth/local-session.js';
 import { parseExpressProjectInput, parseProjectInput, parseProjectStatusInput, PROJECT_APPLICATION, type ProjectApplication } from './orchestration.module.js';
 
 @Controller('projects')
 export class ProjectsController {
-  constructor(@Inject(PROJECT_APPLICATION) private readonly projects: ProjectApplication) {}
+  constructor(
+    @Inject(PROJECT_APPLICATION) private readonly projects: ProjectApplication,
+    @Inject(SERVER_DATABASE) private readonly database: ServerDatabase,
+  ) {}
   @Post()
   create(@Req() request: LocalSessionRequest, @Body() body: unknown) {
     parseLocalSession(request);
@@ -17,6 +22,15 @@ export class ProjectsController {
   }
   @Get()
   list() { return this.projects.list(); }
+  @Get(':projectId/decisions')
+  async listProjectDecisions(
+    @Req() request: LocalSessionRequest,
+    @Param('projectId') projectId: string,
+  ) {
+    parseLocalSession(request);
+    return await listDecisions(this.database.ch, projectId);
+  }
+
   @Get(':projectId')
   async get(@Param('projectId') projectId: string) {
     const project = await this.projects.get(projectId);
