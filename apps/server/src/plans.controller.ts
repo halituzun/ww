@@ -199,7 +199,11 @@ export class PlansController {
   }
 
   @Get()
-  list(@Param('projectId') projectId: string) {
+  list(@Req() request: LocalSessionRequest, @Param('projectId') projectId: string) {
+    // Plan gövdeleri konsey dökümünü ve kararları taşır; okuma da oturum
+    // ister. Aynı dosyadaki YAZMA uçları zaten doğruluyordu — eksiklik
+    // bilinçli bir karar değil, atlamaydı.
+    parseLocalSession(request);
     return this.plans.list(projectId);
   }
 

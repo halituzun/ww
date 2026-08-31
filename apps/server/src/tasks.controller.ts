@@ -11,7 +11,18 @@ export class TasksController {
     return this.tasks.create(projectId, parseTaskInput(body));
   }
   @Get(':taskId')
-  get(@Param('projectId') projectId: string, @Param('taskId') taskId: string) { return this.tasks.get(projectId, taskId); }
+  get(
+    @Req() request: LocalSessionRequest,
+    @Param('projectId') projectId: string,
+    @Param('taskId') taskId: string,
+  ) {
+    parseLocalSession(request);
+    return this.tasks.get(projectId, taskId);
+  }
+
   @Get()
-  list(@Param('projectId') projectId: string) { return this.tasks.list(projectId); }
+  list(@Req() request: LocalSessionRequest, @Param('projectId') projectId: string) {
+    parseLocalSession(request);
+    return this.tasks.list(projectId);
+  }
 }

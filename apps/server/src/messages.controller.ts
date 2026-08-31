@@ -36,9 +36,13 @@ export class MessagesController {
    */
   @Get()
   async list(
+    @Req() request: LocalSessionRequest,
     @Param('projectId') projectId: string,
     @Query('limit') limit?: string,
   ) {
+    // Agent↔kullanıcı yazışmaları oturum ister; aynı dosyadaki yazma ucu
+    // zaten doğruluyordu.
+    parseLocalSession(request);
     const id = EntityIdSchema.parse(projectId);
     const parsed = limit === undefined ? 100 : Number(limit);
     if (!Number.isSafeInteger(parsed) || parsed < 1 || parsed > 1_000) {
@@ -71,9 +75,11 @@ export class MessagesController {
 
   @Get('pending')
   async pending(
+    @Req() request: LocalSessionRequest,
     @Param('projectId') projectId: string,
     @Query('recipientId') recipientId?: string,
   ) {
+    parseLocalSession(request);
     const id = EntityIdSchema.parse(projectId);
     // Varsayılan alıcı projenin PM'idir: sorular oraya düşer (docs/03
     // tırmandırma zinciri: worker → PM → kullanıcı).
@@ -149,7 +155,12 @@ export class MessagesController {
   }
 
   @Get(':messageId')
-  get(@Param('projectId') projectId: string, @Param('messageId') messageId: string) {
+  get(
+    @Req() request: LocalSessionRequest,
+    @Param('projectId') projectId: string,
+    @Param('messageId') messageId: string,
+  ) {
+    parseLocalSession(request);
     return this.messages.get(projectId, messageId);
   }
   @Post()

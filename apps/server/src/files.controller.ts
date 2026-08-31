@@ -18,7 +18,12 @@ export class FilesController {
   constructor(@Inject(SERVER_DATABASE) private readonly database: ServerDatabase) {}
 
   @Get()
-  async list(@Param('projectId') projectId: string, @Query('limit') limit?: string) {
+  async list(
+    @Req() request: LocalSessionRequest,
+    @Param('projectId') projectId: string,
+    @Query('limit') limit?: string,
+  ) {
+    parseLocalSession(request);
     const id = EntityIdSchema.parse(projectId);
     const parsedLimit = limit === undefined ? 1_000 : Number(limit);
     if (!Number.isSafeInteger(parsedLimit) || parsedLimit < 1 || parsedLimit > 5_000) {
@@ -28,7 +33,12 @@ export class FilesController {
   }
 
   @Get('map')
-  async map(@Param('projectId') projectId: string, @Query('limit') limit?: string) {
+  async map(
+    @Req() request: LocalSessionRequest,
+    @Param('projectId') projectId: string,
+    @Query('limit') limit?: string,
+  ) {
+    parseLocalSession(request);
     const id = EntityIdSchema.parse(projectId);
     const parsedLimit = limit === undefined ? 1_000 : Number(limit);
     if (!Number.isSafeInteger(parsedLimit) || parsedLimit < 1 || parsedLimit > 5_000) {
@@ -85,9 +95,13 @@ export class FilesController {
    */
   @Get('content')
   async content(
+    @Req() request: LocalSessionRequest,
     @Param('projectId') projectId: string,
     @Query('path') filePath?: string,
   ) {
+    // EN CİDDİSİ BU UÇ: proje workspace'inden DOSYA İÇERİĞİ döndürüyor ve
+    // oturum doğrulaması yapmıyordu.
+    parseLocalSession(request);
     const id = EntityIdSchema.parse(projectId);
     if (filePath === undefined) throw new Error('path sorgu parametresi zorunludur');
     const project = await getLatestProject(this.database.ch, id);

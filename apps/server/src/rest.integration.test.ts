@@ -72,7 +72,7 @@ describe.skipIf(probeCh === undefined || probeRedis === undefined)('REST gerçek
     expect(task.body.acceptance_criteria).toEqual(['must compile']);
     expect(task.body.target_files).toEqual(['src/a.ts']);
     await upsertFileIndex(ch, { project_id: projectId, file_path: 'src/a.ts', summary: 'REST tarafından indekslendi', layer: 'service', exports: ['run'], related_task_ids: [task.body.task_id], related_artifact_ids: [], related_knowledge_ids: [], last_commit_hash: 'abc123', updated_at: new Date().toISOString() });
-    await request(app.getHttpServer()).get(`/projects/${projectId}/files`).expect(200).then((response) => {
+    await request(app.getHttpServer()).get(`/projects/${projectId}/files`).set('Authorization', `Bearer ${token}`).expect(200).then((response) => {
       expect(response.body).toHaveLength(1);
       expect(response.body[0]).toMatchObject({ file_path: 'src/a.ts', summary: 'REST tarafından indekslendi', related_task_ids: [task.body.task_id] });
     });
@@ -82,12 +82,12 @@ describe.skipIf(probeCh === undefined || probeRedis === undefined)('REST gerçek
       expect(response.body[0]).toMatchObject({ name: 'health', path: '/health' });
     });
     expect(task.body.token_budget).toBe(10);
-    expect(await request(app.getHttpServer()).get(`/projects/${projectId}/tasks/${task.body.task_id}`).expect(200).then((response) => response.body.acceptance_criteria)).toEqual(['must compile']);
+    expect(await request(app.getHttpServer()).get(`/projects/${projectId}/tasks/${task.body.task_id}`).set('Authorization', `Bearer ${token}`).expect(200).then((response) => response.body.acceptance_criteria)).toEqual(['must compile']);
     const dependent = await request(app.getHttpServer()).post(`/projects/${projectId}/tasks`).set('Authorization', `Bearer ${token}`).send({ title: 'Dependent task', acceptanceCriteria: ['must review'], dependencies: [task.body.task_id], files: ['src/b.ts'], budget: 5 }).expect(201);
     expect(dependent.body.depends_on).toEqual([task.body.task_id]);
     const finalTask = await request(app.getHttpServer()).post(`/projects/${projectId}/tasks`).set('Authorization', `Bearer ${token}`).send({ title: 'Final task', acceptanceCriteria: ['must ship'], dependencies: [dependent.body.task_id], files: ['src/c.ts'], budget: 3 }).expect(201);
     expect(finalTask.body.depends_on).toEqual([dependent.body.task_id]);
-    await request(app.getHttpServer()).get(`/projects/${projectId}/tasks`).expect(200).then((response) => {
+    await request(app.getHttpServer()).get(`/projects/${projectId}/tasks`).set('Authorization', `Bearer ${token}`).expect(200).then((response) => {
       expect(new Set(response.body.map((row: { task_id: string }) => row.task_id))).toEqual(new Set([
         task.body.task_id,
         dependent.body.task_id,
@@ -99,7 +99,7 @@ describe.skipIf(probeCh === undefined || probeRedis === undefined)('REST gerçek
     await request(app.getHttpServer()).post(`/projects/${projectId}/messages`).set('Authorization', `Bearer ${token}`).send({ kind: 'answer', text: 'unknown question', replyToMessageId: randomUUID() }).expect(400);
     const message = await request(app.getHttpServer()).post(`/projects/${projectId}/messages`).set('Authorization', `Bearer ${token}`).send({ kind: 'user_command', text: 'please inspect the task' }).expect(201);
     expect(message.body.messageId).toMatch(/^[0-9a-f-]{36}$/);
-    await request(app.getHttpServer()).get(`/projects/${projectId}/messages/${message.body.messageId}`).expect(200).then((response) => {
+    await request(app.getHttpServer()).get(`/projects/${projectId}/messages/${message.body.messageId}`).set('Authorization', `Bearer ${token}`).expect(200).then((response) => {
       expect(response.body.envelope.messageId).toBe(message.body.messageId);
     });
     await request(app.getHttpServer()).post(`/projects/${projectId}/narrator`).send({ question: 'Ne oldu?' }).expect(201).then((response) => {
