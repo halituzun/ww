@@ -1,0 +1,11 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "git_log",
+  "description": "Read recent commits of the project repository so history is visible without guessing.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "limit": { "type": "integer", "minimum": 1, "maximum": 100 }
+  },
+  "required": []
+}

@@ -1,0 +1,17 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "search_code",
+  "description": "Find where text appears in the workspace so the agent does not have to guess file names.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "pattern": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 512,
+      "pattern": "^[^\\u0000]+$",
+      "description": "Literal text to look for (case-insensitive)."
+    }
+  },
+  "required": ["pattern"]
+}

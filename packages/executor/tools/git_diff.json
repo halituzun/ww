@@ -1,0 +1,8 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "git_diff",
+  "description": "Return the current task workspace diff for review.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {}
+}

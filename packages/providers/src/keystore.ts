@@ -1,7 +1,8 @@
 import { execFile } from 'node:child_process';
 import { createCipheriv, createDecipheriv, randomBytes } from 'node:crypto';
+import { existsSync } from 'node:fs';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
-import { dirname } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import { promisify } from 'node:util';
 
 const exec = promisify(execFile);
@@ -17,6 +18,25 @@ interface KeyfileV1 {
 type KeyMap = Record<string, string>;
 
 const KEYCHAIN_SERVICE = 'ww-master';
+
+// Keystore dosya yolu: WW_KEYSTORE_FILE verilmişse o kullanılır. Verilmediyse
+// cwd'den yukarı doğru workspace kökü (pnpm-workspace.yaml) aranır ve
+// <kök>/.ww/keys.json döner; işaretçi bulunamazsa eski davranışa
+// (<cwd>/.ww/keys.json) düşülür. Böylece turbo altında apps/server cwd'siyle
+// başlatılan süreç de depo kökündeki dosyayı bulur — yanlış cwd eskiden
+// sessiz no_key'e yol açıyordu.
+export function resolveKeystoreFile(cwd = process.cwd()): string {
+  const fromEnv = process.env['WW_KEYSTORE_FILE'];
+  if (fromEnv) return fromEnv;
+  const start = resolve(cwd);
+  let dir = start;
+  for (;;) {
+    if (existsSync(join(dir, 'pnpm-workspace.yaml'))) return join(dir, '.ww', 'keys.json');
+    const parent = dirname(dir);
+    if (parent === dir) return join(start, '.ww', 'keys.json');
+    dir = parent;
+  }
+}
 
 export class Keystore {
   constructor(
@@ -54,8 +74,11 @@ export class Keystore {
     let raw: string;
     try {
       raw = await readFile(this.file, 'utf8');
-    } catch {
-      return {}; // henüz anahtar girilmemiş
+    } catch (err) {
+      // Yalnızca "dosya yok" boş depo sayılır (henüz anahtar girilmemiş).
+      // EACCES/EISDIR gibi hatalar sessizce no_key'e dönüşmemeli.
+      if ((err as NodeJS.ErrnoException).code === 'ENOENT') return {};
+      throw err;
     }
     const parsed = JSON.parse(raw) as KeyfileV1;
     if (parsed.v !== 1) throw new Error(`desteklenmeyen anahtar dosyası sürümü: ${parsed.v}`);
@@ -93,20 +116,41 @@ export class Keystore {
 async function resolveMasterKey(): Promise<Buffer> {
   const fromEnv = process.env['WW_MASTER_KEY'];
   if (fromEnv) return Buffer.from(fromEnv, 'hex');
-
   try {
     const { stdout } = await exec('security', ['find-generic-password', '-s', KEYCHAIN_SERVICE, '-w']);
     return Buffer.from(stdout.trim(), 'hex');
-  } catch {
+  } catch (err) {
+    // security: 44 = errSecItemNotFound (girdi gerçekten yok). Diğer hatalar
+    // geçici olabilir (keychain kilitli, headless oturum); bu durumda yeni
+    // rastgele anahtar üretip mevcut girdinin üstüne yazmak depodaki tüm
+    // anahtarları kalıcı olarak çözülemez yapar — hatayı fırlat, üretme.
+    if ((err as { code?: unknown }).code !== 44) {
+      throw new Error(
+        'Keychain okunamadı; mevcut ana anahtar korundu (geçici hata olabilir)',
+        { cause: err },
+      );
+    }
     const key = randomBytes(32);
     await exec('security', [
-      'add-generic-password', '-s', KEYCHAIN_SERVICE, '-a', 'ww', '-w', key.toString('hex'), '-U',
+      'add-generic-password', '-s', KEYCHAIN_SERVICE, '-a', 'ww', '-w', key.toString('hex'),
     ]);
     return key;
   }
 }
 
 export const maskKey = (k: string): string => (k.length <= 4 ? '…' : `${k.slice(0, 3)}…${k.slice(-4)}`);
+
+// Teşhis amaçlı: Keychain'de kayıtlı ana anahtarı döner; yoksa ya da
+// okunamazsa null. WW_MASTER_KEY ile Keychain'in FARKLI anahtarlar tutması
+// bilinen bir tuzaktır — keys.json yalnızca biriyle çözülür (bkz. docs/04).
+export async function readKeychainMasterKey(): Promise<Buffer | null> {
+  try {
+    const { stdout } = await exec('security', ['find-generic-password', '-s', KEYCHAIN_SERVICE, '-w']);
+    return Buffer.from(stdout.trim(), 'hex');
+  } catch {
+    return null;
+  }
+}
 
 // Loglara anahtar sızmasını engeller (docs/04 → sızma koruması).
 export function redactKeys(text: string): string {

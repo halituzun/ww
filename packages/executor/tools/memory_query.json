@@ -1,0 +1,17 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "memory_query",
+  "description": "Ask the project's own memory (past decisions, summaries, knowledge) instead of guessing.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "question": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 2000,
+      "description": "What you want to know about this project's history."
+    },
+    "limit": { "type": "integer", "minimum": 1, "maximum": 20 }
+  },
+  "required": ["question"]
+}

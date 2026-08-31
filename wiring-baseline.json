@@ -1,0 +1,162 @@
+[
+  {
+    "symbol": "apps/server/src/runtime-composition.ts:createPhase8RuntimeComposition",
+    "reason": "Phase 9 composition tarafından geçildi; yalnızca eski sözleşme testleri kullanıyor"
+  },
+  {
+    "symbol": "apps/server/src/runtime-composition.ts:phase8RuntimeFromEnvironment",
+    "reason": "Phase 9 composition tarafından geçildi; yalnızca eski sözleşme testleri kullanıyor"
+  },
+  {
+    "symbol": "packages/agents/src/phase4-acceptance.ts:runPhase4Acceptance",
+    "reason": "Faz 4 kabul senaryosu koşucusu; kabul turunda elle çalıştırılır"
+  },
+  {
+    "symbol": "packages/agents/src/prompt-input-service.ts:PromptInputService",
+    "reason": "runtime kendi mühürünü kurup yazıyor (runtime-context-service). Bu servis daha zengin: kaynakları yeniden doğrular ve nedensel öneki ClickHouse'tan okur. İkisini birleştirmek gerçek koşuyla doğrulanmalı; bakiye bitene dek körlemesine refactor edilmedi."
+  },
+  {
+    "symbol": "packages/db/src/redis-cleanup.ts:dropLeakedRedisKeys",
+    "reason": "pnpm db:clean-tests betiğinden çağrılır (TS dışı giriş)"
+  },
+  {
+    "symbol": "packages/db/src/redis.ts:publishEvent",
+    "reason": "canlı besleme ClickHouse imleçli yoklamayla akar (events.gateway); pub/sub bilinçli olarak kullanılmıyor"
+  },
+  {
+    "symbol": "packages/db/src/redis.ts:subscribeEvents",
+    "reason": "canlı besleme ClickHouse imleçli yoklamayla akar (events.gateway); pub/sub bilinçli olarak kullanılmıyor"
+  },
+  {
+    "symbol": "packages/db/src/repositories/prompts.ts:getActivePromptAsOf",
+    "reason": "tasarım prompt sürümünü AGENT SATIRINDA sabitler (prompt_name/prompt_version) ve brief mühürlemesi getPromptSourceRefAsOf ile zamana bağlı okur; 'o an aktif olan' sorgusunun üretimde yeri yok. Çağrı yeri uydurmak, denetleyiciyi susturmak için kod yazmak olurdu."
+  },
+  {
+    "symbol": "packages/db/src/testutil.ts:clickhouseUp",
+    "reason": "test altyapısı; üretimden çağrılmaması doğrudur"
+  },
+  {
+    "symbol": "packages/db/src/testutil.ts:redisUp",
+    "reason": "test altyapısı; üretimden çağrılmaması doğrudur"
+  },
+  {
+    "symbol": "packages/providers/src/mock.ts:MockProvider",
+    "reason": "deterministik testler için; üretimde gerçek sağlayıcı kullanılır"
+  },
+  {
+    "symbol": "apps/server/src/process-pool.ts:PortPool.portOf",
+    "reason": "HİÇ BAĞLANMAMIŞ YETENEK: ne üretim çağrısı ne de özel bir ikizi var. Gerçek boşluk; gizlenmiyor, görünür kılınıyor. (Ad 2026-08-18'de düzeltildi: analizör tek satırlık sınıfı atlayıp metodu YANLIŞ sınıfa atfediyordu.)"
+  },
+  {
+    "symbol": "packages/agents/src/communication-service.ts:CommunicationService.pollInbox",
+    "reason": "PARALEL GENEL YÜZEY: üretim yolu bu sınıfın ÖZEL metodunu kullanıyor (ör. drainOnce → #processItem); bu genel metot yalnız testlerin çağırdığı ikinci bir kapı. Riski şudur: test bu yüzeyden geçer ama üretimin koştuğu yol denenmemiş kalır. Kaldırmak/birleştirmek ayrı bir tur."
+  },
+  {
+    "symbol": "packages/agents/src/inbox-worker.ts:InboxWorker.processNext",
+    "reason": "PARALEL GENEL YÜZEY: üretim yolu bu sınıfın ÖZEL metodunu kullanıyor (ör. drainOnce → #processItem); bu genel metot yalnız testlerin çağırdığı ikinci bir kapı. Riski şudur: test bu yüzeyden geçer ama üretimin koştuğu yol denenmemiş kalır. Kaldırmak/birleştirmek ayrı bir tur."
+  },
+  {
+    "symbol": "packages/executor/src/git-workspace.ts:GitWorkspace.initializeWebStarter",
+    "reason": "HİÇ BAĞLANMAMIŞ YETENEK: ne üretim çağrısı ne de özel bir ikizi var. Gerçek boşluk; gizlenmiyor, görünür kılınıyor."
+  },
+  {
+    "symbol": "packages/executor/src/tool-registry.ts:ToolRegistry.validator",
+    "reason": "HİÇ BAĞLANMAMIŞ YETENEK: ne üretim çağrısı ne de özel bir ikizi var. Gerçek boşluk; gizlenmiyor, görünür kılınıyor."
+  },
+  {
+    "symbol": "packages/providers/src/adapters/anthropic.ts:AnthropicAdapter.embed",
+    "reason": "docs/04 embedding sağlayıcısını tanımlıyor ama HİÇBİR üretim yolu embedding üretmiyor — docs/06'nın semantik geri getirme katmanı fiilen yok. Gerçek boşluk, görünür kılındı."
+  },
+  {
+    "symbol": "packages/providers/src/adapters/anthropic.ts:AnthropicAdapter.listModels",
+    "reason": "Sağlayıcının model listesini hiçbir üretim yolu okumuyor; panel modelleri api_providers.models'tan alıyor. Gerçek boşluk, görünür kılındı."
+  },
+  {
+    "symbol": "packages/providers/src/adapters/openai.ts:OpenAiAdapter.embed",
+    "reason": "docs/04 embedding sağlayıcısını tanımlıyor ama HİÇBİR üretim yolu embedding üretmiyor — docs/06'nın semantik geri getirme katmanı fiilen yok. Gerçek boşluk, görünür kılındı."
+  },
+  {
+    "symbol": "packages/providers/src/adapters/openai.ts:OpenAiAdapter.listModels",
+    "reason": "Sağlayıcının model listesini hiçbir üretim yolu okumuyor; panel modelleri api_providers.models'tan alıyor. Gerçek boşluk, görünür kılındı."
+  },
+  {
+    "symbol": "packages/providers/src/mock.ts:MockProvider.embed",
+    "reason": "docs/04 embedding sağlayıcısını tanımlıyor ama HİÇBİR üretim yolu embedding üretmiyor — docs/06'nın semantik geri getirme katmanı fiilen yok. Gerçek boşluk, görünür kılındı."
+  },
+  {
+    "symbol": "packages/providers/src/mock.ts:MockProvider.listModels",
+    "reason": "Sağlayıcının model listesini hiçbir üretim yolu okumuyor; panel modelleri api_providers.models'tan alıyor. Gerçek boşluk, görünür kılındı."
+  },
+  {
+    "symbol": "packages/scheduler/src/assignment-service.ts:AssignmentService.rebase",
+    "reason": "HİÇ BAĞLANMAMIŞ YETENEK: ne üretim çağrısı ne de özel bir ikizi var. Gerçek boşluk; gizlenmiyor, görünür kılınıyor."
+  },
+  {
+    "symbol": "packages/scheduler/src/assignment-service.ts:AssignmentService.renewAttemptFileLocks",
+    "reason": "PARALEL GENEL YÜZEY: üretim yolu bu sınıfın ÖZEL metodunu kullanıyor (ör. drainOnce → #processItem); bu genel metot yalnız testlerin çağırdığı ikinci bir kapı. Riski şudur: test bu yüzeyden geçer ama üretimin koştuğu yol denenmemiş kalır. Kaldırmak/birleştirmek ayrı bir tur."
+  },
+  {
+    "symbol": "packages/scheduler/src/assignment-service.ts:AssignmentService.retry",
+    "reason": "HİÇ BAĞLANMAMIŞ YETENEK: ne üretim çağrısı ne de özel bir ikizi var. Gerçek boşluk; gizlenmiyor, görünür kılınıyor."
+  },
+  {
+    "symbol": "packages/scheduler/src/scheduler-worker.ts:SchedulerWorker.runOnce",
+    "reason": "HİÇ BAĞLANMAMIŞ YETENEK: ne üretim çağrısı ne de özel bir ikizi var. Gerçek boşluk; gizlenmiyor, görünür kılınıyor."
+  },
+  {
+    "symbol": "packages/scheduler/src/task-brief-service.ts:TaskBriefService.seal",
+    "reason": "PARALEL GENEL YÜZEY: üretim yolu bu sınıfın ÖZEL metodunu kullanıyor (ör. drainOnce → #processItem); bu genel metot yalnız testlerin çağırdığı ikinci bir kapı. Riski şudur: test bu yüzeyden geçer ama üretimin koştuğu yol denenmemiş kalır. Kaldırmak/birleştirmek ayrı bir tur."
+  },
+  {
+    "symbol": "packages/scheduler/src/task-transition-service.ts:TaskTransitionService.applyWithLease",
+    "reason": "PARALEL GENEL YÜZEY: üretim yolu bu sınıfın ÖZEL metodunu kullanıyor (ör. drainOnce → #processItem); bu genel metot yalnız testlerin çağırdığı ikinci bir kapı. Riski şudur: test bu yüzeyden geçer ama üretimin koştuğu yol denenmemiş kalır. Kaldırmak/birleştirmek ayrı bir tur."
+  },
+  {
+    "symbol": "packages/scheduler/src/task-transition-service.ts:TaskTransitionService.activateAttemptWithLease",
+    "reason": "PARALEL GENEL YÜZEY: üretim yolu bu sınıfın ÖZEL metodunu kullanıyor (#activateAttemptWithLease → #activateAttemptWithGuard); bu genel metot hiçbir yerden çağrılmıyor. Eksik özellik DEĞİL, fazladan kapı."
+  },
+  {
+    "symbol": "packages/memory/src/memory-service.ts:MemoryService.appendEmbedding",
+    "reason": "docs/04 embedding sağlayıcısını tanımlıyor ama HİÇBİR üretim yolu embedding üretmiyor — docs/06'nın semantik geri getirme katmanı fiilen yok. Gerçek boşluk, görünür kılındı."
+  },
+  {
+    "symbol": "apps/panel/src/components/TimelinePanel.tsx:TimelinePanel",
+    "reason": "GERÇEK BOŞLUK: hiçbir sayfa bu component'i render etmiyor; zaman çizelgesi yüzeyi TimelineScrubber üzerinden akıyor. Ya bir sayfaya bağlanmalı ya silinmeli — Faz E5 (testsiz/bağlantısız panel yüzeyleri turu)."
+  },
+  {
+    "symbol": "apps/panel/src/services/plans.ts:rejectPlan",
+    "reason": "GERÇEK BOŞLUK: plan reddi servis katmanında var ama hiçbir View çağırmıyor; PlanApprovalCard yalnız onay ve revizyon sunuyor. Faz B9'da (panel bildirimleri gerçek işlemi söylesin) ele alınacak."
+  },
+  {
+    "symbol": "apps/server/src/budget-limit.ts:checkTaskTokenBudget",
+    "reason": "GERÇEK BOŞLUK ve MUHTEMEL FAZLALIK: token freni zaten packages/scheduler/brake-ports üzerinden sumTaskTokensSpent ile bağlı. Bu, commit 9ebf0a5'te eklenen İKİNCİ ve ölü kopya. Faz C'de ya tek frene indirgenecek ya silinecek."
+  },
+  {
+    "symbol": "apps/server/src/recovery-sweeper.ts:identifyStuckAgents",
+    "reason": "GERÇEK BOŞLUK: asılı agent tespiti yazıldı ama süpürücü yalnız RecoveryService.recoverProject koşuyor. Ayrıca okuduğu status_changed_at alanı AgentRow şemasında yok (yalnız canvas projeksiyon tipinde). Faz C2 (durum gerçeği) ile birlikte ele alınacak."
+  },
+  {
+    "symbol": "apps/server/src/scope-guard.ts:validateTaskScope",
+    "reason": "GERÇEK BOŞLUK: görev kapsam sapması denetimi commit 9ebf0a5'te testiyle eklendi, üretim çağrısı hiç yazılmadı. Faz C'de worker döngüsüne bağlanacak."
+  },
+  {
+    "symbol": "apps/server/src/workspace-sweeper.ts:sweepWorkspaces",
+    "reason": "GERÇEK BOŞLUK: workspace süpürücü servisi yazıldı ama zamanlanmış bir çağrısı yok. Faz C'de periyodik göreve bağlanacak."
+  },
+  {
+    "symbol": "packages/agents/src/interview-service.ts:MAX_INTERVIEW_QUESTIONS",
+    "reason": "GERÇEK BOŞLUK: sihirbaz hâlâ üç SABİT soru soruyor; soru sayısı sınırı ve kalite doğrulaması devrede değil. Faz B1'de (sihirbaz -> konsey bağı) bağlanacak."
+  },
+  {
+    "symbol": "packages/agents/src/interview-service.ts:validateQuestionQuality",
+    "reason": "GERÇEK BOŞLUK: aynı sebep — sihirbazın soru kalitesi doğrulaması üretim yolunda çağrılmıyor. Faz B1."
+  },
+  {
+    "symbol": "packages/db/src/repositories/decisions.ts:getDecision",
+    "reason": "GERÇEK BOŞLUK: karar defteri tekil okuma ucu yazıldı; panel ve API yalnız listDecisions kullanıyor. Tekil karar detayı yüzeyi Faz B'de açılacak."
+  },
+  {
+    "symbol": "packages/db/src/repositories/project-maps.ts:getLatestProjectMapSnapshot",
+    "reason": "GERÇEK BOŞLUK ve TASARIM GEREĞİ: üretim yolu bilinçli olarak as-of varyantını (getLatestProjectMapSnapshotAsOf) kullanıyor; mühürlü brief cutoff'undan sonraki harita bağlama sızmasın diye. Cutoff'suz varyantın üretimde yeri olup olmadığı Faz D'de karara bağlanacak."
+  }
+]

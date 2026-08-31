@@ -1,17 +1,18 @@
 // Provider soyutlaması — docs/04-model-katmani.md arayüzü ile birebir.
 
+import type {
+  PromptMessageV1,
+  ProviderInvocationProvenanceV1,
+} from '@ww/shared';
+
 export interface NormalizedToolCall {
-  id: string;
-  name: string;
-  args: Record<string, unknown>;
+  readonly id: string;
+  readonly name: string;
+  // Provider output remains untrusted until toPromptToolCallV1 validates it.
+  readonly args: unknown;
 }
 
-export interface ChatMessage {
-  role: 'system' | 'user' | 'assistant' | 'tool';
-  content: string;
-  toolCallId?: string; // role='tool' iken hangi çağrının sonucu
-  toolCalls?: NormalizedToolCall[]; // role='assistant' iken modelin istediği çağrılar
-}
+export type ChatMessage = PromptMessageV1;
 
 export interface ToolDef {
   name: string;
@@ -19,16 +20,51 @@ export interface ToolDef {
   parameters: Record<string, unknown>; // JSON Schema
 }
 
-export interface CompletionMeta {
+export interface CompletionMeta extends Partial<ProviderInvocationProvenanceV1> {
   projectId: string;
   agentId: string;
   taskId?: string;
-  purpose: 'completion' | 'embedding' | 'health_check';
+  /**
+   * 'council': konsey turu. Gerçek ve paralı bir çağrıdır, api_usage'a yazılır;
+   * ama göreve bağlı DEĞİLDİR (brief/attempt provenance'ı yoktur), bu yüzden
+   * 'completion'ın dayanıklı etki sınırını gerektirmez.
+   */
+  purpose: 'completion' | 'embedding' | 'health_check' | 'council';
+}
+
+/** Durable boundary supplied by the orchestration layer. Providers must not
+ * invent or change invocation identity; the router supplies the fallback
+ * attempt while keeping the invocation id stable. */
+export interface ProviderInvocationEffect {
+  run<T>(input: {
+    readonly invocationId: string;
+    readonly fallbackAttempt: number;
+    readonly modelRef: string;
+    readonly request: CompletionRequest;
+    readonly execute: () => Promise<T>;
+  }): Promise<T>;
+  /** Records a durable attribution/sink reconciliation item. */
+  reconcile?(input: {
+    readonly invocationId: string;
+    readonly modelRef: string;
+    readonly request: CompletionRequest;
+    readonly error: unknown;
+    readonly usage?: { readonly promptTokens: number; readonly completionTokens: number };
+    readonly latencyMs?: number;
+  }): Promise<void>;
+}
+
+export class ProviderUsageReconciliationError extends Error {
+  readonly code = 'PROVIDER_USAGE_RECONCILIATION_FAILED';
+  constructor(readonly invocationId: string, cause: unknown) {
+    super(`provider usage kaydi uzlastirilamadi: ${invocationId}`, { cause });
+    this.name = 'ProviderUsageReconciliationError';
+  }
 }
 
 export interface CompletionRequest {
   model: string;
-  messages: ChatMessage[];
+  messages: readonly ChatMessage[];
   tools?: ToolDef[];
   maxTokens?: number;
   temperature?: number;
@@ -67,8 +103,19 @@ export class ProviderError extends Error {
     this.name = 'ProviderError';
   }
 
+  /** AYNI sağlayıcıyı tekrar denemek anlamlı mı? Kimlik hatasında değildir. */
   get retryable(): boolean {
     return this.kind !== 'bad_request' && this.kind !== 'auth';
+  }
+
+  /**
+   * BAŞKA bir sağlayıcıya geçmek anlamlı mı? `retryable` ile karıştırılmamalıdır:
+   * kimlik hatası O SAĞLAYICIYA özgüdür, yedeğin anahtarı farklıdır ve docs/04
+   * "düşen sağlayıcıda işler varsayılana akar" der. Yalnızca kötü istek her
+   * sağlayıcıda aynı şekilde düşer; zinciri sadece o keser.
+   */
+  get advancesFallbackChain(): boolean {
+    return this.kind !== 'bad_request';
   }
 }
 

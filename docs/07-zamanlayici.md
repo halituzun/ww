@@ -49,9 +49,15 @@ Görev kuyruktan çekildiğinde:
 | Global paralel agent | 8 | `settings.max_parallel_agents` (global ayar) |
 | Proje başına paralel agent | 5 | proje `settings` |
 | Agent başına klon | 5 | `settings.max_clones_per_agent` |
-| Sağlayıcı başına istek/dk | sağlayıcıya göre (`api_providers.settings`) | provider router token-bucket |
+| Sağlayıcı başına istek/dk | `WW_PROVIDER_RPM` (0 = sınırsız, varsayılan) | provider router token-bucket |
 | Proje başına eşzamanlı komut | 4 | executor |
 | Delegasyon derinliği | 3 | `settings.max_delegation_depth` |
+
+> **Sapma (2026-08-18):** Bu satır önce sınırın `api_providers.settings`'ten
+> okunacağını söylüyordu, ama öyle bir kolon ne docs/02 şemasında ne kodda var.
+> Sınır şimdilik süreç genelinde `WW_PROVIDER_RPM` ile ayarlanır. Sağlayıcı
+> başına ayrı sınır gerekirse şemaya kolon eklenmeli — o zamana kadar burada
+> olmayan bir alanı tarif etmek okuyanı yanıltır.
 
 Rate limit aşımında router bekletir (kuyruklu token-bucket); 429 dönerse
 üstel geri çekilme + 2 denemeden sonra fallback ([04](04-model-katmani.md#fallback)).
@@ -72,11 +78,21 @@ Rate limit aşımında router bekletir (kuyruklu token-bucket); 429 dönerse
 
 | Fren | Tetik | Davranış |
 |---|---|---|
-| **Ping-pong freni** | worker↔verifier ret döngüsü `attempt ≥ max_attempts` (3) | Görev `escalated`; zincir: group_lead → professor → PM → kullanıcı ([03](03-agent-sistemi.md#tırmandırma-zinciri)) |
-| **Görev token tavanı** | `tokens_spent ≥ token_budget` | Görev duraklar → tırmandırma; PM bütçe artırabilir veya görevi böler |
+| **`approved` kilidi** | Süreç kapı geçtikten SONRA, commit'ten ÖNCE ölürse | Görev `approved`'da kilitlenir: FSM'de tek çıkışı `commit_completed`'dir ve kimse onu sürmez. Kurtarma artık `approved`'ı da kapsar (ölçüldü 2026-08-18: canlı veride 4 görev orada kilitliydi) |
+| **Atanamaz görev freni** | `queued` ama `plan_id` NIL: görev atamada reddedilir | Kurtarma onu kuyruğa GERİ KOYMAZ ve `blockedTaskIds` olarak bildirir. Geri koymak sonsuz döngüdür: pompa reddeder → teslim sınırı dolar → mesaj akıştan silinir → kurtarma geri koyar. `attempt` bu döngüde 0'da kaldığı için `max_attempts` freni hiç devreye girmez (ölçüldü 2026-08-18: aynı kimlikler 51 kez "onarıldı") |
+| **Ping-pong freni** | worker↔verifier ret döngüsü `attempt ≥ max_attempts` (3) | Görev `escalated`; Faz 1: PM → kullanıcı, Faz 4: group_lead → professor → PM → kullanıcı ([03](03-agent-sistemi.md#tırmandırma-zinciri)) |
+| **Görev token tavanı** | harcanan token ≥ `token_budget` | Görev duraklar → tırmandırma; PM bütçe artırabilir veya görevi böler |
 | **Proje kontör tavanı** | `mv_usage_daily` toplamı ≥ `budget_usd_limit` | Proje `paused`; panel bildirimi; kullanıcı kararı beklenir |
 | **Kaçak döngü** | Son 3 denemenin hata çıktıları ≥ %90 benzer (normalize edilmiş metin benzerliği) | Deneme hakkı bitmemişse bile erken tırmandırma — aynı duvara tekrar koşturmayı keser |
 | **Kuyruk taşması** | `queued` görev sayısı > 200 (proje) | Yeni delegasyon reddedilir, PM'e uyarı — plan hatası işareti |
+
+*(2026-08-18: harcama `tasks.tokens_spent` KOLONUNDAN okunuyordu ve o kolona
+üretimde 0'dan başka bir şey yazılmıyor — tek yazıcısı görev açılışıdır. Yani
+bu fren yazılı, testli, bağlı ve KALICI OLARAK ÖLÜYDÜ; delegasyondaki "alt
+görev parent'ın kalan bütçesini aşamaz" kuralı da aynı sebeple fiilen "toplam
+bütçesini aşamaz"a dönüşüyordu. Her ikisi de artık `api_usage`'dan okuyor
+(`sumTaskTokensSpent`) — hemen yanındaki maliyet freninin zaten yaptığı gibi.
+`tasks.tokens_spent` kolonu türetilmiş bir alandır ve karar için okunmaz.)*
 
 Her fren tetiklenişi `events`'e (`escalation`) + panele bildirim olarak düşer.
 

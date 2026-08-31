@@ -14,6 +14,11 @@ export const PRICING: Record<string, Price> = {
   'anthropic:claude-haiku-4-5-20251001': { inPerMTok: 1, outPerMTok: 5 },
   'deepseek:deepseek-chat': { inPerMTok: 0.27, outPerMTok: 1.1 },
   'deepseek:deepseek-reasoner': { inPerMTok: 0.55, outPerMTok: 2.19 },
+  'mistral:mistral-large-latest': { inPerMTok: 2, outPerMTok: 6 },
+  'google:gemini-2.5-pro': { inPerMTok: 1.25, outPerMTok: 5.0 },
+  'google:gemini-2.5-flash': { inPerMTok: 0.075, outPerMTok: 0.3 },
+  'google:gemini-1.5-pro': { inPerMTok: 1.25, outPerMTok: 5.0 },
+  'google:gemini-1.5-flash': { inPerMTok: 0.075, outPerMTok: 0.3 },
   'mock:mock-model': { inPerMTok: 0, outPerMTok: 0 },
 };
 

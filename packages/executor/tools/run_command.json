@@ -1,0 +1,32 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "run_command",
+  "description": "Run one allowlisted executable without a shell inside the task workspace.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "cmd": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._+-]*$",
+      "description": "Allowlisted executable name, without a path or shell syntax."
+    },
+    "args": {
+      "type": "array",
+      "maxItems": 256,
+      "items": {
+        "type": "string",
+        "maxLength": 32768
+      },
+      "description": "Literal argument vector passed directly to the executable."
+    },
+    "timeoutSec": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 300,
+      "description": "Execution deadline in seconds."
+    }
+  },
+  "required": ["cmd", "args"]
+}

@@ -21,13 +21,49 @@ export const MESSAGE_KINDS = [
   'report', 'escalation', 'user_command', 'verdict',
 ] as const;
 
+export const MESSAGE_RECEIPT_STATES = [
+  'enqueued', 'claimed', 'retry_scheduled', 'processed', 'failed',
+] as const;
+
+export const MESSAGE_PRIORITIES = ['normal', 'urgent'] as const;
+
+export const PROMPT_MESSAGE_ROLES = ['system', 'user', 'assistant', 'tool'] as const;
+
+export const PAYLOAD_PROVENANCE_CLASSES = [
+  'user_input', 'agent_message', 'model_output', 'tool_result', 'memory', 'diff',
+  'system_generated',
+] as const;
+
+export const COMMUNICATION_EVENT_TYPES = [
+  'message_stored', 'message_rejected', 'receipt_changed', 'brief_sealed',
+  'brief_rebased', 'policy_decision', 'task_handoff',
+] as const;
+
 export const EVENT_TYPES = [
   'tool_call', 'tool_result', 'api_call', 'decision', 'status_change', 'error',
   'commit', 'lock_acquired', 'lock_released', 'escalation', 'clone_spawned',
   'test_run', 'process_started', 'process_stopped', 'recovery_completed',
+  ...COMMUNICATION_EVENT_TYPES,
+] as const;
+
+// Stable IDs are persisted with every deterministic guard decision.
+export const POLICY_RULE_IDS = [
+  'COMM-001', 'COMM-002', 'COMM-003', 'COMM-004', 'COMM-005', 'COMM-006',
+  'TASK-001', 'TASK-002', 'TASK-003', 'TASK-004',
+  'TOOL-001', 'TOOL-002', 'TOOL-003', 'TOOL-004',
+  // docs/09 kod standartları. STD-001: View katmanında fetch/iş mantığı yasak
+  // (React MVVM). Denetçiler bu kimliklerle bulgu açar.
+  'STD-001',
 ] as const;
 
 export const PROJECT_TYPES = ['web', 'mobile', 'api', 'fullstack'] as const;
+
+/**
+ * docs/04 sağlık durumları. ÇALIŞMA ZAMANI dizisi olarak burada durur çünkü
+ * panel de sunucu da kapsamı ona karşı test ediyor; yalnız tip birliği
+ * olsaydı her taraf kendi kopyasını tutar ve kopyalar ayrışırdı.
+ */
+export const HEALTH_STATUSES = ['ok', 'degraded', 'down', 'unknown'] as const;
 
 export const PROJECT_STATUSES = [
   'draft', 'gathering', 'planning', 'running', 'paused', 'completed', 'archived',
@@ -47,6 +83,7 @@ export const SUMMARY_SCOPES = ['task', 'phase', 'day', 'council', 'agent_session
 // messages.from/to için sabit kimlikler
 export const USER_SENTINEL = '00000000-0000-0000-0000-000000000001';
 export const BROADCAST_SENTINEL = '00000000-0000-0000-0000-000000000002';
+export const SYSTEM_SENTINEL = '00000000-0000-0000-0000-000000000003';
 export const NIL_UUID = '00000000-0000-0000-0000-000000000000';
 
 export type TaskStatus = (typeof TASK_STATUSES)[number];
@@ -54,7 +91,12 @@ export type AgentStatus = (typeof AGENT_STATUSES)[number];
 export type AgentRole = (typeof AGENT_ROLES)[number];
 export type AgentGroup = (typeof AGENT_GROUPS)[number];
 export type MessageKind = (typeof MESSAGE_KINDS)[number];
+export type MessageReceiptState = (typeof MESSAGE_RECEIPT_STATES)[number];
+export type MessagePriority = (typeof MESSAGE_PRIORITIES)[number];
+export type PromptMessageRole = (typeof PROMPT_MESSAGE_ROLES)[number];
+export type PayloadProvenanceClass = (typeof PAYLOAD_PROVENANCE_CLASSES)[number];
 export type EventType = (typeof EVENT_TYPES)[number];
+export type PolicyRuleId = (typeof POLICY_RULE_IDS)[number];
 export type ProjectType = (typeof PROJECT_TYPES)[number];
 export type ProjectStatus = (typeof PROJECT_STATUSES)[number];
 export type PlanStatus = (typeof PLAN_STATUSES)[number];

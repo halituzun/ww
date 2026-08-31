@@ -2,7 +2,20 @@
 
 > "Asla unutmama" garantisinin gerçek mimarisi: üç katmanlı hafıza piramidi,
 > özetleyici işleyişi, embedding boru hattı, Context Builder ve "nasıl yaptın?" akışı.
-> İlgili: [Şema](02-clickhouse-semasi.md) · [Agent Sistemi](03-agent-sistemi.md)
+
+*(2026-08-18: anlatıcı olayları İMLEÇSİZ okuyordu, yani en ESKİ 200 olayı.
+
+*(2026-08-18: anlatı kapsamı TAMAMLANDI — şemadaki 22 olay türünün 22'si insan
+cümlesine çevriliyor ve bunu bir TEST sabitliyor (yeni tür eklenip anlatısı
+yazılmazsa test düşer). Önceden 7'si ham tür adı basıyordu ("policy_decision
+receipt_changed"), ki ham tür adı anlatı değildir. Şema dışı bir tür için ad
+KORUNUR: anlamadığı bir olaya inandırıcı cümle yazan anlatıcı, okunamaz
+dökümden tehlikelidir.)*
+4393 olaylı bir projede sorulan işe değil, projenin en eski geçmişine cevap
+veriyordu. Artık `listRecentEvents` ile en yeni 200 olay kronolojik sırada
+okunur.)*
+> İlgili: [Şema](02-clickhouse-semasi.md) · [Agent Sistemi](03-agent-sistemi.md) ·
+> [İletişim Sözleşmesi](13-agent-iletisim-sozlesmesi.md)
 
 ## İçindekiler
 
@@ -61,30 +74,53 @@ prompta bütçeyle koy (disiplinli)**. ClickHouse üç işte de doğal güçlüd
 ## Embedding Boru Hattı
 
 - Arka plan işleyicisi (`memory` paketi) yeni `summaries`, `knowledge`,
+
+*(2026-08-18: bu katman canlı veritabanında TAMAMEN BOŞTU — 8 tamamlanmış
+göreve rağmen 0 satır. `appendSummary` yazılmıştı ama hiçbir çağıranı yoktu
+ve kolonları yanlış eşliyordu (camelCase ↔ snake_case), yani bağlansa bile
+kimliksiz satır yazacaktı. Commit sonrası tetiğe bağlandı. BİLİNÇLİ SAPMA:
+özet şimdilik görev kaydından DETERMİNİSTİK üretilir; model çağrısı paralıdır
+ve her görev bitiminde bir çağrı daha eklemek maliyeti sessizce artırır. Boş
+bir orta katman, deterministik olandan her durumda kötüdür.)*
   `file_index` ve önemli `messages` (kind: proposal/synthesis/verdict/escalation)
   kayıtlarını kuyruğa alır, parçalara böler (≈800 token, %10 örtüşme),
   `embed()` ile gömer, `embeddings`'e yazar.
 - Ham `events` gömülmez (hacim/değer oranı kötü) — onlara SQL ile ulaşılır.
 - Arama: `cosineDistance` top-K (varsayılan K=12) + kaynak tablo filtresi;
   sonuçlar tarih ve `status='active'` (knowledge için) ile süzülür.
+
+*(2026-08-18: embedding boru hattı hâlâ yok — arama TERİM SAYIMIYLA yapılıyor
+(`rankMemoryCandidates`). Asıl düzeltilen kusur sıralama değil KAPSAMDI:
+özetler yalnızca knowledge VE file_index hiç eşleşmediğinde bakılan bir son
+çareydi, yani eşleşen tek bir karar piramidin orta katmanını tamamen görünmez
+yapıyordu. Artık üç kaynak da aynı terazide tartılıp tek listede sıralanıyor.)*
 - Embedding modeli değişimi: [04 — Embedding Sağlayıcısı](04-model-katmani.md#embedding-sağlayıcısı).
 
 ## Context Builder
 
 Her LLM çağrısından önce promptun `{{context_pack}}` bölümünü kurar.
-Girdi: agent rolü, görev, token bütçesi (rol başına ayar; worker varsayılanı 24k token).
+Girdi: agent rolü, immutable `TaskBriefV1`, token bütçesi (rol başına ayar; worker
+varsayılanı 24k token). Global kaynak seçimleri `baseContextCutoffAt` anına göre
+yapılır. Retry/replay daha sonra oluşmuş proje bilgisini göremez; yalnız aynı
+task brief'in verifier reddi, gate çıktısı, soru cevabı ve escalation kayıtları
+`TaskCausalCursorV1` üzerinden eklenir.
 
 Katmanlı doldurma (öncelik sırasıyla, bütçe dolunca kesilir):
 
-1. **Sabit çekirdek** (her zaman): proje adı/türü, aktif plan özeti,
-   gereksinim özeti (`knowledge kind='requirement'` aktifleri),
-   ilgili kod standartları (`kind='standard'`).
+1. **Sabit çekirdek** (her zaman): proje adı/türü, brief'e sabitlenmiş plan özeti,
+   cutoff anında geçerli gereksinimler (`knowledge kind='requirement'`),
+   brief'te sürüm/hash ile sabitlenmiş kod standartları (`kind='standard'`).
 2. **Görev bağlamı**: görev tanımı + kabul kriterleri; `target_files`'ın
    fihrist kayıtları; bağımlı görevlerin (`depends_on`) özetleri;
    üst görev zinciri özeti (delegasyonda).
 3. **Semantik komşular**: görev metniyle embedding araması —
    benzer geçmiş görev özetleri, ilgili kararlar ("bunu daha önce nasıl yaptık").
 4. **Taze gelişmeler**: projenin son N görev özeti (kronolojik farkındalık).
+   Uygulama: `listRecentSummaries` ile son 5 özet, kesme anına göre süzülür ve
+   sorgu eşleşmelerinin ALTINDA bir skorla eklenir — taze olmak, ilgili
+   olmaktan önce gelmez; bütçe dolunca ilk elenen bunlardır. *(2026-08-18'e
+   kadar bu katman HİÇ yoktu: sorgu vermeyen bir görev, projede az önce ne
+   olduğunu hiç göremiyordu.)*
 
 Kurallar:
 
@@ -93,6 +129,8 @@ Kurallar:
 - Kırpma bütünsel yapılır: parça ya tam girer ya hiç girmez (yarım metin yok).
 - Kurulan paketin özeti `events`'e yazılır (`decision` olayı: hangi kaynaklar
   girdi/elendi) — bağlam kararları da izlenebilirdir.
+- Plan/kural/context değişikliği eski brief'i değiştirmez; yeni brief sürümü ve
+  açık bir `rebase` olayı gerektirir.
 
 ## memory_query Aracı
 

@@ -1,7 +1,11 @@
 export * from './types.js';
 export * from './pricing.js';
+export * from './health.js';
+export * from './registry.js';
+export * from './routing.js';
 export * from './usage.js';
 export * from './router.js';
+export * from './rate-limiter.js';
 export * from './mock.js';
 export * from './keystore.js';
 export * from './adapters/normalize.js';
@@ -9,3 +13,4 @@ export * from './adapters/errors.js';
 export * from './adapters/openai.js';
 export * from './adapters/anthropic.js';
 export * from './adapters/deepseek.js';
+export * from './adapters/gemini.js';

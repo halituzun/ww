@@ -1,23 +1,37 @@
 {
   "$schema": "https://turbo.build/schema.json",
+  "globalDependencies": [
+    "tsconfig.base.json",
+    "eslint.config.mjs",
+    "vitest.workspace.ts",
+    "vitest.shared.ts"
+  ],
   "tasks": {
-    "build": { "dependsOn": ["^build"], "outputs": ["dist/**"] },
-    "test": { "dependsOn": ["^build"] },
-    "lint": {},
-    "dev": { "dependsOn": ["^build"], "cache": false, "persistent": true },
-    "@ww/db#test": {
-      "dependsOn": ["^build"],
-      "cache": false,
-      "passThroughEnv": [
-        "WW_CH_DB",
-        "WW_CH_PASS",
-        "WW_CH_URL",
-        "WW_CH_USER",
-        "WW_REDIS_URL"
+    "build": {
+      "dependsOn": [
+        "^build"
+      ],
+      "outputs": [
+        "dist/**"
       ]
     },
-    "@ww/server#test": {
-      "dependsOn": ["^build"],
+    "test": {
+      "dependsOn": [
+        "^build"
+      ]
+    },
+    "lint": {},
+    "dev": {
+      "dependsOn": [
+        "^build"
+      ],
+      "cache": false,
+      "persistent": true
+    },
+    "@ww/db#test": {
+      "dependsOn": [
+        "^build"
+      ],
       "cache": false,
       "passThroughEnv": [
         "WW_CH_DB",
@@ -28,8 +42,77 @@
         "WW_REQUIRE_INTEGRATION"
       ]
     },
+    "@ww/memory#test": {
+      "dependsOn": [
+        "^build"
+      ],
+      "cache": false,
+      "passThroughEnv": [
+        "WW_CH_DB",
+        "WW_CH_PASS",
+        "WW_CH_URL",
+        "WW_CH_USER",
+        "WW_REDIS_URL",
+        "WW_REQUIRE_INTEGRATION"
+      ]
+    },
+    "@ww/agents#test": {
+      "dependsOn": [
+        "^build"
+      ],
+      "cache": false,
+      "passThroughEnv": [
+        "WW_CH_DB",
+        "WW_CH_PASS",
+        "WW_CH_URL",
+        "WW_CH_USER",
+        "WW_REDIS_URL",
+        "WW_REQUIRE_INTEGRATION"
+      ]
+    },
+    "@ww/executor#test": {
+      "dependsOn": [
+        "^build"
+      ],
+      "cache": false,
+      "passThroughEnv": [
+        "WW_DOCKER_LIVE",
+        "WW_EXECUTOR_IMAGE"
+      ]
+    },
+    "@ww/scheduler#test": {
+      "dependsOn": [
+        "^build"
+      ],
+      "cache": false,
+      "passThroughEnv": [
+        "WW_CH_DB",
+        "WW_CH_PASS",
+        "WW_CH_URL",
+        "WW_CH_USER",
+        "WW_REDIS_URL",
+        "WW_REQUIRE_INTEGRATION"
+      ]
+    },
+    "@ww/server#test": {
+      "dependsOn": [
+        "^build"
+      ],
+      "cache": false,
+      "passThroughEnv": [
+        "WW_CH_DB",
+        "WW_CH_PASS",
+        "WW_CH_URL",
+        "WW_CH_USER",
+        "WW_REDIS_URL",
+        "WW_REQUIRE_INTEGRATION",
+        "WW_LOCAL_SESSION_TOKEN"
+      ]
+    },
     "@ww/server#dev": {
-      "dependsOn": ["^build"],
+      "dependsOn": [
+        "^build"
+      ],
       "cache": false,
       "persistent": true,
       "passThroughEnv": [
@@ -39,19 +122,37 @@
         "WW_CH_USER",
         "WW_PANEL_ORIGINS",
         "WW_PORT",
-        "WW_REDIS_URL"
+        "WW_REDIS_URL",
+        "WW_LOCAL_SESSION_TOKEN"
       ]
     },
+    "@ww/panel#test": {
+      "dependsOn": [
+        "^build"
+      ],
+      "cache": false
+    },
     "@ww/panel#build": {
-      "dependsOn": ["^build"],
-      "outputs": ["dist/**"],
-      "env": ["VITE_API_BASE_URL"]
+      "dependsOn": [
+        "^build"
+      ],
+      "outputs": [
+        "dist/**"
+      ],
+      "env": [
+        "VITE_API_BASE_URL"
+      ]
     },
     "@ww/panel#dev": {
-      "dependsOn": ["^build"],
+      "dependsOn": [
+        "^build"
+      ],
       "cache": false,
       "persistent": true,
-      "passThroughEnv": ["VITE_API_BASE_URL", "VITE_API_PROXY_TARGET"]
+      "passThroughEnv": [
+        "VITE_API_BASE_URL",
+        "VITE_API_PROXY_TARGET"
+      ]
     }
   }
 }

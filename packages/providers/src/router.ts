@@ -1,5 +1,5 @@
 import type { ApiUsageRow } from '@ww/shared';
-import { NIL_UUID } from '@ww/shared';
+import { NIL_UUID, ProviderInvocationProvenanceV1Schema } from '@ww/shared';
 import { costUsd } from './pricing.js';
 import { newUsageId, type UsageSink } from './usage.js';
 import {
@@ -8,17 +8,43 @@ import {
   type CompletionRequest,
   type CompletionResult,
   type LlmProvider,
+  ProviderUsageReconciliationError,
+  type ProviderInvocationEffect,
 } from './types.js';
 
 export interface RouterOptions {
   fallbacks: (modelRef: string) => string[];
+  /**
+   * Sağlayıcı başına istek/dakika (docs/04, docs/07). Verilmezse sınır yok.
+   * Sınırsız çıkış 429'a çarpar ve 429'lar fallback'i tetikleyip yükü daha da
+   * artırır — pompa görevleri eşzamanlı işlemeye başladığından beri bu risk
+   * teorik değil.
+   */
+  rateLimiter?: { reserve(providerId: string): number };
+  /** Beklemeyi testler kontrol edebilsin diye enjekte edilebilir. */
+  sleep?: (ms: number) => Promise<void>;
+  /**
+   * 429'da AYNI sağlayıcıyı kaç kez daha denemeli (docs/04: "429 … 2
+   * denemeden sonra"). Sağlayıcı "yavaşla" diyor, "gitme" demiyor; hemen
+   * yedeğe geçmek fallback'i boşa harcar ve çoğu zaman aynı kotaya çarpar.
+   */
+  rateLimitRetries?: number;
+  /**
+   * Sağlayıcının son bilinen sağlığı (`api_providers.health_status`).
+   * docs/04 bunu fallback TETİKLEYİCİSİ sayar: düşmüş olduğu bilinen
+   * sağlayıcıya istek göndermek, zaman aşımı kadar beklemek ve ancak ondan
+   * sonra yedeğe geçmek demektir. Verilmezse sağlık gözetilmez.
+   */
+  providerHealth?: (providerId: string) => string;
   usageSink: UsageSink;
   timeoutMs?: number;
+  invocationEffect?: ProviderInvocationEffect;
 }
 
 export interface RouteResult {
   result: CompletionResult;
   usedRef: string;
+  actualModelRef: string;
   fallbackUsed: boolean;
 }
 
@@ -47,6 +73,12 @@ function errStatus(e: unknown): ApiUsageRow['status'] {
 const errKind = (e: unknown): string =>
   e instanceof ProviderError ? e.kind : e instanceof Error ? e.name : 'unknown';
 
+/** Her tekrarda katlanan bekleme: beklemeden tekrar aynı 429'a çarpar. */
+const RATE_LIMIT_BACKOFF_MS = 1_000;
+
+const defaultSleep = (ms: number): Promise<void> =>
+  new Promise((resolve) => { setTimeout(resolve, ms); });
+
 // Tüm LLM çağrıları buradan geçer: fallback zinciri + api_usage kaydı (docs/04-model-katmani.md).
 export class ModelRouter {
   constructor(
@@ -55,35 +87,129 @@ export class ModelRouter {
   ) {}
 
   async complete(modelRef: string, req: Omit<CompletionRequest, 'model'>): Promise<RouteResult> {
+    if (req.meta.purpose === 'completion') {
+      if (this.opts.invocationEffect === undefined) {
+        throw new Error('completion durable effect boundary gerekli');
+      }
+      const provenance = ['invocationId', 'taskBriefId', 'assignmentAttemptId', 'promptInputSnapshotId'] as const;
+      for (const key of provenance) {
+        if (req.meta[key] === undefined || req.meta[key] === '') {
+          throw new Error(`completion provenance zorunlu: ${key}`);
+        }
+      }
+    }
     const chain = [modelRef, ...this.opts.fallbacks(modelRef)];
     let lastErr: unknown = new Error(`kullanılabilir sağlayıcı yok: ${modelRef}`);
 
-    for (const [i, ref] of chain.entries()) {
+    // docs/04: `health_status='down'` bir fallback tetikleyicisidir. Sıra
+    // KORUNUR (indeks fallbackAttempt ve fallback_used'a yazılır); yalnızca
+    // düşmüş sağlayıcılar elenir.
+    //
+    // 'degraded' elenmez: yavaş/hatalı ama hâlâ cevap veriyor demektir.
+    //
+    // Zincirin tamamı düşmüşse eleme YAPILMAZ: sağlık kaydı yanılabilir
+    // (1 token'lık ping'in düşmesi gerçek isteğin de düşeceğini kanıtlamaz)
+    // ve hiç denemeden pes etmek, kendi kaydımız yüzünden ayakta olan bir
+    // sağlayıcıyı kapatmak olurdu.
+    const entries = chain.map((ref, index) => ({ ref, index }));
+    const health = this.opts.providerHealth;
+    const healthy = health === undefined
+      ? entries
+      : entries.filter(({ ref }) => health(splitRef(ref).providerId) !== 'down');
+    const candidates = healthy.length > 0 ? healthy : entries;
+
+    for (const { ref, index: i } of candidates) {
       const { providerId, model } = splitRef(ref);
       const provider = this.providers.get(providerId);
       if (!provider) continue;
 
+      // İstek DÜŞÜRÜLMEZ, sırası gelene kadar beklenir (docs/07).
+      const waitMs = this.opts.rateLimiter?.reserve(providerId) ?? 0;
+      if (waitMs > 0) {
+        await (this.opts.sleep ?? defaultSleep)(waitMs);
+      }
+
       const t0 = Date.now();
+      const attemptRequest = {
+        ...req,
+        model,
+        meta: {
+          ...req.meta,
+          ...(req.meta.purpose === 'completion' ? { fallbackAttempt: i } : {}),
+        },
+      };
+      if (attemptRequest.meta.purpose === 'completion') {
+        ProviderInvocationProvenanceV1Schema.parse({
+          invocationId: attemptRequest.meta.invocationId,
+          taskBriefId: attemptRequest.meta.taskBriefId,
+          assignmentAttemptId: attemptRequest.meta.assignmentAttemptId,
+          promptInputSnapshotId: attemptRequest.meta.promptInputSnapshotId,
+          fallbackAttempt: i,
+        });
+      }
+      let result!: CompletionResult;
+      // Aynı sağlayıcı üzerinde kaç kez denendi; YALNIZCA rate limit artırır.
+      let rateLimitAttempt = 0;
+      let advanceChain = false;
+      for (;;) {
       try {
-        const result = await withTimeout(
-          provider.complete({ ...req, model }),
-          this.opts.timeoutMs ?? 120_000,
-        );
-        await this.record(ref, req, result.usage, Date.now() - t0, i > 0 ? 'fallback_used' : 'ok', '');
-        return { result, usedRef: ref, fallbackUsed: i > 0 };
+        result = await (this.opts.invocationEffect === undefined
+          ? withTimeout(provider.complete(attemptRequest), this.opts.timeoutMs ?? 120_000)
+          : this.opts.invocationEffect.run({
+            invocationId: req.meta.invocationId ?? '',
+            fallbackAttempt: i,
+            modelRef: ref,
+            request: attemptRequest,
+            execute: () => withTimeout(provider.complete(attemptRequest), this.opts.timeoutMs ?? 120_000),
+          }));
       } catch (e) {
         lastErr = e;
         await this.record(
           ref,
-          req,
+          attemptRequest,
           { promptTokens: 0, completionTokens: 0 },
           Date.now() - t0,
           errStatus(e),
           errKind(e),
         );
-        // Kalıcı hatalarda (kötü istek / kimlik) yedek denemek anlamsız.
-        if (e instanceof ProviderError && !e.retryable) throw e;
+        // Provider-level retryable failures are a completed durable attempt
+        // and may advance the explicit fallback chain. Ledger failures
+        // (uncertain/reconciliation) are terminal and never do so.
+        if (!(e instanceof ProviderError)) throw e;
+        // Zinciri yalnızca KÖTÜ İSTEK keser: o, her sağlayıcıda aynı şekilde
+        // düşer. Kimlik hatası ise sağlayıcıya özgüdür ve tam da yedeğe
+        // geçilmesi gereken durumdur (docs/04).
+        if (!e.advancesFallbackChain) throw e;
+
+        // docs/04: 429'da aynı sağlayıcı tekrar denenir. Diğer hatalarda
+        // tekrar zaman kaybıdır — sağlayıcı zaten "olmaz" demiştir.
+        if (e.kind === 'rate_limited' && rateLimitAttempt < (this.opts.rateLimitRetries ?? 2)) {
+          rateLimitAttempt += 1;
+          await (this.opts.sleep ?? defaultSleep)(RATE_LIMIT_BACKOFF_MS * rateLimitAttempt);
+          continue;
+        }
+        advanceChain = true;
+        break;
       }
+      break;
+      }
+      if (advanceChain) continue;
+      try {
+        await this.record(ref, attemptRequest, result.usage, Date.now() - t0, i > 0 ? 'fallback_used' : 'ok', '');
+      } catch (error) {
+        // A completed provider call is never repeated because its usage write
+        // failed; reconciliation can repair the sink later.
+        await this.opts.invocationEffect?.reconcile?.({
+          invocationId: req.meta.invocationId ?? '',
+          modelRef: ref,
+          request: attemptRequest,
+          error,
+          usage: result.usage,
+          latencyMs: Date.now() - t0,
+        }).catch(() => undefined);
+        throw new ProviderUsageReconciliationError(req.meta.invocationId ?? '', error);
+      }
+      return { result, usedRef: ref, actualModelRef: ref, fallbackUsed: i > 0 };
     }
     throw lastErr;
   }
@@ -112,6 +238,11 @@ export class ModelRouter {
       latency_ms: latencyMs,
       status,
       error_kind: errorKind,
+      ...(req.meta.invocationId === undefined ? {} : { invocation_id: req.meta.invocationId }),
+      ...(req.meta.taskBriefId === undefined ? {} : { task_brief_id: req.meta.taskBriefId }),
+      ...(req.meta.assignmentAttemptId === undefined ? {} : { assignment_attempt_id: req.meta.assignmentAttemptId }),
+      ...(req.meta.promptInputSnapshotId === undefined ? {} : { prompt_input_snapshot_id: req.meta.promptInputSnapshotId }),
+      ...(req.meta.fallbackAttempt === undefined ? {} : { fallback_attempt: req.meta.fallbackAttempt }),
     });
   }
 }

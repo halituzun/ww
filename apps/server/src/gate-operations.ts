@@ -1,0 +1,255 @@
+// `Phase1SchedulerPort` kapı ve commit işlemlerinin üretim karşılıkları.
+//
+// Sıra sorunu: schedulerOperations composition'a GİRDİ olarak verilir, ama
+// gateRunner ve gitWorkspace composition'ın İÇİNDE kurulur. Çözüm geç
+// bağlamadır — closure'lar ancak orkestrasyon sırasında çağrılır. Bunu örtük
+// bırakmak yerine açık bir tutucuyla ifade ediyoruz; bağlanmadan çağrı
+// sessiz `undefined` çökmesi yerine anlaşılır hata verir.
+import { randomUUID } from 'node:crypto';
+import type { AssignmentAttemptV1, EntityId } from '@ww/shared';
+
+/**
+ * Kapı kanıtının GERÇEK şekli (docs/05). Yerel tip `evidenceRefs` içeriyordu
+ * ama GateEvidence'da böyle bir alan YOK; okumak undefined döndürüp kapı
+ * adımını "evidenceRefs is not iterable" ile düşürüyordu.
+ */
+export interface GateStepEvidenceLike {
+  readonly name: string;
+  readonly passed: boolean;
+  readonly exitCode: number | null;
+}
+
+export interface GateEvidenceLike {
+  readonly passed: boolean;
+  readonly configPath: string;
+  readonly steps: readonly GateStepEvidenceLike[];
+}
+
+export interface WorkspaceLike {
+  initialize(): Promise<unknown>;
+  /** Çalışma ağacı kökü; sıfırlama git komutlarını burada koşar. */
+  readonly root: string;
+  /** Denetim commit'lenen dosyanın İÇERİĞİNİ görmeli. */
+  readText?(relativePath: string, offset: number, limit: number): Promise<string>;
+}
+
+export interface GateStepFailureLike {
+  readonly name: string;
+  readonly exitCode: number | null;
+  readonly output: string;
+}
+
+export interface GateRunnerLike {
+  run(projectKey: string, workspace: WorkspaceLike, context: Readonly<{
+    operationId: string;
+    occurredAt: string;
+    onStepFailure?: ((failure: GateStepFailureLike) => void) | undefined;
+  }>): Promise<GateEvidenceLike>;
+}
+
+/**
+ * Kapı hatasının worker'a dönecek metni (docs/05: "Hata → tam çıktı worker'a
+ * döner"). Buraya kadar worker yalnızca "gate_step:tsc:failed:1" görüyordu —
+ * yani göremediği bir hatayı düzeltmesi bekleniyordu.
+ */
+export function gateFailureSummary(failures: readonly GateStepFailureLike[]): string {
+  if (failures.length === 0) return '';
+  return failures
+    .map((failure) => [
+      `Kapı adımı düştü: ${failure.name} (çıkış kodu ${failure.exitCode ?? 'yok'})`,
+      failure.output.trim() === '' ? '(adım çıktı üretmedi)' : failure.output,
+    ].join('\n'))
+    .join('\n\n');
+}
+
+export interface GitWorkspaceLike {
+  commitAfterSuccessfulGate(
+    workspace: WorkspaceLike,
+    input: Record<string, unknown>,
+  ): Promise<{ commitHash: string }>;
+}
+
+export interface TaskCommitDetails {
+  title: string;
+  summary: string;
+  targetFiles: readonly string[];
+  workerName: string;
+  verifierName: string;
+}
+
+export interface CommittedTaskNotice {
+  readonly projectId: EntityId;
+  readonly taskId: EntityId;
+  readonly targetFiles: readonly string[];
+  readonly readFile: (relativePath: string) => Promise<string>;
+}
+
+export interface GateOperationsInput {
+  workspaceRoot: string;
+  /**
+   * Commit tarihe yazıldıktan SONRA çalışır (docs/09 denetçi tetiği).
+   * Hatası commit'i düşürmez.
+   */
+  onCommitted?: (notice: CommittedTaskNotice) => Promise<unknown>;
+  /** docs/05: ret/kapı düşüşünde ağacı son commit'e döndürür. */
+  resetWorkingTree?: (workspaceRoot: string) => Promise<void>;
+  taskDetails: (taskId: EntityId) => Promise<TaskCommitDetails>;
+  /**
+   * Commit sonrası üretilen çıktıları ve dosya fihristini kaydeder.
+   * Verilmezse artifact yazılmaz — bu, `artifacts` tablosunun boş kalma
+   * sebebiydi.
+   */
+  recordArtifacts?: (input: Readonly<{
+    projectId: EntityId;
+    taskId: EntityId;
+    agentId: EntityId;
+    commitHash: string;
+    summary: string;
+    targetFiles: readonly string[];
+  }>) => Promise<readonly string[]>;
+  /** Kapı geçmeden commit'i engeller (docs/05 → çalıştırma/test kapısı). */
+  requireGatePass?: boolean;
+}
+
+export interface GateBinding {
+  gateRunner: GateRunnerLike;
+  git: GitWorkspaceLike;
+  workspace: WorkspaceLike;
+}
+
+/** Kapı kanıtı: hangi adım geçti/kaldı — denetim izinin okunabilir çekirdeği. */
+export function gateEvidenceRefs(evidence: GateEvidenceLike): readonly string[] {
+  return Object.freeze([
+    `gate_config:${evidence.configPath}`,
+    ...evidence.steps.map((step) => `gate_step:${step.name}:${step.passed ? 'passed' : 'failed'}:${step.exitCode ?? 'null'}`),
+  ]);
+}
+
+export function createGateOperations(input: GateOperationsInput) {
+  let binding: GateBinding | undefined;
+  const gatePassed = new Map<string, boolean>();
+
+  const required = (): GateBinding => {
+    if (binding === undefined) {
+      throw new Error('kapı işlemleri henüz bağlanmadı — composition kurulduktan sonra bind() çağrılmalı');
+    }
+    return binding;
+  };
+
+  return {
+    bind(next: GateBinding): void {
+      binding = next;
+    },
+
+    async gate({ taskId, attempt, targetFiles }: Readonly<{ taskId: EntityId; attempt: AssignmentAttemptV1; targetFiles?: readonly string[] }>) {
+      const { gateRunner, workspace } = required();
+      await workspace.initialize();
+      const failures: GateStepFailureLike[] = [];
+      const evidence = await gateRunner.run(attempt.projectId, workspace, {
+        operationId: randomUUID(),
+        occurredAt: new Date().toISOString(),
+        onStepFailure: (failure) => { failures.push(failure); },
+        ...(targetFiles === undefined ? {} : { extraInputs: targetFiles }),
+      });
+      gatePassed.set(`${taskId}:${attempt.assignmentAttemptId}`, evidence.passed);
+      // GateEvidence'da `evidenceRefs` YOKTUR (passed/configPath/steps vardır);
+      // onu okumak undefined döndürüp "evidenceRefs is not iterable" ile
+      // kapı adımını düşürüyordu. Kanıt adımlardan türetilir.
+      // Kanıt kalıcı kayda gider ve ham çıktı taşımaz; bu özet ayrı yoldan
+      // worker'a döner. GEÇEN kapıda alan hiç konmaz: boş bir "hata özeti"
+      // çağıranın "hata var mı" kontrolünü gereksizce zorlaştırır.
+      const failureSummary = gateFailureSummary(failures);
+      return {
+        passed: evidence.passed,
+        evidenceRefs: gateEvidenceRefs(evidence),
+        ...(failureSummary === '' ? {} : { failureSummary }),
+      };
+    },
+
+    /**
+     * docs/05 yarım iş kuralı: ret/kapı düşüşünde çalışma ağacı son commit'e
+     * döner. Reddedilen denemenin dosyaları kalırsa yeni worker, prompt'unda
+     * yazmayan bir kodun üstüne yazar.
+     */
+    async resetWorkspace() {
+      const { workspace } = required();
+      await workspace.initialize();
+      await input.resetWorkingTree?.(workspace.root);
+    },
+
+    async commit({ taskId, attempt }: Readonly<{ taskId: EntityId; attempt: AssignmentAttemptV1 }>) {
+      const { git, workspace } = required();
+
+      // Kapı geçmeden commit atmak, doğrulanmamış kodu tarihe yazmaktır.
+      if (input.requireGatePass === true) {
+        const passed = gatePassed.get(`${taskId}:${attempt.assignmentAttemptId}`);
+        if (passed !== true) throw new Error('kapı geçilmeden commit yapılamaz');
+      }
+
+      const details = await input.taskDetails(taskId);
+      await workspace.initialize();
+      const result = await git.commitAfterSuccessfulGate(workspace, {
+        projectKey: attempt.projectId,
+        operationId: randomUUID(),
+        occurredAt: new Date().toISOString(),
+        taskId,
+        title: details.title,
+        summary: details.summary,
+        workerName: details.workerName,
+        verifierName: details.verifierName,
+        targetFiles: details.targetFiles,
+        // Sözleşme: HER hedef dosya için tam erişim kaydı. Tek bir kısmi kayıt
+        // "Her commit hedefi için exact access fence gerekir" / "file lock
+        // doğrulaması zorunludur" ile commit'i düşürüyordu — iş kapıyı geçse
+        // bile tarihe yazılamıyordu.
+        targetAccess: details.targetFiles.map((relativePath) => ({
+          projectId: attempt.projectId,
+          taskId,
+          taskBriefId: attempt.taskBriefId,
+          assignmentAttemptId: attempt.assignmentAttemptId,
+          agentId: (attempt as unknown as { workerAgentId: EntityId }).workerAgentId,
+          taskStatus: 'approved' as const,
+          leaseOwner: (attempt as unknown as { leaseOwner: string }).leaseOwner,
+          leaseFence: (attempt as unknown as { leaseFence: number }).leaseFence,
+          relativePath,
+          requireFileLock: true,
+        })),
+      });
+
+      // Commit tarihe yazıldı; ÜRETİLEN ÇIKTI da kaydedilmeli. Bunlar
+      // yazılmadığı için `artifacts` boş kalıyor ve panelin fihristi
+      // ("bu dosyayı kim, neden değiştirdi") kalıcı olarak boş görünüyordu.
+      const artifactIds = await input.recordArtifacts?.({
+        projectId: attempt.projectId,
+        taskId,
+        agentId: (attempt as unknown as { workerAgentId: EntityId }).workerAgentId,
+        commitHash: result.commitHash,
+        summary: details.summary,
+        targetFiles: details.targetFiles,
+      }) ?? [];
+
+      // docs/09: denetçiler "her N görev tamamlanışında" koşar. Bu kanca o
+      // tetiği taşır.
+      //
+      // HATASI COMMIT'İ DÜŞÜRMEZ: commit zaten tarihe yazıldı; denetim
+      // koşamadı diye onu geri almak, çözdüğünden fazlasını bozar. Sessiz de
+      // kalmaz.
+      if (input.onCommitted !== undefined) {
+        try {
+          await input.onCommitted({
+            projectId: attempt.projectId,
+            taskId,
+            targetFiles: details.targetFiles,
+            readFile: async (relativePath) => (workspace.readText === undefined
+              ? ''
+              : workspace.readText(relativePath, 0, 262_144)),
+          });
+        } catch (reason) {
+          console.warn(`[ww] commit sonrası denetim tetiklenemedi: ${String(reason)}`);
+        }
+      }
+
+      return { commitHash: result.commitHash, artifactIds };
+    },
+  };
+}

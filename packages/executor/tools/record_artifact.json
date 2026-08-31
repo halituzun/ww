@@ -1,0 +1,18 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "record_artifact",
+  "description": "Record a produced artifact (controller, component, schema, ...) with its file path.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "type": {
+      "type": "string",
+      "enum": ["controller", "service", "repository", "model", "view", "viewmodel",
+               "component", "schema", "api_endpoint", "design_decision", "test", "config", "doc"]
+    },
+    "name": { "type": "string", "minLength": 1, "maxLength": 200 },
+    "path": { "type": "string", "minLength": 1, "maxLength": 4096, "pattern": "^[^\\u0000]+$" },
+    "summary": { "type": "string", "maxLength": 2000 }
+  },
+  "required": ["type", "name", "path"]
+}

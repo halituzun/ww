@@ -58,6 +58,9 @@ Agent kodu hiçbir zaman adaptörü doğrudan çağırmaz — daima router.
 | OpenAI | `openai` | `tools[].function` + `tool_calls` | Codex-tarzı kod modelleri dahil |
 | Anthropic | `@anthropic-ai/sdk` | `tools[]` + `tool_use`/`tool_result` blokları | System prompt ayrı parametre |
 | DeepSeek | `openai` (uyumlu uç) | OpenAI biçimi | `base_url` değişir |
+| Google Gemini | `openai` (uyumlu GenAI ucu) | OpenAI biçimi | `generativelanguage.googleapis.com/v1beta/openai/` |
+| Mistral | `openai` (uyumlu uç) | OpenAI biçimi | `api.mistral.ai/v1` |
+| Ollama | `openai` (yerel uç) | OpenAI biçimi | `localhost:11434/v1` |
 | (yeni) | — | — | Adaptör ekle + `api_providers` satırı; başka değişiklik gerekmez |
 
 Normalizasyon kuralları:
@@ -76,6 +79,13 @@ Normalizasyon kuralları:
   `api_providers.is_default` sağlayıcının varsayılan modeli.
 - Tetikleyiciler: bağlantı hatası, 5xx, 429 (rate limit, 2 denemeden sonra),
   zaman aşımı, `health_status='down'`.
+- `health_status` kapısının iki emniyet kuralı (uygulama kararı):
+  `degraded` ELENMEZ (yavaş ama cevap veriyor), ve zincirin TAMAMI `down` ise
+  eleme yapılmaz — son çare olarak yine denenir. Sağlık kaydı yanılabilir
+  (1 token'lık ping'in düşmesi gerçek isteğin de düşeceğini kanıtlamaz) ve
+  hiç denemeden pes etmek, kendi kaydımız yüzünden ayakta olan bir sağlayıcıyı
+  kapatmak olurdu. Aynı nedenle sağlık görüntüsü bayatlarsa (>5 dk) `unknown`
+  sayılır: ölmüş bir tarayıcı hiçbir sağlayıcıyı kalıcı kara listeye alamaz.
 - Fallback kullanımı gizlenmez: `api_usage.status='fallback_used'` + `events` kaydı +
   panelde uyarı rozeti. Konsey üyeleri için istisna: üye çeşitliliği bozulmasın diye
   aynı sağlayıcı içinde model düşümü tercih edilir; sağlayıcı tamamen düştüyse üye
@@ -86,9 +96,23 @@ Normalizasyon kuralları:
 ## Sağlık Kontrolü
 
 - Periyodik (60 sn) hafif ping: 1-token'lık ucuz istek `purpose='health_check'`.
+- TAKLİT sağlayıcı (`base_url` boş) pinglenmez; durumu `unknown` yazılır.
+  Anahtarsız GERÇEK sağlayıcı atlanmaz, `down` yazılır — yapılandırma eksikliği
+  gerçek bir sağlık sorunudur. (Ölçüm 2026-08-18: taklide 1352 ping atılmış,
+  hepsi hata; bunlar `api_usage`'ın %45'iydi, hata oranını şişiriyordu ve
+  panelde kalıcı sahte kırmızı üretiyordu.)
 - Pasif sinyal: `mv_provider_errors` — son 5 dk hata oranı > %50 → `degraded`,
+  (görünüm GERÇEK trafiği sayar: `health_check` hariçtir, çünkü aktif ping
+  ayrı ve bağımsız bir sinyaldir; `fallback_used` de hata DEĞİLDİR — yedek
+  isteği başarıyla karşılamıştır. İkisi de 2026-08-18'de düzeltildi),
   art arda 3 ping hatası → `down`; ilk başarılı ping → `ok`.
 - Durum `api_providers.health_status`'a yazılır + pub/sub ile panele düşer
+  (yazma yolu `recordApiProviderHealth`: satırı YAZMADAN HEMEN ÖNCE tazeden
+  okur ve yalnızca sağlık alanlarını değiştirir. Tarama önceden satırın
+  tamamını, taramanın BAŞINDA okunmuş anlık görüntüden yazıyordu; ping
+  saniyeler sürdüğü için o aralıkta panelden girilen yeni anahtar ya da
+  yapılan pasifleştirme sessizce geri alınabiliyordu — "girdiğim anahtar
+  çalışmıyor" gibi görünen, aslında kaybolmuş bir yazma.)
   (API yönetim ekranında yeşil/sarı/kırmızı).
 
 ## Rol→Model Eşleme
@@ -111,7 +135,7 @@ Normalizasyon kuralları:
 
 ## Kontör: Maliyet Ölçümü ve Frenler
 
-- Fiyat tablosu `packages/providers/pricing.ts` — model başına $/1M girdi-çıktı token;
+- Fiyat tablosu `packages/providers/src/pricing.ts` — model başına $/1M girdi-çıktı token;
   sürüm kontrollü, elle güncellenir.
 - Her çağrı → `api_usage` satırı (maliyet burada hesaplanır) → `mv_usage_daily`
   panoyu besler.
@@ -127,9 +151,25 @@ Normalizasyon kuralları:
 
 - Anahtarlar **asla** ClickHouse'a yazılmaz; `api_providers.key_ref` yalnızca
   referanstır.
-- Depo: `secrets/keys.enc.json` — `node:crypto` AES-256-GCM ile şifreli; ana anahtar
-  ilk kurulumda üretilir ve macOS Keychain'e konur (`security add-generic-password`),
-  container kipinde `WW_MASTER_KEY` ortam değişkeni.
+- Depo: `WW_KEYSTORE_FILE` ile belirlenen şifreli dosya. Verilmediyse
+  `resolveKeystoreFile()` cwd'den yukarı doğru workspace kökünü
+  (`pnpm-workspace.yaml`) arar ve `<kök>/.ww/keys.json` kullanır; işaretçi
+  yoksa `<cwd>/.ww/keys.json`'a düşer. Böylece server turbo altında
+  `apps/server` cwd'siyle başlatılsa bile depo kökündeki dosya bulunur.
+  Şifreleme: `node:crypto` AES-256-GCM (nonce + authTag), dosya izni
+  `0600`. Ana anahtar `WW_MASTER_KEY` (64 karakter hex) ortam değişkeninden gelir;
+  verilmezse macOS Keychain'den okunur. Girdi gerçekten yoksa (`security` çıkış
+  kodu 44) üretilip `security add-generic-password` ile `ww-master` servisine
+  yazılır; **geçici okuma hatasında (keychain kilitli, headless oturum) yeni
+  anahtar üretilip üstüne yazılmaz**, hata fırlatılır — aksi halde depodaki tüm
+  anahtarlar kalıcı olarak çözülemez hale gelir.
+- Görünürlük: server açılışında keystore öz-denetimi hangi dosyanın
+  kullanıldığını ve kaç kaydın çözülebildiğini log'lar; sağlık tarayıcısı
+  `no_key` durumunda çözülen tam yolu yazar. Dosya yalnızca `ENOENT`'ta
+  "boş depo" sayılır; EACCES/EISDIR gibi okuma hataları sessizce yutulmaz,
+  fırlatılır.
+- Anahtar dosyasının ve `.env`'in **gitignore'da olması zorunludur** (`.ww/`, `.env`,
+  `.env.*`). Depo public upstream'e bağlıdır; bu kural gevşetilemez.
 - Panelden anahtar girişi: HTTPS-localhost üzerinden POST → server bellekte çözer,
   şifreli dosyaya yazar; API yanıtlarında anahtar asla geri dönmez (yalnız
   `sk-...son4` maskesi).

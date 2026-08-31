@@ -1,0 +1,22 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "ask_question",
+  "description": "Send a focused task question to the Phase 1 project manager route.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "to": {
+      "type": "string",
+      "enum": ["pm"],
+      "description": "Phase 1 questions are routed directly to the project manager."
+    },
+    "content": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 16000,
+      "pattern": ".*\\S.*",
+      "description": "Question text with enough context for a concrete answer."
+    }
+  },
+  "required": ["to", "content"]
+}

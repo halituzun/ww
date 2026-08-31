@@ -1,0 +1,189 @@
+// Görev pompasının üretim sürücüsü.
+//
+// NEDEN VAR: motor kayıtlıydı ve /runtime 'enabled' diyordu, ama kuyruğa
+// düşen görevler sonsuza dek 'queued' kalıyordu — kuyruğu tüketip
+// `orchestrate` çağıran hiçbir üretim kodu yoktu. Kayıt ≠ tüketim.
+import { Inject, Injectable, Logger, Optional, type OnModuleDestroy, type OnModuleInit } from '@nestjs/common';
+import { ackQueue, createRedis, deleteQueueMessage, ensureGroup, getLatestTask, queueKey, readQueue, reclaimQueue, setHeartbeat, setTaskHeartbeat } from '@ww/db';
+import { EntityIdSchema, NIL_UUID, type EntityId } from '@ww/shared';
+import type { WwRedis } from '@ww/db';
+import { PHASE8_RUNTIME } from './runtime-composition.js';
+import { SERVER_DATABASE, type ServerDatabase } from './orchestration.module.js';
+import { pumpOnce, type PumpItem } from './task-pump.js';
+import { withHeartbeat } from './work-heartbeat.js';
+
+export const TASK_PUMP_INTERVAL_MS = 3_000;
+const PUMP_GROUP = 'scheduler';
+// Çöken/yeniden başlayan bir tüketicinin üzerinde kalan mesaj bu süre sonunda
+// devralınır; reclaim olmazsa o iş sonsuza dek asılı kalır.
+const RECLAIM_MIN_IDLE_MS = 30_000;
+const MAX_DELIVERIES = 5;
+
+/** Composition'ın pompanın ihtiyaç duyduğu dar yüzeyi. */
+export interface PumpRuntime {
+  orchestrate(input: Readonly<{ taskId: EntityId; maxAttempts: number }>): Promise<Readonly<{ status: string }>>;
+}
+
+/**
+ * Eşzamanlı görev sayısı. Varsayılan 2: kadroda ikişer worker/verifier var,
+ * daha fazlası sağlayıcı rate limitine çarpar. WW_PUMP_CONCURRENCY ile
+ * ayarlanır; bozuk değer sessizce sınırsıza dönmez, varsayılana düşer.
+ */
+export function pumpConcurrency(raw = process.env['WW_PUMP_CONCURRENCY']): number {
+  if (raw === undefined || raw.trim() === '') return 2;
+  const parsed = Number(raw);
+  if (!Number.isSafeInteger(parsed) || parsed < 1) return 2;
+  return Math.min(parsed, 8);
+}
+
+@Injectable()
+export class TaskPumpService implements OnModuleInit, OnModuleDestroy {
+  readonly #logger = new Logger(TaskPumpService.name);
+  readonly #database: ServerDatabase;
+  readonly #runtime: PumpRuntime | null;
+  #timer: ReturnType<typeof setInterval> | undefined;
+  #running = false;
+  #redis: Promise<WwRedis> | undefined;
+  #reclaimCursor = '0-0';
+
+  constructor(
+    @Inject(SERVER_DATABASE) database: ServerDatabase,
+    @Optional() @Inject(PHASE8_RUNTIME) runtime: PumpRuntime | null,
+  ) {
+    this.#database = database;
+    this.#runtime = runtime ?? null;
+  }
+
+  onModuleInit(): void {
+    // Pompanın KAPALI olması sessiz kalmamalı: kuyruk dolarken sebebi
+    // görünmezse "motor etkin ama hiçbir şey olmuyor" tablosuna geri dönülür.
+    if (this.#runtime === null) {
+      this.#logger.warn('görev pompası açılmadı: orkestrasyon runtime kayıtlı değil');
+      return;
+    }
+    if (process.env['WW_DISABLE_TASK_PUMP'] === '1') {
+      this.#logger.log('görev pompası WW_DISABLE_TASK_PUMP=1 ile kapatıldı');
+      return;
+    }
+    const projectId = process.env['WW_RUNTIME_PROJECT_ID'];
+    if (projectId === undefined || projectId.trim() === '') {
+      this.#logger.warn('görev pompası açılmadı: WW_RUNTIME_PROJECT_ID ayarlı değil');
+      return;
+    }
+    this.#timer = setInterval(() => { void this.pump(projectId); }, TASK_PUMP_INTERVAL_MS);
+    this.#timer.unref?.();
+    this.#logger.log(`görev pompası açık — proje ${projectId}`);
+    void this.pump(projectId);
+  }
+
+  onModuleDestroy(): void {
+    if (this.#timer) clearInterval(this.#timer);
+    this.#timer = undefined;
+  }
+
+  /** Tek tur. Üst üste binmeyi engeller: aynı görev iki kez koşarsa iş bozulur. */
+  async pump(projectIdValue: string): Promise<void> {
+    if (this.#running) return;
+    const runtime = this.#runtime;
+    if (runtime === null) return;
+    this.#running = true;
+    try {
+      const projectId = EntityIdSchema.parse(projectIdValue);
+      // Bağlantıyı sessizce atlamak, pompayı görünmez biçimde ölü bırakırdı.
+      const redis = await this.#connect();
+      const stream = queueKey(projectId);
+      await ensureGroup(redis, stream, PUMP_GROUP);
+
+      const result = await pumpOnce({
+        claim: async () => this.#claim(projectId),
+        ack: async (msgId) => { await ackQueue(redis, stream, PUMP_GROUP, msgId); },
+        // Canlılık işareti olmadan kurtarma ÇALIŞAN işi ölü sanıp dosya
+        // kilidini devralıyordu.
+        orchestrate: (call) => this.#withTaskHeartbeat(
+          projectId, call.taskId, () => runtime.orchestrate(call),
+        ),
+        // docs/07 → "Proje başına paralel agent 5". Pompa seri çalışıyordu:
+        // canlı koşuda iki görev aynı worker/verifier çiftini sırayla kullandı
+        // ve kadrodaki ikinci çift hiç devreye girmedi.
+        concurrency: pumpConcurrency(),
+        onResult: (taskId, status) => this.#logger.log(`görev ${taskId}: ${status}`),
+        onError: (taskId, reason) => this.#logger.warn(`görev ${taskId} işlenemedi: ${String(reason)}`),
+      });
+      if (result.processed > 0) this.#logger.log(`pompa turu: ${result.processed} görev`);
+    } catch (reason) {
+      // Pompa turu hatası sunucuyu düşürmemeli ama sessiz de kalmamalı.
+      this.#logger.warn(`görev pompası turu başarısız: ${String(reason)}`);
+    } finally {
+      this.#running = false;
+    }
+  }
+
+  #connect(): Promise<WwRedis> {
+    this.#redis ??= this.#database.redis === undefined
+      ? createRedis()
+      : Promise.resolve(this.#database.redis);
+    return this.#redis;
+  }
+
+  /** Görevin worker/verifier agent'ları ve görevin kendisi için canlılık işareti. */
+  async #withTaskHeartbeat<T>(
+    projectId: EntityId,
+    taskId: EntityId,
+    run: () => Promise<T>,
+  ): Promise<T> {
+    const redis = await this.#connect();
+
+    return withHeartbeat({
+      // Agent'lar orchestrate'in İÇİNDE atanır; listeyi önceden okumak boş
+      // kalır ve atanan agent hiç canlılık işareti almazdı.
+      beat: async () => {
+        const task = await getLatestTask(this.#database.ch, projectId, taskId);
+        const agentIds = [task?.worker_agent_id, task?.verifier_agent_id]
+          .filter((agentId): agentId is string => typeof agentId === 'string' && agentId !== NIL_UUID);
+        await Promise.all([
+          setTaskHeartbeat(redis, taskId),
+          ...agentIds.map((agentId) => setHeartbeat(redis, agentId)),
+        ]);
+      },
+      setTimer: (fn, delayMs) => setInterval(fn, delayMs) as unknown as number,
+      clearTimer: (handle) => clearInterval(handle as unknown as NodeJS.Timeout),
+      onError: (reason) => this.#logger.warn(`canlılık işareti yazılamadı: ${String(reason)}`),
+    }, run);
+  }
+
+  async #claim(projectId: EntityId): Promise<readonly PumpItem[]> {
+    const redis = await this.#connect();
+    const stream = queueKey(projectId);
+    const consumer = `pump-${process.pid}`;
+
+    // ÖNCE terk edilmiş iş: sunucu yeniden başladığında önceki tüketicinin
+    // üzerinde kalan mesajlar aksi halde hiç işlenmez.
+    const reclaim = await reclaimQueue(redis, stream, PUMP_GROUP, consumer, {
+      minIdleMs: RECLAIM_MIN_IDLE_MS,
+      maxDeliveries: MAX_DELIVERIES,
+      cursor: this.#reclaimCursor,
+      count: 5,
+    });
+    this.#reclaimCursor = reclaim.nextCursor;
+    for (const dead of reclaim.exhausted) {
+      // Tükenmiş mesajı ACK'leyip stream'den SİLİYORUZ: aksi halde kurtarma
+      // "bu görev zaten kuyrukta" deyip yeniden eklemiyor ve görev kalıcı
+      // olarak görünmez oluyordu. Görev hâlâ 'queued' ise kurtarma taze bir
+      // teslim sayacıyla geri koyar; değilse zaten ilerlemiştir.
+      this.#logger.warn(`görev ${dead.taskId} teslim sınırını aştı — kuyruktan düşürülüyor`);
+      await ackQueue(redis, stream, PUMP_GROUP, dead.msgId);
+      await deleteQueueMessage(redis, stream, dead.msgId);
+    }
+
+    const read = await readQueue(redis, stream, PUMP_GROUP, consumer, { count: 5 });
+    // Bozuk çerçeve sessizce düşerse kuyruğun neden tıkandığı görünmez olur.
+    for (const bad of [...reclaim.invalid, ...read.invalid]) {
+      this.#logger.warn(`kuyrukta geçersiz mesaj ${bad.msgId}: okunamadı`);
+    }
+    return [...reclaim.claimed, ...read.messages].map((message) => ({
+      msgId: message.msgId,
+      taskId: EntityIdSchema.parse(message.taskId),
+    }));
+  }
+
+}

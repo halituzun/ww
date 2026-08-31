@@ -7,6 +7,12 @@ it('bilinen model için maliyet hesaplar', () => {
   expect(r.cost).toBeCloseTo(3 + 15, 6);
 });
 
+it('google:gemini-2.5-flash için maliyet hesaplar', () => {
+  const r = costUsd('google:gemini-2.5-flash', { promptTokens: 1_000_000, completionTokens: 1_000_000 });
+  expect(r.known).toBe(true);
+  expect(r.cost).toBeCloseTo(0.075 + 0.3, 6);
+});
+
 it('bilinmeyen model 0 + known:false döner', () => {
   const r = costUsd('acme:mystery-1', { promptTokens: 1000, completionTokens: 1000 });
   expect(r).toEqual({ cost: 0, known: false });

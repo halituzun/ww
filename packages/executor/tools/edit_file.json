@@ -1,0 +1,28 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "edit_file",
+  "description": "Replace one exact text occurrence in a declared, locked workspace file.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "path": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 4096,
+      "pattern": "^[^\\u0000]+$",
+      "description": "Workspace-relative path to the declared target file."
+    },
+    "old": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 4194304,
+      "description": "Exact existing text that must occur once."
+    },
+    "new": {
+      "type": "string",
+      "maxLength": 4194304,
+      "description": "Replacement text; an empty string removes the matched text."
+    }
+  },
+  "required": ["path", "old", "new"]
+}

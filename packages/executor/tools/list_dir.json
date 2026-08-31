@@ -1,0 +1,17 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "list_dir",
+  "description": "List files in the workspace so the agent can see what exists before reading or writing.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "path": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 4096,
+      "pattern": "^[^\\u0000]+$",
+      "description": "Workspace-relative directory. Omit for the workspace root."
+    }
+  },
+  "required": []
+}

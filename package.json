@@ -2,12 +2,18 @@
   "name": "ww",
   "private": true,
   "packageManager": "pnpm@11.1.3",
-  "engines": { "node": ">=22" },
+  "engines": {
+    "node": ">=22"
+  },
   "scripts": {
     "build": "turbo build",
-    "test": "turbo test",
+    "test": "turbo test --concurrency=1",
     "lint": "turbo lint",
-    "dev": "turbo dev"
+    "dev": "turbo dev",
+    "wiring:check": "pnpm --filter @ww/wiring-check build && node packages/wiring-check/dist/cli.js",
+    "db:clean-tests": "node -e \"Promise.all([import('./packages/db/dist/test-cleanup.js'),import('./packages/db/dist/redis-cleanup.js')]).then(([a,b])=>Promise.all([a.dropLeakedTestDatabases({olderThanMs:3600000}),b.dropLeakedRedisKeys()]).then(([x,y])=>console.log('DB:',x.length,'Redis anahtar:',y)))\"",
+    "test:parallel": "turbo test",
+    "gate": "./scripts/gate.sh"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",

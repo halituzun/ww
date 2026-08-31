@@ -4,5 +4,19 @@ dist/
 coverage/
 workspace/
 secrets/
+.ww/
+.env
+.env.*
+!.env.example
 *.log
 .DS_Store
+
+ww-panel-tasarim/
+*.zip
+
+# Depoya sızan yerel artıklar. NEDEN: kökte takipsiz duran 642 MB'lık bir
+# .dmg, bir PDF ve kaynak ağacındaki .bak dosyaları vardı; bir `git add -A`
+# bunları commit'lerdi.
+*.dmg
+*.pdf
+*.bak

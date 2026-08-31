@@ -1,0 +1,28 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "report_result",
+  "description": "Report completed worker output and evidence for verifier review.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "summary": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 16000,
+      "pattern": ".*\\S.*",
+      "description": "Concise description of the completed work and observable result."
+    },
+    "evidenceRefs": {
+      "type": "array",
+      "maxItems": 256,
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 4096,
+        "pattern": ".*\\S.*"
+      },
+      "description": "Stable references to diffs, tests, logs, or artifacts supporting the report."
+    }
+  },
+  "required": ["summary", "evidenceRefs"]
+}

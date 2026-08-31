@@ -1,0 +1,21 @@
+-- Konsey çapraz kontrolünün gerçekliği: plana YAZILAN bir sayı.
+--
+-- NEDEN VAR: docs/03 konseyin 3-4 üyeden ve FARKLI sağlayıcılardan oluşmasını
+-- ister. Kod üye sayısını gerçekten zorluyordu (3'ün altında fırlatır), ama
+-- SAĞLAYICI çeşitliliği yetersizken koşu durmuyordu; yalnız bir uyarı METNİ
+-- üretilip plan markdown'ına
+--
+--   > ⚠️ konsey 1 sağlayıcıya düştü (hedef 3): çapraz kontrol bu koşuda
+--     tam değildir
+--
+-- satırı olarak yazılıyordu. Plan yine `proposed` oluyor ve onaylanabiliyordu.
+-- Yani tek modelin kendisiyle konuştuğu bir koşu, gerçek bir konsey kararıyla
+-- AYIRT EDİLEMEZ hâlde kaydediliyordu: uyarı prozadaydı, veri değildi.
+--
+-- Metin sorgulanamaz, filtrelenemez ve onay kararında kullanılamaz. Sayı
+-- kullanılabilir: onay yolu eşiğin altındaki planlar için kullanıcıdan
+-- BİLİNÇLİ onay ister ve panel bunu rozetle gösterir.
+--
+-- Varsayılan 0 = "ölçülmedi" (bu migration'dan önce yazılmış planlar).
+
+ALTER TABLE plans ADD COLUMN IF NOT EXISTS provider_diversity UInt8 DEFAULT 0;

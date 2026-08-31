@@ -1,16 +1,102 @@
+import { AgentBridgeController } from "./erp-agent-bridge/agent-bridge.controller.js";
+import { AgentBridgeService } from "./erp-agent-bridge/agent-bridge.service.js";
 import { Module } from '@nestjs/common';
+import { PromptSnapshotsController } from './prompt-snapshots.controller.js';
+import { AgentsController } from './agents.controller.js';
+import { CanvasController } from './canvas.controller.js';
+import { ArtifactsController } from './artifacts.controller.js';
+import { PreviewController } from './preview.controller.js';
+import { PreviewApplicationService } from './preview.service.js';
+import { InterviewController } from './interview.controller.js';
+import { InterviewApplicationService } from './interview.service.js';
+import { CouncilController } from './council.controller.js';
+import { StandardsAuditController } from './standards-audit.controller.js';
+import { StandardsAuditApplicationService } from './standards-audit.service.js';
+import { CouncilApplicationService } from './council.service.js';
 import { HealthController } from './health.controller.js';
+import { MessagesController } from './messages.controller.js';
+import { ProjectsController } from './projects.controller.js';
+import { TasksController } from './tasks.controller.js';
+import { EventsGateway } from './events.gateway.js';
+import { OperationsController } from './operations.controller.js';
+import { FilesController } from './files.controller.js';
+import { NarratorController } from './narrator.controller.js';
+import { ProvidersController } from './providers.controller.js';
+import { CliproxyApiController } from './cliproxyapi.controller.js';
+import { CliproxyApiService } from './cliproxyapi.service.js';
+import { ProviderHealthScheduler } from './provider-health.scheduler.js';
+import { TaskPumpService } from './task-pump.service.js';
+import { RecoverySweeperService } from './recovery-sweeper.service.js';
+import { PlanApplicationService, PlansController } from './plans.controller.js';
+import { DelegationApplicationService, DelegationController } from './delegation.controller.js';
+import { MobilePreviewController } from './mobile-preview.controller.js';
+import { KnowledgeController } from './knowledge.controller.js';
+import { PromptsController } from './prompts.controller.js';
+import { EffectsController } from './effects.controller.js';
+import { RoleModelsController } from './role-models.controller.js';
+import { BudgetController } from './budget.controller.js';
+import { AuditController } from './audit.controller.js';
+import { RuntimeController } from './runtime.controller.js';
+
+// Vitest creates Nest application contexts without a websocket adapter; keep
+// unit/e2e HTTP boots independent while production still registers the gateway.
+const EVENTS_GATEWAY_PROVIDER = process.env['WW_ENABLE_WS'] !== '1'
+  ? { provide: EventsGateway, useValue: null }
+  : EventsGateway;
+import {
+  MESSAGE_APPLICATION,
+  MessageApplicationService,
+  OrchestrationModule,
+  PROJECT_APPLICATION,
+  ProjectApplicationService,
+  TASK_APPLICATION,
+  TaskApplicationService,
+} from './orchestration.module.js';
 import {
   DEFAULT_HEALTH_DEPENDENCIES,
   HEALTH_DEPENDENCIES,
   HealthService,
 } from './health.service.js';
+import {
+} from './runtime-composition.js';
 
 @Module({
-  controllers: [HealthController],
+  imports: [OrchestrationModule],
+  controllers: [
+    EffectsController,
+    PromptsController,
+    KnowledgeController,
+    MobilePreviewController,
+    DelegationController,
+    PromptSnapshotsController,
+    AgentsController,
+    CanvasController,
+    ArtifactsController,
+    PreviewController,
+    InterviewController,
+    CouncilController,
+    StandardsAuditController,
+    PlansController,HealthController, ProjectsController, TasksController, MessagesController, OperationsController, FilesController, NarratorController, ProvidersController, CliproxyApiController, RoleModelsController, BudgetController, AuditController, RuntimeController, AgentBridgeController],
   providers: [
+    EVENTS_GATEWAY_PROVIDER,
+    ProviderHealthScheduler,
+    TaskPumpService,
+    RecoverySweeperService,
+    CliproxyApiService,
+    PlanApplicationService,
+    PreviewApplicationService,
+    InterviewApplicationService,
+    CouncilApplicationService,
+    StandardsAuditApplicationService,
+    DelegationApplicationService,
     { provide: HEALTH_DEPENDENCIES, useValue: DEFAULT_HEALTH_DEPENDENCIES },
     HealthService,
+    AgentBridgeService,
+    { provide: PROJECT_APPLICATION, useExisting: ProjectApplicationService },
+    { provide: TASK_APPLICATION, useExisting: TaskApplicationService },
+    { provide: MESSAGE_APPLICATION, useExisting: MessageApplicationService },
+    // PHASE8_RUNTIME/PHASE9_RUNTIME_CONFIG artık OrchestrationModule'den gelir
+    // (bkz. oradaki not): ebeveynde durduklarında çocuk modül onları göremiyordu.
   ],
 })
 export class AppModule {}

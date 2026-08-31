@@ -15,17 +15,27 @@
     "@nestjs/common": "^11.1.29",
     "@nestjs/core": "^11.1.29",
     "@nestjs/platform-express": "^11.1.29",
+    "@nestjs/platform-ws": "^11.2.1",
+    "@nestjs/websockets": "^11.2.1",
+    "@types/ws": "^8.18.1",
+    "@ww/agents": "workspace:*",
     "@ww/db": "workspace:*",
+    "@ww/executor": "workspace:*",
+    "@ww/memory": "workspace:*",
+    "@ww/providers": "workspace:*",
+    "@ww/scheduler": "workspace:*",
     "@ww/shared": "workspace:*",
     "reflect-metadata": "^0.2.2",
-    "rxjs": "^7.8.2"
+    "rxjs": "^7.8.2",
+    "typescript": "^5.7.0",
+    "ws": "^8.21.3",
+    "zod": "^4.4.3"
   },
   "devDependencies": {
     "@nestjs/testing": "^11.1.29",
     "@types/supertest": "^6.0.3",
     "supertest": "^7.1.4",
     "tsx": "^4.20.0",
-    "typescript": "^5.7.0",
     "vitest": "^2.1.8"
   }
 }

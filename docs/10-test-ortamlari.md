@@ -16,8 +16,9 @@
 
 ## Genel Yaklaşım
 
-Test ortamları panelin **Test** sayfasında yaşar; hepsi executor'ın
-`ProcessManager`'ına dayanır ([05](05-executor.md#dev-server-yaşam-döngüsü)).
+Test ortamları panelin **Test** sayfasında yaşar; hepsi dev-server yaşam
+döngüsüne (`PreviewApplicationService` + `process-pool.ts`,
+[05](05-executor.md#dev-server-yaşam-döngüsü)) dayanır.
 Kullanıcı "çalışırken gör" der; sistem ilgili süreci başlatır, panel bağlanır.
 Süreç durumu ve logları her ortamda ortaktır.
 
@@ -26,8 +27,8 @@ kolay olandan zora ([11 — Yol Haritası, Faz 6](11-yol-haritasi.md#faz-6)).
 
 ## Web Önizleme
 
-- "Önizlemeyi başlat" → `ProcessManager` `dev` sürecini başlatır (`vite` vb.),
-  port havuzundan port alır (42000-42999).
+- "Önizlemeyi başlat" → `PreviewApplicationService` `dev` sürecini başlatır
+  (`vite` vb.), port havuzundan port alır (42000-42999).
 - Panel içinde `iframe` ile `http://localhost:<port>` gösterilir; üst şeritte:
   - cihaz çerçeveleri (masaüstü / tablet / telefon genişlikleri),
   - yenile, yeni sekmede aç,
@@ -56,6 +57,15 @@ Emülatör **host'ta** çalışır (Docker'a girmez); gereksinimler ve akış:
   command-line tools, en az bir AVD imajı, `ANDROID_HOME` tanımlı,
   Flutter SDK. Server açılışta `flutter doctor` / `emulator -list-avds`
   ile durumu tespit eder; eksikler Test sayfasında yönergeyle gösterilir.
+  *(2026-08-18: `/mobile-preview/avds` yalnız `emulator -list-avds` çağırıyordu
+  ve o ikili kurulu değilken uç düşüyordu — oysa `adb devices` gerçek bağlı
+  cihazları gösterebiliyor ve önizleme için AVD'ye gerek yok. Uç artık İKİSİNİ
+  de döner; hiçbiri yoksa SEBEBİYLE 503 verir. Panel tarafında emülatör
+  yüzeyi 2026-08-18'de eklendi: hedefleri listeler, oturum açar, kareyi
+  gösterir, DOKUNUŞ gönderir ve durdurur. Kare AKIŞI değil düzenli anlık
+  görüntüdür (2 sn); sürekli akış ayrı bir iş. Dokunuş, görüntüdeki tıklamayı
+  cihaz pikseline çevirir — ölçek atlanırsa dokunuş yanlış yere gider, bu
+  yüzden dönüşüm ayrı ve testlidir.)*
 - **Akış**:
   1. Panel "Emülatörü başlat" → `emulator -avd <ad>` süreci.
   2. `adb wait-for-device` → cihaz hazır.
@@ -71,9 +81,33 @@ Emülatör **host'ta** çalışır (Docker'a girmez); gereksinimler ve akış:
 ## Ortak Davranışlar
 
 - Her ortam başlat/durdur olayları `events`'e yazılır; süreç çökerse panelde
-  rozet + tek tık yeniden başlatma.
+  rozet + tek tık yeniden başlatma. *(Olay yazımı 2026-08-18'de eklendi:
+  `process_started`/`process_stopped` türleri şemada tanımlıydı ama hiçbir
+  üretim kodu yazmıyordu — canlı veritabanında sıfır satır. Önizleme açılıp
+  kapanıyor, zaman çizelgesinde hiç iz kalmıyordu. "Çöktü" rozeti de eklendi:
+  `PreviewStatus` çöküşü kullanıcının durdurmasından AYIRIYOR (durdurmada kayıt
+  silinir; kayıt dururken süreç ölmüşse kimse durdurmamıştır) ve ÇÖKME de bir
+  `process_stopped` olayı yazar — eskiden zaman çizelgesinde "başladı"
+  görünüp "durdu" hiç görünmüyordu. Tek tık yeniden başlatma ZATEN vardı
+  (kapalı durumda "Başlat" düğmesi çökmüş süreç için de görünür); önceki not
+  yanlıştı. Emülatör tarafı hâlâ bu olayları yazmıyor.)*
 - Aynı anda proje başına en çok 1 önizleme + 1 emülatör süreci (kaynak koruması).
-- Proje duraklatılırsa/arşivlenirse süreçler kapatılır.
+  *(Emülatör tarafı 2026-08-18'de uygulandı: uçlar projeden BAĞIMSIZDI, bu
+  yüzden ne sınır uygulanabiliyor ne de yaşam döngüsü olayı yazılabiliyordu
+  (`events.project_id` zorunludur). Oturum artık isteğe bağlı `projectId`
+  taşır; PROJESİZ oturum meşrudur ve sınıra takılmaz — kullanıcı proje
+  seçmeden de cihaz açabilir.)*
+- Proje duraklatılırsa/arşivlenirse süreçler kapatılır. *(2026-08-18'de
+  uygulandı: hiçbir yer proje DURUMUNA bakmıyordu, duraklatılmış projenin dev
+  sunucusu çalışmaya devam edip port tutuyor ve bayat içerik sunuyordu. Kural
+  durum yoklamasına bağlandı — ayrı zamanlayıcı kurmak, kuralı bir bileşenin
+  ömrüne bağlamak olurdu. `completed` de kapatılır; `draft`/`gathering`/
+  `planning` KAPATILMAZ, çünkü proje henüz başlamamıştır, durdurulmuş
+  değildir.)*
 - Test ortamındayken kullanıcının verdiği emirler normal akışla PM'e gider;
   "gördüğüm şu ekranda X'i değiştir" türü emirler için aktif ekran bağlamı
-  (hangi route/ekran açık) emre iliştirilir.
+  (hangi route/ekran açık) emre iliştirilir. *(2026-08-18'de uygulandı:
+  `sendUserCommand` yalnız METİN taşıyordu ve bağlamsız emir PM'i soru
+  sormaya zorluyordu — her soru bir tur ve bir model çağrısı. Bağlam AYRI bir
+  `[panel bağlamı]` bloğu olarak eklenir; metne karıştırmak PM'e kullanıcının
+  yazdığı sanılan bir cümle verirdi.)*

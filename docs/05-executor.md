@@ -32,7 +32,7 @@ sağlayıcı biçimine çevirir. Roller yalnızca kendine tanınan araçları g�
 
 | Araç | Parametreler (özet) | Kim kullanır | Not |
 |---|---|---|---|
-| `read_file` | path, offset?, limit? | herkes | Workspace-göreli yol |
+| `read_file` | path, offset?, limit? | herkes | Workspace-göreli yol. GÖRME aracıdır: mühürlü hedef listesi YAZMAYI sınırlar, görmeyi değil (2026-08-18'e kadar hedefe bağlıydı ve worker yalnız yazacağı dosyayı okuyabiliyordu; canlı veride 15 CAPABILITY_DENIED'ın 11'i buydu) |
 | `write_file` | path, content | worker | Dosya kilidi gerektirir |
 | `edit_file` | path, old, new | worker | Birebir eşleşme; kilit gerekir |
 | `move_file` / `delete_file` | from,to / path | worker | Silme çöp klasörüne taşır (`.ww-trash/`) |
@@ -46,7 +46,7 @@ sağlayıcı biçimine çevirir. Roller yalnızca kendine tanınan araçları g�
 | `record_knowledge` | kind, title, content, tags | pm, group_lead, researcher | `knowledge` kaydı açar |
 | `record_artifact` | type, name, path, summary | worker | `artifacts` kaydı |
 | `create_subtask` | title, description, group, files[], criteria | pm, group_lead, worker | Delegasyon ([03](03-agent-sistemi.md#delegasyon)) |
-| `ask_question` | to ('group_lead'\|'pm'), content | herkes | Soru akışı |
+| `ask_question` | to (`pm`; Faz 4: `group_lead`), content | herkes | Faz 1 doğrudan PM; Faz 4 tam soru akışı |
 | `report_result` | summary | worker | Görevi `verifying`'e taşır |
 | `run_gate` | — | sistem/worker | Derleme+lint+test kapısını koşar |
 
@@ -79,7 +79,16 @@ sağlayıcı biçimine çevirir. Roller yalnızca kendine tanınan araçları g�
     `task(<task_id kısa>): <title>` + gövdede görev özeti ve agent adları.
   - Hash `tasks.commit_hash`'e ve `artifacts.commit_hash`'e yazılır.
 - Ret/iptal/kurtarma → `git checkout . && git clean -fd` (yarım iş kuralı;
-  `.ww-trash/` hariç).
+  `.ww-trash/` hariç). Komutlar ve sırası `packages/executor/src/workspace-reset.ts`
+  içinde tek yerde tanımlıdır. İki çağıran vardır:
+  - **kurtarma**: çöküş sonrası açılışta, yalnız görevi kuyruğa geri düşen
+    projeler için (`apps/server/src/workspace-recovery.ts`);
+  - **ret / kapı düşüşü**: yeni denemeye geçmeden önce
+    (`Phase1SchedulerPort.resetWorkspace`, orkestratörden çağrılır). Reddedilen
+    denemenin dosyaları diskte kalırsa yeni worker, prompt'unda YAZMAYAN bir
+    kodun üstüne yazar; temiz sanıp eklediğinde yinelenen kod ya da yarım
+    birleşim çıkar. Temizlik başarısız olursa yeniden deneme yine yapılır:
+    kirli ağaç kötüdür ama hiç denememek daha kötüdür.
 - Panel diff görünümü `git_diff` çıktısından beslenir; geri alma =
   PM'e "şu görevi geri al" emri → revert görevi açılır (`git revert <hash>`,
   yine worker+verifier çiftiyle).
@@ -97,7 +106,11 @@ Görev `verifying → testing` geçtiğinde proje türüne göre kapı komutlar�
 | Flutter | `flutter pub get` → `dart analyze` → `flutter test` |
 
 - Her adımın çıktısı `events`'e `test_run` olayı olarak yazılır.
-- Hata → tam çıktı worker'a döner (`testing → working`), `attempt++`.
+- Hata → tam çıktı worker'a döner (`testing → working`), `attempt++`. Çıktı
+  KANIT nesnesine konmaz (kanıt kalıcı kayda gider ve ham çıktı taşımaması
+  kasıtlıdır); ayrı bir bellek-içi kanaldan alınır, redakte + sınırlanır
+  (son 4000 karakter) ve `tasks.reject_reason` üzerinden bir sonraki denemenin
+  prompt'una girer.
 - Kapı tanımına adım eklemek/çıkarmak plan kararıdır (konsey/PM belirler,
   `knowledge`'a yazılır).
 - Test *yazmak* da işin parçasıdır: kod görevlerinin kabul kriterlerine
@@ -105,7 +118,10 @@ Görev `verifying → testing` geçtiğinde proje türüne göre kapı komutlar�
 
 ## Dev-Server Yaşam Döngüsü
 
-Test ortamlarının ([10](10-test-ortamlari.md)) temeli — `ProcessManager`:
+Test ortamlarının ([10](10-test-ortamlari.md)) temeli — dev-server yaşam
+döngüsü. Kod karşılığı: `apps/server/src/preview.service.ts`
+(`PreviewApplicationService`) + saf parçalar `apps/server/src/process-pool.ts`
+(`PortPool`, `OutputRing`):
 
 - Proje başına adlandırılmış süreçler: `dev` (vite/flutter run/nest start),
   `emulator`, vb. Kayıtları bellekte + `events`'te (`process_started/stopped`).
@@ -118,7 +134,7 @@ Test ortamlarının ([10](10-test-ortamlari.md)) temeli — `ProcessManager`:
 
 | Hata | Davranış |
 |---|---|
-| Araç argüman hatası (şema uyumsuz) | Modele hata mesajı döner, aynı turda düzeltmesi beklenir (retry maliyeti düşük) |
+| Araç argüman hatası (şema uyumsuz) | Modele hata mesajı ARAÇ CEVABI olarak döner (çağrı kimliğine bağlı), model sonraki turda düzeltir; `maxTurns` sınırı korunur. Brief DIŞI araç istemek bu kapsamda değildir: o bir sınır ihlalidir ve sert reddedilir |
 | Dosya kilidi alınamadı | Araç `LOCKED` döner; worker beklemek yerine kilit sahibini ve tahmini süreyi görür; zamanlayıcı görevi kısa erteleyebilir |
 | Komut zaman aşımı | Süreç öldürülür, çıktı + `TIMEOUT` worker'a döner |
 | LLM çağrısı hatası | Router fallback'i dener ([04](04-model-katmani.md#fallback)); tükendiyse görev `queued`'a döner |

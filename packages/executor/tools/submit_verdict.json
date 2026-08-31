@@ -1,0 +1,117 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "submit_verdict",
+  "description": "Submit the verifier's strict StructuredVerdictV1 decision.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "decision": {
+      "type": "string",
+      "enum": ["approve", "reject"]
+    },
+    "reasons": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 256,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "message": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 16000,
+            "pattern": ".*\\S.*"
+          },
+          "evidenceRefs": {
+            "type": "array",
+            "maxItems": 256,
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 4096,
+              "pattern": ".*\\S.*"
+            }
+          },
+          "rule": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "ruleId": {
+                "type": "string",
+                "enum": [
+                  "COMM-001",
+                  "COMM-002",
+                  "COMM-003",
+                  "COMM-004",
+                  "COMM-005",
+                  "COMM-006",
+                  "TASK-001",
+                  "TASK-002",
+                  "TASK-003",
+                  "TASK-004",
+                  "TOOL-001",
+                  "TOOL-002",
+                  "TOOL-003",
+                  "TOOL-004"
+                ]
+              },
+              "ruleVersion": {
+                "type": "integer",
+                "minimum": 1
+              }
+            },
+            "required": ["ruleId", "ruleVersion"]
+          }
+        },
+        "required": ["message", "evidenceRefs"]
+      }
+    },
+    "evidenceRefs": {
+      "type": "array",
+      "maxItems": 256,
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 4096,
+        "pattern": ".*\\S.*"
+      }
+    },
+    "ruleRefs": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 256,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "ruleId": {
+            "type": "string",
+            "enum": [
+              "COMM-001",
+              "COMM-002",
+              "COMM-003",
+              "COMM-004",
+              "COMM-005",
+              "COMM-006",
+              "TASK-001",
+              "TASK-002",
+              "TASK-003",
+              "TASK-004",
+              "TOOL-001",
+              "TOOL-002",
+              "TOOL-003",
+              "TOOL-004"
+            ]
+          },
+          "ruleVersion": {
+            "type": "integer",
+            "minimum": 1
+          }
+        },
+        "required": ["ruleId", "ruleVersion"]
+      }
+    }
+  },
+  "required": ["decision", "reasons", "evidenceRefs", "ruleRefs"]
+}

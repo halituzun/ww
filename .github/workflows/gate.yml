@@ -1,0 +1,85 @@
+# ww tam kapısı — makinede.
+#
+# NEDEN VAR: 2026-08-31'e kadar bu depoda HİÇBİR CI yoktu. Tek yaptırım
+# operatörün elle `pnpm gate` yazmasıydı ve ölçüm bunun tutmadığını gösterdi:
+# öz-denetim ve wiring-check HEAD'de kırmızıydı, commit 9ebf0a5 dört ölü
+# güvenlik frenini "tamamlandı" diye ekledi. CLAUDE.md "kırmızı kapıda asla
+# push yok" derken bunu doğrulayan bir makine yoktu.
+#
+# Kapı, yerelde `./scripts/gate.sh` ile birebir aynı adımları koşar.
+
+name: kapı
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: kapi-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  gate:
+    name: build + öz-denetim + wiring + lint + test
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    services:
+      clickhouse:
+        image: clickhouse/clickhouse-server:24.8
+        ports: ["8124:8123"]
+        env:
+          CLICKHOUSE_DB: ww
+          CLICKHOUSE_USER: ww
+          CLICKHOUSE_PASSWORD: ww
+        options: >-
+          --health-cmd "clickhouse-client --query 'SELECT 1'"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+      redis:
+        image: redis:7-alpine
+        ports: ["6380:6379"]
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+
+    env:
+      # Yerel docker-compose ile aynı portlar; testler bu değerleri okur.
+      WW_CH_URL: http://localhost:8124
+      WW_CH_USER: ww
+      WW_CH_PASS: ww
+      WW_CH_DB: ww
+      WW_REDIS_URL: redis://localhost:6380
+      # Entegrasyon testlerinin SESSİZCE atlanması hata sayılır. Atlanan test
+      # kapı sayılmaz — bu bayrak olmadan ~324 test (%16) yeşil bir çıkışla
+      # buharlaşıyordu.
+      WW_REQUIRE_INTEGRATION: "1"
+      WW_LOCAL_SESSION_TOKEN: ci-oturum-tokeni-yalnizca-test-icin
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.1.3
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      # Kapıdan ÖNCE koşar: kapı docs/DURUM.md'yi kendisi üretir, dolayısıyla
+      # kapıdan sonra bakmak her zaman yeşil görünürdü. Bayat bir durum kaydı
+      # PR'a burada takılır.
+      - name: durum kaydı güncel mi
+        run: node scripts/durum.mjs --check
+
+      - name: tam kapı
+        run: ./scripts/gate.sh

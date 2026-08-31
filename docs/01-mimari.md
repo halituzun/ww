@@ -76,26 +76,16 @@ shared ← db ← {providers, memory, executor} ← agents ← scheduler ← app
 ## Docker Compose Topolojisi
 
 ```yaml
-# docker-compose.yml (özet)
+# docker-compose.yml (özet) — yalnızca veri servisleri; server/panel host'ta
 services:
   clickhouse:
-    image: clickhouse/clickhouse-server:24.8   # vektör arama destekli sürüm
-    ports: ["8123:8123", "9000:9000"]
+    image: clickhouse/clickhouse-server:24.8
+    ports: ["8124:8123", "9001:9000"]   # host portu bilinçli standart dışı
     volumes: ["ch-data:/var/lib/clickhouse"]
   redis:
     image: redis:7-alpine
-    ports: ["6379:6379"]
+    ports: ["6380:6379"]                # host portu bilinçli standart dışı
     command: ["redis-server", "--appendonly", "yes"]
-  server:
-    build: apps/server
-    depends_on: [clickhouse, redis]
-    ports: ["4000:4000"]                        # REST + WS
-    volumes:
-      - ./workspace:/workspace                  # üretilen projeler
-      - ./secrets:/secrets:ro                   # şifreli API anahtarları
-  panel:
-    build: apps/panel
-    ports: ["3000:80"]
 ```
 
 Notlar:
@@ -176,7 +166,8 @@ yazılır. Redis kaybı = yalnızca hız kaybı, veri kaybı değil.
 
 1. **Yazım sırası**: önce ClickHouse (kalıcı gerçek), sonra Redis (tampon/yayın).
    Panel bir olayı WebSocket'ten kaçırırsa REST ile `events`'ten tamamlar
-   (her olay zarfında monoton `seq` alanı vardır).
+   (Faz 3'te tanımlanacak opaque, proje kapsamlı cursor/high-water ile). Faz 0
+   `events.seq` alanı public istemci cursor sözleşmesi değildir.
 2. **Durum güncellemeleri**: `tasks` ve `agents` ReplacingMergeTree'dir; güncelleme =
    artan `version` (server'da monoton sayaç: `toUnixTimestamp64Milli(now64())`) ile
    yeni satır. Okumalar her zaman `FINAL` yerine `ORDER BY version DESC LIMIT 1 BY id`
@@ -194,11 +185,11 @@ Senaryolar ve davranış:
 
 | Senaryo | Kurtarma |
 |---|---|
-| **Server çöktü / yeniden başladı** | Açılışta `RecoveryService`: (1) `tasks`'tan durumu `working/verifying/testing` olan görevleri bulur; heartbeat'i olmayanları `queued`'a düşürür (yeni sürüm satırı + `attempt` korunur). (2) Redis kuyruklarını `tasks WHERE status='queued'` ile yeniden doldurur (claim kilidi boşta olanlar). (3) Working tree'de commit'lenmemiş değişiklik varsa `git checkout .` ile temizler (yarım iş kuralı). |
+| **Server çöktü / yeniden başladı** | Açılışta `RecoveryService`: (1) `tasks`'tan durumu `working/verifying/testing` olan görevleri bulur; heartbeat'i olmayanları `queued`'a düşürür (yeni sürüm satırı + `attempt` korunur). (2) Redis kuyruklarını `tasks WHERE status='queued'` ile yeniden doldurur (claim kilidi boşta olanlar). (3) Working tree'de commit'lenmemiş değişiklik varsa `git checkout .` ile temizler (yarım iş kuralı). *(2026-08-18'de uygulandı: HİÇBİR üretim kodu bunu yapmıyordu, yarım dosyalar diskte kalıyor ve sonraki deneme kirli ağaçtan başlıyordu. Temizlik YALNIZCA gerçekten görev kurtarılan projede koşar — çalışan bir sistemin ağacını silmek süren işi silmek olurdu. `.ww-trash/` korunur ve `-x` kullanılmaz: kurtarma, kurtardığından fazlasını bozmamalı.)* |
 | **Redis kaybı (flush/çökme)** | Aynı `RecoveryService` akışı; kuyruk, kilit ve heartbeat'ler DB'den yeniden kurulur. Veri kaybı yoktur. |
 | **ClickHouse geçici kapalı** | Server yazamıyorsa görev başlatmaz (fail-safe duraklatma); devam eden tool çağrıları lokal tamponda (disk üzerinde JSONL) bekletilir, bağlantı dönünce `events`'e boşaltılır. |
 | **LLM API kesintisi** | Provider katmanı fallback zincirine geçer ([04](04-model-katmani.md#fallback)); hiçbir sağlayıcı yoksa görev `queued`'da bekler, panelde uyarı. |
 | **Görev asılı kaldı** | Heartbeat TTL (30 sn) dolunca zamanlayıcı görevi geri alır; `attempt` artar; `max_attempts` aşılırsa tırmandırma. |
 
 Kurtarma testi, mock provider ile entegrasyon test setinin parçasıdır
-([11 — Yol Haritası, Faz 1](11-yol-haritasi.md#faz-1)).
+([11 — Yol Haritası, Faz 2](11-yol-haritasi.md#faz-2)).

@@ -1,0 +1,126 @@
+import 'reflect-metadata';
+import { randomUUID } from 'node:crypto';
+import { unlink } from 'node:fs/promises';
+import type { INestApplication } from '@nestjs/common';
+import { Test } from '@nestjs/testing';
+import request from 'supertest';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { appendArtifact, createAgent, createCh, createRedis, runMigrations, upsertFileIndex, type ClickHouseClient, type WwRedis } from '@ww/db';
+import { AppModule } from './app.module.js';
+import { SERVER_DATABASE } from './orchestration.module.js';
+
+const token = 'phase9-test-token';
+const integration = process.env['WW_REQUIRE_INTEGRATION'] === '1';
+let probeCh: ClickHouseClient | undefined;
+let probeRedis: WwRedis | undefined;
+try {
+  probeCh = createCh();
+  await probeCh.query({ query: 'SELECT 1', format: 'JSONEachRow' });
+  probeRedis = await createRedis();
+} catch {
+  if (integration) throw new Error('Phase 9 REST entegrasyon servisi kapalı');
+}
+
+describe.skipIf(probeCh === undefined || probeRedis === undefined)('REST gerçek ClickHouse/Redis akışı', () => {
+  let app: INestApplication;
+  let ch: ClickHouseClient;
+  let redis: WwRedis;
+  const db = `ww_test_server_rest_${Date.now()}_${process.pid}`;
+  const keyFile = `/tmp/ww-rest-provider-${Date.now()}-${process.pid}.json`;
+
+  beforeAll(async () => {
+    await runMigrations({ database: db });
+    ch = createCh({ database: db });
+    redis = await createRedis();
+    process.env['WW_LOCAL_SESSION_TOKEN'] = token;
+    process.env['WW_MASTER_KEY'] = '11'.repeat(32);
+    process.env['WW_KEYSTORE_FILE'] = keyFile;
+    const moduleRef = await Test.createTestingModule({ imports: [AppModule] })
+      .overrideProvider(SERVER_DATABASE)
+      .useValue({ ch, redis })
+      .compile();
+    app = moduleRef.createNestApplication();
+    await app.init();
+  });
+
+  afterAll(async () => {
+    await app.close();
+    redis.destroy();
+    await ch.close();
+    const admin = createCh({ database: 'default' });
+    await admin.command({ query: `DROP DATABASE IF EXISTS ${db}` });
+    await admin.close();
+    await unlink(keyFile).catch(() => undefined);
+    probeRedis?.destroy();
+    await probeCh?.close();
+  });
+
+  it('invalid auth kalıcı yazı yapmadan reddeder; project→active issuer task→queue ve kriterleri korur', async () => {
+    await request(app.getHttpServer()).post('/projects').send({ name: 'unauthorized' }).expect(401);
+    const project = await request(app.getHttpServer()).post('/projects').set('Authorization', `Bearer ${token}`).send({ name: 'REST integration' }).expect(201);
+    const projectId = project.body.project_id as string;
+    await request(app.getHttpServer()).patch(`/projects/${projectId}/status`).send({ status: 'paused' }).expect(401);
+    await request(app.getHttpServer()).patch(`/projects/${projectId}/status`).set('Authorization', `Bearer ${token}`).send({ status: 'paused' }).expect(200).then((response) => expect(response.body.status).toBe('paused'));
+    await request(app.getHttpServer()).patch(`/projects/${projectId}/status`).set('Authorization', `Bearer ${token}`).send({ status: 'running' }).expect(200).then((response) => expect(response.body.status).toBe('running'));
+    await request(app.getHttpServer()).get(`/projects/${projectId}`).expect(200).then((response) => {
+      expect(response.body.project_id).toBe(projectId);
+    });
+    const agentId = randomUUID();
+    await createAgent(ch, { agent_id: agentId, project_id: projectId, role: 'pm', group: 'management', name: 'PM', model_ref: 'mock:pm', parent_agent_id: '00000000-0000-0000-0000-000000000000', clone_of: '00000000-0000-0000-0000-000000000000', status: 'idle', current_task_id: '00000000-0000-0000-0000-000000000000', prompt_name: 'role.pm', prompt_version: 2, tasks_done: 0, tasks_rejected: 0, created_at: new Date().toISOString(), updated_at: new Date().toISOString() });
+    const task = await request(app.getHttpServer()).post(`/projects/${projectId}/tasks`).set('Authorization', `Bearer ${token}`).send({ title: 'Persist criteria', acceptanceCriteria: ['must compile'], dependencies: [], files: ['src/a.ts'], budget: 10 }).expect(201);
+    expect(task.body.issuer_agent_id).toBe(agentId);
+    expect(task.body.acceptance_criteria).toEqual(['must compile']);
+    expect(task.body.target_files).toEqual(['src/a.ts']);
+    await upsertFileIndex(ch, { project_id: projectId, file_path: 'src/a.ts', summary: 'REST tarafından indekslendi', layer: 'service', exports: ['run'], related_task_ids: [task.body.task_id], related_artifact_ids: [], related_knowledge_ids: [], last_commit_hash: 'abc123', updated_at: new Date().toISOString() });
+    await request(app.getHttpServer()).get(`/projects/${projectId}/files`).set('Authorization', `Bearer ${token}`).expect(200).then((response) => {
+      expect(response.body).toHaveLength(1);
+      expect(response.body[0]).toMatchObject({ file_path: 'src/a.ts', summary: 'REST tarafından indekslendi', related_task_ids: [task.body.task_id] });
+    });
+    await appendArtifact(ch, { artifact_id: randomUUID(), project_id: projectId, task_id: task.body.task_id, agent_id: agentId, artifact_type: 'api_endpoint', name: 'health', path: '/health', summary: 'Health endpoint', commit_hash: '', created_at: new Date().toISOString() });
+    await request(app.getHttpServer()).get(`/projects/${projectId}/artifacts?type=api_endpoint`).expect(200).then((response) => {
+      expect(response.body).toHaveLength(1);
+      expect(response.body[0]).toMatchObject({ name: 'health', path: '/health' });
+    });
+    expect(task.body.token_budget).toBe(10);
+    expect(await request(app.getHttpServer()).get(`/projects/${projectId}/tasks/${task.body.task_id}`).set('Authorization', `Bearer ${token}`).expect(200).then((response) => response.body.acceptance_criteria)).toEqual(['must compile']);
+    const dependent = await request(app.getHttpServer()).post(`/projects/${projectId}/tasks`).set('Authorization', `Bearer ${token}`).send({ title: 'Dependent task', acceptanceCriteria: ['must review'], dependencies: [task.body.task_id], files: ['src/b.ts'], budget: 5 }).expect(201);
+    expect(dependent.body.depends_on).toEqual([task.body.task_id]);
+    const finalTask = await request(app.getHttpServer()).post(`/projects/${projectId}/tasks`).set('Authorization', `Bearer ${token}`).send({ title: 'Final task', acceptanceCriteria: ['must ship'], dependencies: [dependent.body.task_id], files: ['src/c.ts'], budget: 3 }).expect(201);
+    expect(finalTask.body.depends_on).toEqual([dependent.body.task_id]);
+    await request(app.getHttpServer()).get(`/projects/${projectId}/tasks`).set('Authorization', `Bearer ${token}`).expect(200).then((response) => {
+      expect(new Set(response.body.map((row: { task_id: string }) => row.task_id))).toEqual(new Set([
+        task.body.task_id,
+        dependent.body.task_id,
+        finalTask.body.task_id,
+      ]));
+    });
+    await request(app.getHttpServer()).post(`/projects/${projectId}/messages`).send({ kind: 'user_command', text: 'unauthorized' }).expect(401);
+    await request(app.getHttpServer()).post(`/projects/${projectId}/messages`).set('Authorization', `Bearer ${token}`).send({ kind: 'answer', text: 'missing question reference' }).expect(400);
+    await request(app.getHttpServer()).post(`/projects/${projectId}/messages`).set('Authorization', `Bearer ${token}`).send({ kind: 'answer', text: 'unknown question', replyToMessageId: randomUUID() }).expect(400);
+    const message = await request(app.getHttpServer()).post(`/projects/${projectId}/messages`).set('Authorization', `Bearer ${token}`).send({ kind: 'user_command', text: 'please inspect the task' }).expect(201);
+    expect(message.body.messageId).toMatch(/^[0-9a-f-]{36}$/);
+    await request(app.getHttpServer()).get(`/projects/${projectId}/messages/${message.body.messageId}`).set('Authorization', `Bearer ${token}`).expect(200).then((response) => {
+      expect(response.body.envelope.messageId).toBe(message.body.messageId);
+    });
+    await request(app.getHttpServer()).post(`/projects/${projectId}/narrator`).send({ question: 'Ne oldu?' }).expect(201).then((response) => {
+      // 'message' dizesini aramak, anlatının HAM tür adı ('message_stored')
+      // bastığı döneme aitti — yani testin geçmesi kusurun kanıtıydı. Artık
+      // insan cümlesi bekleniyor (docs/06: "referanslı ANLATI").
+      expect(response.body.answer).toContain('mesaj kaydedildi');
+      expect(response.body.evidenceRefs.length).toBeGreaterThan(0);
+      expect(response.body.traceHash).toMatch(/^[a-f0-9]{64}$/);
+    });
+    await request(app.getHttpServer()).patch('/providers/mock').set('Authorization', `Bearer ${token}`).send({ displayName: 'Mock Provider', baseUrl: '', models: ['mock:default'], enabled: true, isDefault: true, fallbackOrder: 0 }).expect(200).then((response) => {
+      expect(response.body.provider_id).toBe('mock');
+      expect(response.body.key_ref).toBe('');
+    });
+    await request(app.getHttpServer()).post('/providers/mock/key').set('Authorization', `Bearer ${token}`).send({ apiKey: 'sk-test-provider-key' }).expect(201).then((response) => {
+      expect(response.body).toEqual({ providerId: 'mock', configured: true, maskedKey: 'sk-…-key' });
+    });
+    await request(app.getHttpServer()).get('/providers').expect(200).then((response) => {
+      expect(response.body).toHaveLength(1);
+      expect(response.body[0]).toMatchObject({ provider_id: 'mock', keyConfigured: true, maskedKey: 'sk-…-key' });
+      expect(response.body[0].apiKey).toBeUndefined();
+    });
+  });
+});
