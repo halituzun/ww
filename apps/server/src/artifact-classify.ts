@@ -27,6 +27,7 @@ export function classifyArtifact(filePath: string): ArtifactKind {
 /** docs/09 MVVM katmanı; bilinmiyorsa uydurma yapılmaz. */
 export function classifyLayer(filePath: string): string {
   const kind = classifyArtifact(filePath);
+  if (kind === 'test') return 'test';
   if (kind === 'viewmodel') return 'viewmodel';
   if (kind === 'component' || kind === 'view') return 'view';
   if (kind === 'service' || kind === 'repository' || kind === 'controller') return 'model';

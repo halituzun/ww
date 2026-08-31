@@ -42,6 +42,7 @@ import {
   type ServiceBackedSchedulerInput,
   type Phase1RuntimePort,
   type Phase1SchedulerPort,
+  type ProjectMapSnapshotterPort,
 } from '@ww/scheduler';
 import {
   GateRunner,
@@ -231,6 +232,7 @@ export interface Phase9RuntimeCompositionInput extends Omit<Phase8RuntimeComposi
   readonly projectId: import('@ww/shared').EntityId;
   readonly consumerId: string;
   readonly snapshotBuilder: ConstructorParameters<typeof TaskBriefService>[2];
+  readonly projectMapSnapshotter?: ProjectMapSnapshotterPort;
   /** The lifecycle operations that remain server-owned (gate/commit/runtime policy). */
   readonly schedulerOperations: Omit<Phase1SchedulerPort, 'assign'>;
   /** Optional production wrapper that fences executor gate/commit and persists evidence. */
@@ -339,7 +341,12 @@ export function createPhase9RuntimeComposition(
     input.projectId,
     input.ch,
     input.snapshotBuilder,
-    { redis: input.redis },
+    {
+      redis: input.redis,
+      ...(input.projectMapSnapshotter === undefined ? {} : {
+        projectMapSnapshotter: input.projectMapSnapshotter,
+      }),
+    },
   );
   const taskTransitionService = new TaskTransitionService(input.ch, input.redis);
   const taskCausalLog = new TaskCausalLog(input.ch, input.redis);

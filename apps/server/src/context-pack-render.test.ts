@@ -30,6 +30,15 @@ describe('renderContextPack', () => {
     expect(renderContextPack([chunk({})])).not.toContain('Dosya fihristi');
   });
 
+  it('proje haritası bölümünü fihristten sonra yazar', () => {
+    const text = renderContextPack([
+      chunk({ sourceTable: 'project_maps', text: 'GET /api/health -> src/api.controller.ts:12', label: 'map#1' }),
+      chunk({ sourceTable: 'file_index', text: 'src/api.controller.ts', label: 'file' }),
+    ]);
+    expect(text).toContain('## Proje haritası');
+    expect(text.indexOf('Dosya fihristi')).toBeLessThan(text.indexOf('Proje haritası'));
+  });
+
   // Bağlam yoksa boş dize doğrudur; uydurma başlık modele yanlış sinyal verir.
   it('parça yoksa boş döner', () => {
     expect(renderContextPack([])).toBe('');

@@ -1,11 +1,14 @@
 import { readFile, stat } from 'node:fs/promises';
-import { BadRequestException, Controller, Get, Inject, NotFoundException, Param, Query } from '@nestjs/common';
+import { randomUUID } from 'node:crypto';
+import { BadRequestException, Controller, Get, Inject, NotFoundException, Param, Post, Query, Req } from '@nestjs/common';
 import { EntityIdSchema } from '@ww/shared';
-import { listFileIndex } from '@ww/db';
+import { createProjectMapSnapshot, getProjectMapSourceRef, listFileIndex } from '@ww/db';
 import { SERVER_DATABASE, type ServerDatabase } from './orchestration.module.js';
 import { getLatestProject } from '@ww/db';
 import { resolveWorkspaceBase, resolveWorkspaceRoot } from './runtime-context.js';
 import { resolveWorkspaceFile } from './workspace-file-path.js';
+import { buildProjectMap } from './project-map.js';
+import { parseLocalSession, type LocalSessionRequest } from './auth/local-session.js';
 
 /** Panelde okunabilir üst sınır; büyük dosya tarayıcıyı kilitler. */
 const MAX_FILE_BYTES = 512 * 1024;
@@ -22,6 +25,56 @@ export class FilesController {
       throw new Error('file index limiti gecersiz');
     }
     return listFileIndex(this.database.ch, id, parsedLimit);
+  }
+
+  @Get('map')
+  async map(@Param('projectId') projectId: string, @Query('limit') limit?: string) {
+    const id = EntityIdSchema.parse(projectId);
+    const parsedLimit = limit === undefined ? 1_000 : Number(limit);
+    if (!Number.isSafeInteger(parsedLimit) || parsedLimit < 1 || parsedLimit > 5_000) {
+      throw new Error('proje haritası limiti geçersiz');
+    }
+    const project = await getLatestProject(this.database.ch, id);
+    if (project === null) throw new Error('proje bulunamadı');
+    return buildProjectMap(
+      resolveWorkspaceRoot(resolveWorkspaceBase(), project.slug),
+      { limit: parsedLimit },
+    );
+  }
+
+  @Post('map/snapshots')
+  async createMapSnapshot(
+    @Req() request: LocalSessionRequest,
+    @Param('projectId') projectId: string,
+    @Query('limit') limit?: string,
+  ) {
+    parseLocalSession(request);
+    const id = EntityIdSchema.parse(projectId);
+    const parsedLimit = limit === undefined ? 1_000 : Number(limit);
+    if (!Number.isSafeInteger(parsedLimit) || parsedLimit < 1 || parsedLimit > 5_000) {
+      throw new Error('proje haritası limiti geçersiz');
+    }
+    const project = await getLatestProject(this.database.ch, id);
+    if (project === null) throw new Error('proje bulunamadı');
+    const map = await buildProjectMap(
+      resolveWorkspaceRoot(resolveWorkspaceBase(), project.slug),
+      { limit: parsedLimit },
+    );
+    const now = new Date().toISOString();
+    const snapshot = await createProjectMapSnapshot(this.database.ch, {
+      project_map_id: randomUUID(),
+      project_id: id,
+      map_json: map as never,
+      file_count: map.fileCount,
+      function_count: map.functionCount,
+      route_count: map.routeCount,
+      generated_at: map.generatedAt,
+      created_at: now,
+    });
+    return {
+      snapshot,
+      sourceRef: await getProjectMapSourceRef(this.database.ch, id, snapshot.project_map_id),
+    };
   }
 
   /**

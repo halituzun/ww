@@ -25,7 +25,7 @@ import { createExecutionErrorRecorder } from './execution-error-recorder.js';
 import { renderContextPack } from './context-pack-render.js';
 import { classifyArtifact, classifyLayer } from './artifact-classify.js';
 import { buildAgentCapabilities } from './agent-capabilities.js';
-import { appendArtifact, appendEvent, appendPromptInputSnapshot, getMessage, getTaskHandoff, listTaskCausalEntriesThroughCursor, listKnowledgeIdsBySourceTask, getPromptVersion, getTaskCausalCursor, getAssignmentAttempt, getLatestTask, listLatestAgents, listLatestApiProviders } from '@ww/db';
+import { appendArtifact, appendEvent, appendPromptInputSnapshot, createProjectMapSnapshot, getMessage, getTaskHandoff, listTaskCausalEntriesThroughCursor, listKnowledgeIdsBySourceTask, getPromptVersion, getTaskCausalCursor, getAssignmentAttempt, getLatestTask, listLatestAgents, listLatestApiProviders } from '@ww/db';
 import type { RuntimeModels } from './runtime-context.js';
 import type { Phase9RuntimeCompositionInput } from './runtime-composition.js';
 import { createLateBoundPort, type LateBoundPort } from './late-binding.js';
@@ -35,6 +35,7 @@ import { shouldRunStandardsAudit } from './audit-trigger.js';
 import { buildTaskSummary } from './task-summary.js';
 import type { LateBoundServices } from './late-bind-runtime.js';
 import { providerRequestsPerMinute } from './provider-rate.js';
+import { buildProjectMap } from './project-map.js';
 
 export interface AssemblyInput {
   ch: ClickHouseClient;
@@ -272,6 +273,21 @@ export async function createOrchestrationComposition(
     // Önbellek bilgisizliği "kapalı" saymaz (bkz. provider-health-cache.ts).
     providerHealth: (providerId: string) => providerHealth.statusOf(providerId),
     snapshotBuilder: new TaskContextSnapshotBuilder(input.ch),
+    projectMapSnapshotter: {
+      snapshot: async ({ projectId, cutoffAt }: { readonly projectId: string; readonly cutoffAt: string }) => {
+        const map = await buildProjectMap(input.projectRoot, { now: () => cutoffAt });
+        await createProjectMapSnapshot(input.ch, {
+          project_map_id: randomUUID(),
+          project_id: projectId,
+          map_json: map as never,
+          file_count: map.fileCount,
+          function_count: map.functionCount,
+          route_count: map.routeCount,
+          generated_at: map.generatedAt,
+          created_at: cutoffAt,
+        });
+      },
+    },
     executor,
     toolFactory: createToolPortFactory({
       executor: toolExecutorPort.proxy as never,
