@@ -317,6 +317,12 @@ describe('immutable task contracts', () => {
       version: 1,
       hash: HASH,
     }).sourceId).toBe('Role.Worker.Coding');
+    expect(VersionedSourceRefV1Schema.parse({
+      sourceType: 'project_map',
+      sourceId: CASE_ID,
+      version: 1,
+      hash: HASH,
+    }).sourceType).toBe('project_map');
     expect(TaskBriefV1Schema.safeParse({
       ...validBrief(),
       planId: CASE_ID,

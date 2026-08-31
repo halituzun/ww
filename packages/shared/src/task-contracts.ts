@@ -14,6 +14,7 @@ const GIT_HASH_SCHEMA = z.string().regex(/^[a-f0-9]{7,64}$/, 'geçerli bir git h
 
 export const SOURCE_MANIFEST_TYPES = [
   'task', 'plan', 'prompt', 'rule', 'standard', 'requirement', 'knowledge', 'summary',
+  'project_map',
 ] as const;
 
 export type SourceManifestType = (typeof SOURCE_MANIFEST_TYPES)[number];

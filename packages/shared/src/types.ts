@@ -72,3 +72,34 @@ export const ProviderInvocationProvenanceV1Schema = z.strictObject({
 export type ProviderInvocationProvenanceV1 = z.infer<
   typeof ProviderInvocationProvenanceV1Schema
 >;
+
+export interface OrgMember {
+  readonly role: string;
+  readonly count: number;
+  readonly model_tier: 'heavy' | 'medium' | 'light';
+}
+
+export interface OrgDepartment {
+  readonly id: string;
+  readonly name: string;
+  readonly group: string;
+  readonly lead_role: string;
+  readonly members: readonly OrgMember[];
+  readonly responsibility_patterns: readonly string[];
+  readonly rationale: string;
+}
+
+export interface OrgNonDepartmentRole {
+  readonly role: string;
+  readonly reports_to: string;
+  readonly rationale: string;
+}
+
+export interface OrgPlan {
+  readonly departments: readonly OrgDepartment[];
+  readonly non_department_roles: readonly OrgNonDepartmentRole[];
+  readonly concurrency_limit: number;
+  readonly estimated_tokens: number;
+  readonly estimated_cost_usd: number;
+  readonly dissenting_opinions?: readonly string[];
+}
