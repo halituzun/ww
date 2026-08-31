@@ -103,6 +103,29 @@ describe('auditMvvmView', () => {
       expect(found[0]!.ruleId).toBe('STD-002');
     });
 
+    // KURALIN EN ÇOK ÖNEMLİ OLDUĞU YÖN: docs/09 "tüm IO services üzerinden
+    // geçer" der, ama kural yalnız DOM'a bakıyordu. İki ViewModel
+    // (useApiConsoleViewModel, useSettingsViewModel) doğrudan `fetch` çağırıp
+    // services katmanını atlıyordu ve öz-denetim bunu HİÇ görmüyordu.
+    it('viewmodel dogrudan fetch cagirirsa bulgu acar', () => {
+      const found = auditStandards(
+        'apps/panel/src/viewmodels/useThing.ts',
+        "export function useThing() { return fetch('http://localhost:4000/x'); }\n",
+      );
+      expect(found).toHaveLength(1);
+      expect(found[0]!.ruleId).toBe('STD-002');
+      expect(found[0]!.summary).toContain('fetch');
+    });
+
+    // YANLIŞ POZİTİF KORUMASI: enjekte edilen bağımlılık zaten servis
+    // sınırından geçer; onu ihlal saymak test edilebilirliği cezalandırırdı.
+    it('enjekte edilen fetchImpl ihlal SAYILMAZ', () => {
+      expect(auditStandards(
+        'apps/panel/src/viewmodels/useThing.ts',
+        "export function useThing(fetchImpl = fetch) { return fetchImpl('/x'); }\n",
+      )).toHaveLength(0);
+    });
+
     // ASIL RİSK — YANLIŞ POZİTİF: `window.setInterval` bir ZAMANLAYICIDIR,
     // DOM erişimi değil. Mevcut viewmodel'lerin çoğu onu kullanıyor; bunu
     // ihlal saymak denetçiyi gürültüye boğar ve gürültü kapıyı aşındırır.

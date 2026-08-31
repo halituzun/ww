@@ -1,6 +1,7 @@
 import { useState, useCallback, useEffect } from "react";
 import { useHealth } from "./useHealth.js";
 import { fetchCliproxyStatus, type CliproxyGatewayStatus } from "../services/cliproxy.js";
+import { checkSessionToken } from "../services/session-check.js";
 
 export function useSettingsViewModel() {
   const health = useHealth();
@@ -72,19 +73,16 @@ export function useSettingsViewModel() {
     setValidating(true);
     setTokenValidationResult(null);
     try {
-      const token = trimmed.startsWith("Bearer ") ? trimmed.slice(7).trim() : trimmed;
-      const res = await fetch("http://localhost:4000/projects", {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      if (res.ok) {
+      const check = await checkSessionToken(trimmed);
+      if (check.ok) {
         setTokenValidationResult("Token doğrulandı: Oturum geçerli.");
-      } else if (res.status === 401) {
+      } else if (check.reason === "unauthorized") {
         setTokenValidationResult("Geçersiz token: Yetkilendirme reddedildi (401).");
+      } else if (check.reason === "unreachable") {
+        setTokenValidationResult("Sunucuya ulaşılamadı veya ağ hatası.");
       } else {
-        setTokenValidationResult(`Sunucu yanıtı: ${res.status}`);
+        setTokenValidationResult(`Sunucu yanıtı: ${check.status}`);
       }
-    } catch {
-      setTokenValidationResult("Sunucuya ulaşılamadı veya ağ hatası.");
     } finally {
       setValidating(false);
     }

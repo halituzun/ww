@@ -10,6 +10,7 @@
 // atılmaz ve bu açıkça söylenir.
 import { useCallback, useState } from 'react';
 import { fetchPreviewStatus, type PreviewStatus } from '../services/preview.js';
+import { sendApiConsoleRequest } from '../services/api-console.js';
 
 export interface ApiConsoleResult {
   readonly status: number | undefined;
@@ -26,14 +27,9 @@ export const SERVER_OFF_NOTE =
   'Projenin sunucusu çalışmıyor. Önizleme sekmesinden başlatın; '
   + 'aksi halde konsol başka bir sunucunun cevabını gösterirdi.';
 
-async function defaultSend(url: string): Promise<{ status: number; text: string }> {
-  const response = await fetch(url);
-  return { status: response.status, text: await response.text() };
-}
-
 export function useApiConsoleViewModel(projectId: string, ports: ApiConsolePorts = {}) {
   const loadStatus = ports.fetchStatus ?? fetchPreviewStatus;
-  const send = ports.send ?? defaultSend;
+  const send = ports.send ?? sendApiConsoleRequest;
 
   const [path, setPath] = useState('/');
   const [result, setResult] = useState<ApiConsoleResult | undefined>();

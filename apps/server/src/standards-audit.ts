@@ -101,18 +101,45 @@ export function auditViewModel(
   content: string,
 ): readonly StandardsViolation[] {
   if (!isViewModelFile(filePath)) return [];
-  const hit = codeLines(content).find((entry) =>
+  const lines = codeLines(content);
+  const violations: StandardsViolation[] = [];
+
+  const domHit = lines.find((entry) =>
     /\bdocument\s*\./.test(entry.text)
     || /\.(querySelector|getElementById|innerHTML)\b/.test(entry.text));
-  if (hit === undefined) return Object.freeze([]);
-  return Object.freeze([{
-    ruleId: 'STD-002' as const,
-    filePath,
-    summary: `ViewModel katmanı DOM'a dokunuyor: ${filePath}. `
-      + 'docs/09 gereği DOM erişimi View katmanına aittir.',
-    evidenceRefs: [`file:${filePath}:${hit.line}`],
-    severity: 'medium' as const,
-  }]);
+  if (domHit !== undefined) {
+    violations.push({
+      ruleId: 'STD-002' as const,
+      filePath,
+      summary: `ViewModel katmanı DOM'a dokunuyor: ${filePath}. `
+        + 'docs/09 gereği DOM erişimi View katmanına aittir.',
+      evidenceRefs: [`file:${filePath}:${domHit.line}`],
+      severity: 'medium' as const,
+    });
+  }
+
+  // NEDEN EKLENDİ: kural yalnız DOM'a bakıyordu, `fetch`'e bakmıyordu. Oysa
+  // docs/09'un asıl kuralı "TÜM IO services üzerinden geçer" ve ihlal en çok
+  // bu yönde oluyordu: iki ViewModel (useApiConsoleViewModel,
+  // useSettingsViewModel) doğrudan `fetch` çağırıp services katmanını
+  // atlıyordu ve öz-denetim bunu hiç görmüyordu.
+  //
+  // `fetchImpl` gibi ENJEKTE EDİLEN bağımlılıklar ihlal değildir: onlar
+  // zaten servis sınırından geçer.
+  const fetchHit = lines.find((entry) =>
+    /(^|[^.\w])fetch\s*\(/.test(entry.text) && !/fetchImpl/.test(entry.text));
+  if (fetchHit !== undefined) {
+    violations.push({
+      ruleId: 'STD-002' as const,
+      filePath,
+      summary: `ViewModel katmanında doğrudan fetch çağrısı var: ${filePath}. `
+        + 'docs/09 gereği tüm IO services katmanından geçer.',
+      evidenceRefs: [`file:${filePath}:${fetchHit.line}`],
+      severity: 'medium' as const,
+    });
+  }
+
+  return Object.freeze(violations);
 }
 
 /** docs/09: "Service React import etmez" — servis katmanı UI'dan bağımsızdır. */
