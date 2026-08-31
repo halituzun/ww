@@ -4,6 +4,7 @@ export * from './types.js';
 export * from './json.js';
 export * from './communication.js';
 export * from './task-contracts.js';
+export * from './plan-tasks.js';
 export * from './policy.js';
 export * from './transitions.js';
 export * from './event-cursor.js';

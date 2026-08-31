@@ -267,7 +267,24 @@ KARAR: UZLAŞILAMADI
 GEREKÇE: [Neden çözümsüz]
 ÖNERİ: [Kullanıcıya sunulacak seçenek]
 
-Son olarak NİHAİ DEPARTMANLAR ve GENEL DURUM satırını ekle.`;
+Son olarak NİHAİ DEPARTMANLAR ve GENEL DURUM satırını ekle.
+
+ZORUNLU: Yanıtının SONUNA makine tarafından okunacak iş kırılımını ekle.
+Bu bölüm olmadan plan onaylanamaz — onay hiçbir görev üretemez.
+
+## GÖREVLER
+### GÖREV g1 — [kısa görev başlığı]
+DOSYALAR: [virgülle ayrılmış GERÇEK dosya yolları, en az bir tane]
+KABUL: [kriter 1 | kriter 2]
+BAĞIMLI: [önceki görev anahtarı ya da -]
+GRUP: coding
+AÇIKLAMA: [tek cümle]
+
+Kurallar:
+- Her görevin EN AZ BİR hedef dosyası olmalı; hedefsiz görev hiçbir şey yazamaz.
+- Anahtarlar g1, g2, g3 ... biçiminde olmalı ve BAĞIMLI yalnız daha önce
+  tanımlanmış bir anahtara referans verebilir.
+- Yalnız bu projede gerçekten yapılacak işleri yaz; uydurma görev ekleme.`;
       break;
     }
   }
@@ -424,7 +441,10 @@ export class CouncilApplicationService {
         }
         const routed = await router.complete(member.modelRef, {
           messages: [{ role: 'user', content: buildCouncilTurnPrompt(kind, trimmedGoal, prior, roleNameFor(member as CouncilMember, composition.members)) }],
-          maxTokens: 600, // Yerel model bütçe kontrolü (Faz D2)
+          // Nihai sentez BULGU/KARAR bloklarına EK OLARAK makine okunur bir
+          // iş kırılımı taşır; 600 token bunu doldurmaya yetmiyor ve kesik
+          // çıktı [SENTEZLEME_BASARISIZ] sayılıyordu.
+          maxTokens: kind === 'final_synthesis' ? 1_400 : 600,
           meta: {
             purpose: 'council',
             projectId: project.project_id,
@@ -445,19 +465,22 @@ export class CouncilApplicationService {
 
         // Dil ve Şablon Doğrulaması (Tur 5 / final_synthesis)
         if (kind === 'final_synthesis') {
-          if (isEnglishOrObserverText(text) || !text.includes('BULGU') || !text.includes('KARAR:')) {
+          if (isEnglishOrObserverText(text) || !text.includes('BULGU') || !text.includes('KARAR:') || !text.includes('GÖREVLER')) {
             // Tekrar dene
             const retryRouted = await router.complete(member.modelRef, {
               messages: [
                 { role: 'user', content: buildCouncilTurnPrompt(kind, trimmedGoal, prior, roleNameFor(member as CouncilMember, composition.members)) },
                 { role: 'assistant', content: text },
-                { role: 'user', content: "Lütfen yanıtını SADECE TÜRKÇE yaz ve verilen BULGU/KARAR/GEREKÇE/PLANA YANSIMASI şablonunu aynen doldur." }
+                { role: 'user', content: "Lütfen yanıtını SADECE TÜRKÇE yaz, BULGU/KARAR/GEREKÇE/PLANA YANSIMASI şablonunu aynen doldur ve sonuna ## GÖREVLER bölümünü zorunlu biçimde ekle." }
               ],
-              maxTokens: 600,
+              // Görev kırılımı da bu yanıta sığmalı; 600 token şablonu
+              // doldurmaya çoğu zaman yetmiyordu ve kesik çıktı
+              // [SENTEZLEME_BASARISIZ] sayılıyordu.
+              maxTokens: kind === 'final_synthesis' ? 1_400 : 600,
               meta: { purpose: 'council', projectId: project.project_id, agentId: member.agentId }
             });
             const retryText = cleanLlmResponse(retryRouted.result.content ?? '');
-            if (retryText && !isEnglishOrObserverText(retryText) && retryText.includes('BULGU')) {
+            if (retryText && !isEnglishOrObserverText(retryText) && retryText.includes('BULGU') && retryText.includes('GÖREVLER')) {
               text = retryText;
             } else {
               // Model iki denemede de başarısız — sabit metin YASAK, failed_synthesis işareti koy.

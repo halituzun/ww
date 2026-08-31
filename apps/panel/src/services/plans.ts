@@ -27,13 +27,19 @@ export const fetchPlans = (
 ): Promise<Plan[]> =>
   getJson<Plan[]>(scope(projectId, "/plans"), options, "Planlar alınamadı");
 
+/** Onayın ürettiği görev sayısı; panel bunu olduğu gibi söyler. */
+export interface PlanApprovalResponse {
+  readonly createdTaskCount: number;
+  readonly createdTaskIds: readonly string[];
+}
+
 export const approvePlan = (
   projectId: string,
   planId: string,
   note?: string,
   options: RequestOptions = {}
-): Promise<unknown> =>
-  requestJson(
+): Promise<PlanApprovalResponse> =>
+  requestJson<PlanApprovalResponse>(
     scope(projectId, `/plans/${planId}/approval`),
     {
       ...options,

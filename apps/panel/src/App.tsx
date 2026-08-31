@@ -38,8 +38,13 @@ function AppContent() {
 
   const handleApprovePlan = useCallback(async () => {
     try {
-      await vm.approveCurrentPlan();
-      toast.success("Görev planı onaylandı. Görevler yürütmeye alındı.", "Plan Onaylandı");
+      // BİLDİRİM İŞLEMİN SONUCUNU SÖYLER. Eskiden "Görevler yürütmeye alındı"
+      // yazıyordu ama onay hiçbir görev üretmiyordu; kuyruk boş kalıyordu.
+      const createdTaskCount = await vm.approveCurrentPlan();
+      toast.success(
+        `Plan onaylandı. ${createdTaskCount} görev yürütmeye alındı.`,
+        "Plan Onaylandı",
+      );
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Plan onaylanamadı", "Hata");
     }

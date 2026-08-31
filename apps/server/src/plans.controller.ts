@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { BadRequestException, Body, Controller, Get, Inject, Injectable, Param, Post, Req } from '@nestjs/common';
-import { createPlan, getLatestProject, listLatestAgents, listLatestPlansByStatus } from '@ww/db';
+import { createPlan, createRedis, enqueueTask, getLatestProject, listLatestAgents, listLatestPlansByStatus, type WwRedis } from '@ww/db';
 import { PlanApprovalError, PlanApprovalService, ReplanningService } from '@ww/scheduler';
 import { parseApprovalInput } from './plan-approval.service.js';
 import { parseReplanInput } from './replan.service.js';
@@ -11,6 +11,7 @@ import { buildPlanRow, parsePlanInput } from './plans.service.js';
 
 @Injectable()
 export class PlanApplicationService {
+  #redis: Promise<WwRedis> | undefined;
   constructor(@Inject(SERVER_DATABASE) private readonly database: ServerDatabase) {}
 
   async create(projectId: string, input: ReturnType<typeof parsePlanInput>) {
@@ -36,9 +37,23 @@ export class PlanApplicationService {
    * ama çağıran yoktu: kullanıcı planı ne onaylayabiliyor ne reddedebiliyordu.
    */
   async decide(projectId: string, planId: string, input: ReturnType<typeof parseApprovalInput>) {
-    const service = new PlanApprovalService(this.database.ch);
+    // Onay artık görev ÜRETİR; kuyruk portu olmadan çağrılamaz. Port zorunlu
+    // olduğu için "onayladım ama hiçbir şey olmadı" durumu kablolama
+    // seviyesinde imkânsızdır.
+    const service = new PlanApprovalService(
+      this.database.ch,
+      {
+        enqueue: async (pid, taskId) => {
+          this.#redis ??= this.database.redis === undefined
+            ? createRedis()
+            : Promise.resolve(this.database.redis);
+          await enqueueTask(await this.#redis, `ww:queue:${pid}`, taskId);
+        },
+      },
+      { newTaskId: () => randomUUID() as EntityId },
+    );
     try {
-      return await service.apply({
+      const result = await service.apply({
         projectId: projectId as EntityId,
         planId: planId as EntityId,
         approved: input.approved,
@@ -47,6 +62,12 @@ export class PlanApplicationService {
         now: new Date().toISOString(),
         ...(input.note === undefined ? {} : { note: input.note }),
       });
+      // Panel bildirimi bu sayıyı OLDUĞU GİBİ söyler; uydurma metin yok.
+      return {
+        ...result.plan,
+        createdTaskCount: result.createdTasks.length,
+        createdTaskIds: result.createdTasks.map((task) => task.task_id),
+      };
     } catch (reason) {
       // Geçersiz durum geçişi kullanıcı hatasıdır; 500 sebebi gizler.
       if (reason instanceof PlanApprovalError) throw new BadRequestException(reason.message);

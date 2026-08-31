@@ -6,7 +6,7 @@
 //
 // Faz D: Konsey çıktısı artık 'org_plan' (departmanlar, liderler, sorumluluk
 // dosya desenleri, eşzamanlılık sınırı) ve 5 turluk müzakere dökümünü içerir.
-import { NIL_UUID, type EntityId, type OrgPlan } from '@ww/shared';
+import { parsePlanTasksFromMarkdown, type PlanTaskSpecV1, NIL_UUID, type EntityId, type OrgPlan } from '@ww/shared';
 
 export interface CouncilTurnLike {
   readonly memberId: string;
@@ -195,6 +195,16 @@ export function deriveOrgPlan(projectName: string, goal: string): OrgPlan {
 }
 
 export function buildCouncilPlan(input: CouncilPlanInput) {
+  const finalTurn = input.finalSynthesis ?? input.synthesis;
+  // Ayrıştırma hatası YUTULMAZ ama planın yazılmasını da engellemez: görevsiz
+  // plan yazılır, onay ucu bunu açıkça reddeder ve kullanıcı sebebi görür.
+  let planTasks: readonly PlanTaskSpecV1[] = [];
+  let planTaskError = '';
+  try {
+    planTasks = parsePlanTasksFromMarkdown(finalTurn.text);
+  } catch (reason) {
+    planTaskError = reason instanceof Error ? reason.message : String(reason);
+  }
   const effectiveOrgPlan = input.orgPlan ?? deriveOrgPlan(input.projectName, input.goal);
   const allTurns = input.allTurns ?? [
     ...input.proposals,
@@ -212,6 +222,7 @@ export function buildCouncilPlan(input: CouncilPlanInput) {
     `**Konsey üyeleri:** ${input.memberModelRefs.join(', ')}`,
     `**Durum:** ${input.status ?? 'converged'}`,
     ...(input.diversityWarning === '' ? [] : ['', `> ⚠️ ${input.diversityWarning}`]),
+    ...(planTaskError === '' ? [] : ['', `> ⚠️ Görev kırılımı okunamadı: ${planTaskError}`]),
     '',
     '## Sentez (Nihai Karar & Görevler)',
     '',
@@ -233,7 +244,11 @@ export function buildCouncilPlan(input: CouncilPlanInput) {
       members: [...input.memberModelRefs],
       org_plan: effectiveOrgPlan,
     },
-    scenarios_json: { scenarios: [] },
+    // GÖREV GRAFİĞİ. Bu alan eskiden her yerde `{ scenarios: [] }` olarak
+    // boş yazılıyor ve hiçbir üretim kodu okumuyordu; plan onayı da hiçbir
+    // görev üretmiyordu. Konseyin nihai sentezindeki `## GÖREVLER` bölümü
+    // burada makine okunur biçimde saklanır ve onay anında göreve dönüşür.
+    scenarios_json: { version: 1, tasks: planTasks },
     replan_reason: '',
     supersedes_plan_id: input.supersedesPlanId ?? NIL_UUID,
     created_by_agent_id: input.chairAgentId,
