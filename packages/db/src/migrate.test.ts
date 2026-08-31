@@ -175,7 +175,11 @@ describe('prompt seed migration', () => {
 });
 
 describe.skipIf(!up)('runMigrations', () => {
-  const db = `ww_test_migrate_${Date.now()}`;
+  // process.pid ZORUNLU: bu, veritabanı adında pid taşımayan TEK db testiydi.
+  // Vitest dosyaları paralel fork'larda koşar; aynı milisaniyede başlayan iki
+  // fork aynı veritabanını paylaşıyor ve birbirinin migration'ını eziyordu.
+  // Tam kapı yükü altında dalgalanan "migrate" hatasının kaynağı buydu.
+  const db = `ww_test_migrate_${Date.now()}_${process.pid}`;
   const admin = createCh({ database: 'default' });
   let firstApplied: string[] = [];
   let secondApplied: string[] = [];
