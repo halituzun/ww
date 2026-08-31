@@ -161,6 +161,17 @@ describe('prompt seed migration', () => {
     expect(sql.match(/WHERE source_hash NOT IN/g)).toHaveLength(6);
     expect(sql).not.toContain(' FINAL');
   });
+
+  it('Faz I project maps migrationı snapshot tablosunu restart-safe kurar', async () => {
+    const sql = await readFile(migrationUrl('0009_project_maps.sql'), 'utf8');
+    expect(sql).toContain('CREATE TABLE IF NOT EXISTS project_maps');
+    expect(sql).toContain('map_json String');
+    expect(sql).toContain('file_count UInt32');
+    expect(sql).toContain('function_count UInt32');
+    expect(sql).toContain('route_count UInt32');
+    expect(sql).toContain("generated_at DateTime64(3, 'UTC')");
+    expect(sql).toContain('row_hash FixedString(64)');
+  });
 });
 
 describe.skipIf(!up)('runMigrations', () => {
@@ -189,6 +200,8 @@ describe.skipIf(!up)('runMigrations', () => {
       '0005_receipt_quarantine.sql',
       '0006_task_acceptance_criteria.sql',
       '0007_provider_error_signal.sql',
+      '0008_decisions_ledger.sql',
+      '0009_project_maps.sql',
     ]);
     expect(secondApplied).toHaveLength(0);
   });

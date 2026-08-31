@@ -32,3 +32,5 @@ export * from './repositories/knowledge.js';
 export * from './repositories/summaries.js';
 export * from './repositories/audit-findings.js';
 export * from './repositories/prompts.js';
+export * from './repositories/decisions.js';
+export * from './repositories/project-maps.js';

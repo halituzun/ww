@@ -32,6 +32,8 @@ describe('@ww/db public repository surface', () => {
     expect(db.listLatestAgents).toBeTypeOf('function');
     expect(db.appendAuditFindingVersion).toBeTypeOf('function');
     expect(db.appendPromptVersion).toBeTypeOf('function');
+    expect(db.createProjectMapSnapshot).toBeTypeOf('function');
+    expect(db.getProjectMapSourceRef).toBeTypeOf('function');
     expect(db.RepositoryConflictError).toBeTypeOf('function');
   });
 });

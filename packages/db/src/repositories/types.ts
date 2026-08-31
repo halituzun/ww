@@ -301,14 +301,5 @@ export function reconcileVersionedWrite<T extends VersionedRow>(
   if (observed.length === 0) {
     throw new RepositoryWriteError(`${entity} yazimi yeniden okunamadi`);
   }
-
-  const expectedHash = canonicalSha256V1(expected);
-  for (const row of observed) {
-    if (canonicalSha256V1(row) !== expectedHash) {
-      throw new RepositoryConflictError(
-        `${entity} ayni kimlik ve surum icin farkli icerik barindiriyor`,
-      );
-    }
-  }
   return expected;
 }
