@@ -5,7 +5,8 @@ import {
   canonicalSha256V1,
   type EntityId,
 } from '@ww/shared';
-import { getFileIndex, getLatestProjectMapSnapshotAsOf, getPlanAsOf, getTaskAsOf, listFileIndex, listFileIndexAsOf, listFileIndexByPathsAsOf, listLatestKnowledgeByStatus, listLatestKnowledgeByStatusAsOf, listRecentMessages, listRecentSummaries, upsertFileIndex, type FileIndexLayer, type KnowledgeRow, type ProjectMapSnapshotRow } from '@ww/db';
+import { getFileIndex, getLatestProjectMapSnapshotAsOf, getPlanAsOf, getTaskAsOf, listFileIndex, listFileIndexAsOf, listFileIndexByPathsAsOf, listLatestKnowledgeByStatus, listLatestKnowledgeByStatusAsOf, listRecentMessages, listRecentSummaries,
+  listSummariesByRefIds, upsertFileIndex, type FileIndexLayer, type KnowledgeRow, type ProjectMapSnapshotRow } from '@ww/db';
 
 export interface MemoryChunk {
   readonly sourceTable: 'plans' | 'knowledge' | 'summaries' | 'file_index' | 'project_maps' | 'messages';
@@ -429,10 +430,12 @@ export class MemoryService {
       ...(task.parent_task_id === NIL_UUID ? [] : [task.parent_task_id]),
       ...task.depends_on,
     ]);
+    // Bağımlılıklar REF ile sorgulanır. Eskiden 200 satır çekilip
+    // filtreleniyordu; 200'den eski bir bağımlılık görünmez kalıyordu —
+    // yani yorumun uyardığı durumun ta kendisi gerçekleşiyordu.
     const relatedSummaries = relatedTaskIds.size === 0
       ? []
-      : (await listRecentSummaries(this.#ch, input.projectId, 200, cutoffAt))
-        .filter((row) => relatedTaskIds.has(row.ref_id))
+      : (await listSummariesByRefIds(this.#ch, input.projectId, [...relatedTaskIds], cutoffAt))
         .map((row) => Object.freeze({
           sourceTable: 'summaries' as const,
           sourceId: EntityIdSchema.parse(row.summary_id),

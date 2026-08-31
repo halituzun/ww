@@ -3,7 +3,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { createCh, type ClickHouseClient } from '../client.js';
 import { runMigrations } from '../migrate.js';
 import { clickhouseUp } from '../testutil.js';
-import { listRecentSummaries } from './summaries.js';
+import { listRecentSummaries, listSummariesByRefIds } from './summaries.js';
 
 const up = await clickhouseUp();
 describe.skipIf(!up)('summaries repository', () => {
@@ -73,5 +73,46 @@ describe.skipIf(!up)('summaries repository', () => {
 
     const rows = await listRecentSummaries(ch, projectId, 10);
     expect(rows.filter((item) => item.summary_id === summaryId)).toHaveLength(1);
+  });
+
+  // PENCERE HATASININ MÜHÜRÜ: bağımlılık özetleri eskiden son 200 satır
+  // çekilip ref_id'ye göre filtreleniyordu; 200'den eski bir bağımlılık
+  // GÖRÜNMEZ kalıyordu. Kodun kendi yorumu bunun neden yanlış olduğunu
+  // yazıyordu ama çözüm yine pencereye dayanıyordu.
+  it('bagimlilik ozetini yasindan BAGIMSIZ getirir', async () => {
+    const projectId = randomUUID();
+    const bagimlilikTaskId = randomUUID();
+    const agentId = randomUUID();
+
+    // Önce ESKİ bağımlılık özeti.
+    await ch.insert({
+      table: 'summaries',
+      values: [{
+        summary_id: randomUUID(), project_id: projectId, scope: 'task',
+        ref_id: bagimlilikTaskId, content: 'eski bagimlilik ozeti',
+        created_by_agent_id: agentId, created_at: '2020-01-01T00:00:00.000Z',
+      }],
+      format: 'JSONEachRow',
+    });
+    // Sonra onu penceresinden itecek kadar yeni özet.
+    for (let index = 0; index < 30; index += 1) {
+      await ch.insert({
+        table: 'summaries',
+        values: [{
+          summary_id: randomUUID(), project_id: projectId, scope: 'task',
+          ref_id: randomUUID(), content: `yeni ${index}`,
+          created_by_agent_id: agentId, created_at: '2026-08-31T09:00:00.000Z',
+        }],
+        format: 'JSONEachRow',
+      });
+    }
+
+    const rows = await listSummariesByRefIds(ch, projectId, [bagimlilikTaskId]);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.content).toBe('eski bagimlilik ozeti');
+  });
+
+  it('bos ref listesinde sorgu yapmaz', async () => {
+    expect(await listSummariesByRefIds(ch, randomUUID(), [])).toEqual([]);
   });
 });

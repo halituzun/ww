@@ -43,6 +43,43 @@ function parse(value: unknown): SummaryRow {
  * yeniden koşan bir görev, kendisinden sonra oluşmuş bilgiyi görmemelidir.
  */
 /**
+ * BELİRLİ görevlerin özetleri (bağımlılık/üst görev bağlamı).
+ *
+ * NEDEN VAR: çağıran taraf bağımlılık özetlerini `listRecentSummaries(...,
+ * 200)` ile çekip `ref_id`'ye göre FİLTRELİYORDU. Kodun kendi yorumu bunun
+ * neden yanlış olduğunu yazıyordu: "bir bağımlılık projenin en yeni beş
+ * özetinden eski olabilir ve yine de görülebilmelidir" — ama çözüm yine
+ * pencereye dayanıyordu ve 200'den eski bir bağımlılık GÖRÜNMEZ kalıyordu.
+ * Bu, hedef dosya fihristindeki pencere hatasının birebir aynı sınıfıydı.
+ */
+export async function listSummariesByRefIds(
+  ch: ClickHouseClient,
+  projectId: string,
+  refIds: readonly string[],
+  cutoffAt?: string,
+): Promise<readonly SummaryRow[]> {
+  const wanted = [...new Set(refIds)].filter((value) => value.trim() !== '');
+  if (wanted.length === 0) return [];
+  if (wanted.length > 500) throw new Error('summaries ref listesi cok uzun');
+  const id = concreteEntityId(projectId, 'projectId');
+  const result = await ch.query({
+    query: `SELECT ${COLUMNS} FROM summaries
+      WHERE project_id = {projectId:UUID}
+        AND ref_id IN {refIds:Array(UUID)}
+        ${cutoffAt === undefined ? '' : 'AND created_at <= parseDateTime64BestEffort({cutoff:String}, 3)'}
+      ORDER BY created_at DESC, summary_id ASC
+      LIMIT 1 BY summary_id`,
+    query_params: {
+      projectId: id,
+      refIds: wanted,
+      ...(cutoffAt === undefined ? {} : { cutoff: cutoffAt }),
+    },
+    format: 'JSONEachRow',
+  });
+  return (await result.json<unknown>()).map(parse);
+}
+
+/**
  * Son N özet. `LIMIT 1 BY summary_id` NEDEN VAR: tablo `MergeTree` (yani
  * ReplacingMergeTree DEĞİL) ve `summary_id` üzerinde benzersizlik yok. Aynı
  * özet iki kez yazılırsa kopya kalıcıdır; bağlam paketi son beş özeti aldığı
