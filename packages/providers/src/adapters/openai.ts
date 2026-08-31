@@ -1,7 +1,9 @@
 function stripThinkingBlocks(text: string | null | undefined): string | null {
   if (text === null || text === undefined) return null;
   // <think>...</think> veya <thought>...</thought> bloklarını temizler
-  const cleaned = text.replace(/<think>[\s\S]*?<\/think>/gi, '').replace(/<thought>[\s\S]*?<\/thought>/gi, '').trim();
+  let cleaned = text.replace(/<think>[\s\S]*?<\/think>/gi, '').replace(/<thought>[\s\S]*?<\/thought>/gi, '').trim();
+  // Emoji ve sembolleri temizler
+  cleaned = cleaned.replace(/[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}\u{FE0F}\u{200D}]/gu, '').replace(/[ \t]+/g, ' ').trim();
   return cleaned.length > 0 ? cleaned : null;
 }
 import OpenAI from 'openai';

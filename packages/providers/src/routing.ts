@@ -24,7 +24,7 @@ export interface RoutingIndex {
   fallbacks: (modelRef: string) => string[];
 }
 
-const MODEL_REF = /^[a-z0-9_-]+:[A-Za-z0-9._-]+$/;
+const MODEL_REF = /^[a-z0-9_-]+:[A-Za-z0-9._:-]+$/;
 const providerOf = (modelRef: string): string => modelRef.split(':')[0] ?? '';
 
 export function buildRoutingIndex(

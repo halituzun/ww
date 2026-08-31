@@ -93,7 +93,15 @@ export async function buildProviderRegistry(
 
     try {
       const keyRef = record.key_ref.trim() === '' ? record.provider_id : record.key_ref;
-      const apiKey = await keys.get(keyRef);
+      let apiKey: string | undefined;
+      try {
+        apiKey = await keys.get(keyRef);
+      } catch {
+        apiKey = undefined;
+      }
+      if (!apiKey && (record.provider_id === 'ollama' || record.base_url.includes('127.0.0.1') || record.base_url.includes('localhost'))) {
+        apiKey = 'ollama';
+      }
       if (apiKey === undefined || apiKey.trim() === '') {
         skipped.push({ providerId: record.provider_id, reason: 'no_key' });
         continue;
