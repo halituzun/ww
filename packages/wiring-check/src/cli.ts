@@ -33,6 +33,11 @@ const diff = diffAgainstBaseline(report.unwired, baseline, report.untested);
 console.log(`taranan dosya: ${files.length}`);
 console.log(`bağlantısız (testte var, üretimde yok): ${report.unwired.length}`);
 console.log(`hiç kullanılmayan: ${report.untested.length} (gerekçesiz: ${unbaselinedDeadCode(report, baseline).length})`);
+// KÖR NOKTA GÖRÜNÜR OLSUN: adı yaygın olan sınıf metotları `.ad(`
+// eşleşmesiyle doğrulanamaz ve eskiden sessizce "bağlı" sayılıyorlardı.
+// Kapıyı düşürmez — gerçekten bağlı olabilirler — ama ölçülemeyenin
+// ölçüldüğü sanılmamalı.
+console.log(`doğrulanamayan sınıf metodu: ${report.unverifiable.length} (adı yerleşik API'lerle çakışıyor)`);
 
 // ADLARI YAZ. Eskiden yalnız SAYI yazılıyordu: ölü kod sayılıyor ama kimse
 // üzerine gidemiyordu. `AgentCloneService` bu yüzden proje boyunca

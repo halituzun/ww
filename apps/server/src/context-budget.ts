@@ -52,7 +52,9 @@ export function effectiveTaskBudget(
   taskBudget: number | undefined,
   role?: AgentRole | string | undefined,
 ): number {
-  if (typeof taskBudget === 'number' && Number.isSafeInteger(taskBudget) && taskBudget > 0) {
+  if (typeof taskBudget === 'number'
+    && Number.isSafeInteger(taskBudget)
+    && taskBudget > TASK_BUDGET_UNSET) {
     return taskBudget;
   }
   const byRole = role === undefined ? undefined : ROLE_DEFAULT_TASK_BUDGET[role];
@@ -74,7 +76,7 @@ export function describeTaskBudget(
   role?: AgentRole | string | undefined,
 ): string {
   const effective = effectiveTaskBudget(taskBudget, role);
-  return taskBudget === undefined || taskBudget <= 0
+  return taskBudget === undefined || taskBudget <= TASK_BUDGET_UNSET
     ? `${effective} (varsayılan)`
     : String(effective);
 }

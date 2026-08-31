@@ -211,13 +211,15 @@ describe('sınıf metotları', () => {
           'export class RegError extends Error {}',
           '',
           'export class Registry {',
-          '  bind(x: string) { return x; }',
+          // Ad BİLEREK özgün: 'bind' yerleşik API'lerle çakışır ve
+          // doğrulanamaz sayılır; bu test sınıf gövdesi ayrıştırmasını ölçer.
+          '  bindAdapter(x: string) { return x; }',
           '}',
         ].join('\n'),
       },
-      { path: 'src/reg.test.ts', text: 'new Registry().bind("a");\n' },
+      { path: 'src/reg.test.ts', text: 'new Registry().bindAdapter("a");\n' },
     ]);
-    expect(report.unwired).toContain('src/reg.ts:Registry.bind');
+    expect(report.unwired).toContain('src/reg.ts:Registry.bindAdapter');
     expect(report.unwired).not.toContain('src/reg.ts:RegError.bind');
   });
 
@@ -283,4 +285,30 @@ describe('ölü kod temel listesi', () => {
       { symbol: 'src/a.ts:A.b', reason: 'bilinçli' },
     ])).toEqual(['src/c.ts:C.d']);
   });
+
+// KÖR NOKTANIN MÜHÜRÜ: metot bağlılığı `.ad(` deseniyle ölçülüyor. `get`,
+// `run`, `push` gibi adlar `Map.get(`, `Array.push(` çağrılarıyla eşleşir;
+// bu metotlar HER ZAMAN "bağlı" görünür ve asla raporlanamaz. Denetçi bunu
+// sessizce yutuyordu — yani sınıf metodu yüzeyinin bir bölümü kalıcı olarak
+// görünmezdi.
+describe('doğrulanamayan sınıf metotları', () => {
+  const file = (path: string, text: string) => ({ path, text });
+
+  it('adi yaygin olan metodu bagli SAYMAZ, dogrulanamaz olarak isaretler', () => {
+    const report = analyzeWiring([
+      file('packages/x/src/store.ts', 'export class Store {\n  get(key: string) { return key; }\n}\n'),
+    ]);
+    expect(report.unverifiable).toContain('packages/x/src/store.ts:Store.get');
+    expect(report.unwired).not.toContain('packages/x/src/store.ts:Store.get');
+    expect(report.untested).not.toContain('packages/x/src/store.ts:Store.get');
+  });
+
+  it('ozgun adli metot normal analiz edilir', () => {
+    const report = analyzeWiring([
+      file('packages/x/src/store.ts', 'export class Store {\n  hydrateFromDisk() { return 1; }\n}\n'),
+    ]);
+    expect(report.unverifiable).not.toContain('packages/x/src/store.ts:Store.hydrateFromDisk');
+    expect(report.untested).toContain('packages/x/src/store.ts:Store.hydrateFromDisk');
+  });
+});
 });

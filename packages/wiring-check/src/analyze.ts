@@ -21,6 +21,19 @@ export interface WiringReport {
   unwired: string[];
   /** Hiç kullanılmıyor — ayrı bir sorun (ölü kod), ayrı raporlanır. */
   untested: string[];
+  /**
+   * Adı yaygın olduğu için DOĞRULANAMAYAN sınıf metotları.
+   *
+   * NEDEN VAR: metot bağlılığı `.ad(` deseniyle ölçülüyor. `get`, `run`,
+   * `push`, `apply` gibi adlar `Map.get(`, `Array.push(`, `Object.assign(`
+   * çağrılarıyla eşleşir; bu metotlar HER ZAMAN "bağlı" görünür ve asla
+   * raporlanamaz. Denetçi bunu sessizce yutuyordu: yani sınıf metodu
+   * yüzeyinin bir bölümü kalıcı olarak görünmezdi.
+   *
+   * Kapıyı DÜŞÜRMEZ (gerçekten bağlı olabilirler) ama sayılır ve yazılır:
+   * ölçülemeyen şeyin ölçüldüğünü sanmak, ölçmemekten kötüdür.
+   */
+  unverifiable: string[];
 }
 
 export interface BaselineDiff {
@@ -84,6 +97,22 @@ const FRAMEWORK_METHODS = new Set([
 
 const CONTROL_KEYWORDS = new Set(['if', 'for', 'while', 'switch', 'catch', 'return', 'function']);
 
+/**
+ * `.ad(` eşleşmesini güvenilmez kılan adlar: yerleşik nesnelerin ve yaygın
+ * kütüphane API'lerinin metotları. Bu adları taşıyan bir sınıf metodu
+ * `Map.get(`, `Array.push(`, `Promise.then(` gibi ALAKASIZ çağrılarla
+ * eşleşir ve her zaman "bağlı" görünür.
+ */
+const AMBIGUOUS_METHOD_NAMES = new Set([
+  'get', 'set', 'has', 'add', 'delete', 'clear', 'keys', 'values', 'entries',
+  'push', 'pop', 'shift', 'slice', 'splice', 'join', 'map', 'filter', 'find',
+  'includes', 'forEach', 'sort', 'reverse', 'concat', 'flat',
+  'then', 'catch', 'finally', 'apply', 'call', 'bind', 'toString', 'valueOf',
+  'run', 'start', 'stop', 'close', 'open', 'send', 'emit', 'on', 'off', 'once',
+  'read', 'write', 'load', 'save', 'parse', 'test', 'exec', 'next', 'query',
+  'insert', 'update', 'remove', 'connect', 'destroy', 'end', 'json', 'text',
+]);
+
 const isController = (file: SourceFile): boolean =>
   /\.controller\.tsx?$/.test(file.path) || /@Controller\(/.test(file.text);
 
@@ -128,6 +157,7 @@ export function analyzeWiring(files: readonly SourceFile[]): WiringReport {
 
   const unwired: string[] = [];
   const untested: string[] = [];
+  const unverifiable: string[] = [];
 
   for (const [key, owner] of exports) {
     const name = key.slice(owner.path.length + 1);
@@ -153,6 +183,12 @@ export function analyzeWiring(files: readonly SourceFile[]): WiringReport {
   }
 
   for (const method of classMethods(files)) {
+    // ADI YAYGIN OLAN METOT ÖLÇÜLEMEZ. Sessizce "bağlı" saymak yerine
+    // ayrı sayılır: kör noktanın kendisi rapora girer.
+    if (AMBIGUOUS_METHOD_NAMES.has(method.name)) {
+      unverifiable.push(method.key);
+      continue;
+    }
     let production = 0;
     let testing = 0;
     for (const file of files) {
@@ -173,7 +209,11 @@ export function analyzeWiring(files: readonly SourceFile[]): WiringReport {
     else untested.push(method.key);
   }
 
-  return { unwired: unwired.sort(), untested: untested.sort() };
+  return {
+    unwired: unwired.sort(),
+    untested: untested.sort(),
+    unverifiable: unverifiable.sort(),
+  };
 }
 
 export function diffAgainstBaseline(
