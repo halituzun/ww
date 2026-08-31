@@ -1,6 +1,6 @@
 // PhaseProgressCard — SALT GÖRÜNÜM (docs/09 MVVM standardı)
 //
-// ⚠️  Faz ilerlemesi için ClickHouse'ta faz-bazlı bir tablo/alan YOKTUR.
+// ️  Faz ilerlemesi için ClickHouse'ta faz-bazlı bir tablo/alan YOKTUR.
 // tasks.group = agent grubu (frontend/backend/qa), faz değil.
 // plans.status = plan onay durumu (proposed/approved/superseded), faz değil.
 // project.status = genel durum (draft/gathering/planning/running/completed), faz değil.

@@ -20,7 +20,12 @@ export function ProvidersPage() {
         <small>Hesaplarını gateway’den, doğrudan API anahtarlarını aşağıdan yönet.</small>
       </div>
 
-      <ProviderHealthBadges providers={vm.providers} />
+      <ProviderHealthBadges
+        providers={vm.providers.map((provider) => ({
+          provider_id: provider.provider_id,
+          health_status: provider.health_status ?? 'unknown',
+        }))}
+      />
       <CliproxyGatewayCard />
 
       {vm.status ? <p className="provider-status" role="status">{vm.status}</p> : null}

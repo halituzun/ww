@@ -36,7 +36,7 @@ export function RoleModelTable({ providers }: { providers: readonly Provider[] }
 
       {vm.status ? <p className="provider-status" role="status">{vm.status}</p> : null}
       {warnings.map((warning) => (
-        <p key={warning} className="role-warning" role="note">⚠ {warning}</p>
+        <p key={warning} className="role-warning" role="note"> {warning}</p>
       ))}
       {vm.loading ? <p className="hint">Yükleniyor…</p> : null}
       {/* Boş tablo "hiç rol eşlemesi yok" gibi okunur; yükleme hatası
@@ -72,9 +72,9 @@ export function RoleModelTable({ providers }: { providers: readonly Provider[] }
                   {row.configured ? null : <span className="pill pill--paused">eşlenmedi</span>}
                 </th>
                 <td>
-                  {ROLE_TIERS[row.role] ? (
-                    <span className={`role-tier-badge role-tier-badge--${ROLE_TIERS[row.role].tone}`}>
-                      {ROLE_TIERS[row.role].label}
+                  {ROLE_TIERS[row.role] !== undefined ? (
+                    <span className={`role-tier-badge role-tier-badge--${ROLE_TIERS[row.role]!.tone}`}>
+                      {ROLE_TIERS[row.role]!.label}
                     </span>
                   ) : null}
                 </td>

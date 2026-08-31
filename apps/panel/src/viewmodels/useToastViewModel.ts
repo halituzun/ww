@@ -31,15 +31,15 @@ export function useToastViewModel() {
   }, [dismiss]);
 
   const success = useCallback((message: string, title?: string) => {
-    showToast({ type: "success", message, title });
+    showToast({ type: "success", message, ...(title === undefined ? {} : { title }) });
   }, [showToast]);
 
   const error = useCallback((message: string, title?: string) => {
-    showToast({ type: "error", message, title, duration: 6000 });
+    showToast({ type: "error", message, ...(title === undefined ? {} : { title }), duration: 6000 });
   }, [showToast]);
 
   const info = useCallback((message: string, title?: string) => {
-    showToast({ type: "info", message, title });
+    showToast({ type: "info", message, ...(title === undefined ? {} : { title }) });
   }, [showToast]);
 
   return {

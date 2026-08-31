@@ -43,7 +43,7 @@ function formatSender(
   const name = fallbackRole !== fromId ? fallbackRole : "Agent";
   return {
     name,
-    shortId: fromId.length > 8 ? fromId.slice(0, 8) : undefined,
+    ...(fromId.length > 8 ? { shortId: fromId.slice(0, 8) } : {}),
     isUser: false,
   };
 }
@@ -96,7 +96,7 @@ export function ChatPage({
                     <div className="chat-bubble-meta">
                       <strong className="chat-sender-name">{sender.name}</strong>
                       {sender.shortId ? (
-                        <code className="chat-sender-id" title={m.from}>
+                        <code className="chat-sender-id" title={m.from ?? ""}>
                           {sender.shortId}
                         </code>
                       ) : null}

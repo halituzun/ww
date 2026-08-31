@@ -2,7 +2,7 @@ function cleanModelName(modelRef: string | undefined): string {
   if (!modelRef || modelRef === '' || modelRef === 'unknown') return 'model bilinmiyor';
   const parts = modelRef.split(':');
   if (parts.length >= 2) {
-    const name = parts[1] ?? parts[0];
+    const name = parts[1] ?? parts[0] ?? 'model bilinmiyor';
     if (parts.length >= 3 && parts[2] !== 'latest') {
       return `${name}:${parts[2]}`;
     }
@@ -30,11 +30,17 @@ export function AgentDetail({ projectId, agentId, ports }: {
 }) {
   const { detail, error } = useAgentDetailViewModel(projectId, agentId, ports);
 
-  if (agentId === undefined) {
-    return <p className="hint">Geçmişi görmek için tuvalden bir agent seçin.</p>;
+  if (!agentId) {
+    return <p className="hint" style={{ padding: "16px", color: "#64748b", fontSize: "12px" }}>Geçmişi görmek için tuvalden bir agent seçin.</p>;
   }
-  if (error !== '') return <p className="canvas__error">{error}</p>;
-  if (detail === undefined) return <p className="hint">Yükleniyor…</p>;
+  if (error !== '') return <p className="canvas__error" style={{ padding: "16px", color: "#f87171" }}>{error}</p>;
+  if (detail === undefined) {
+    return (
+      <div style={{ padding: "16px", color: "#94a3b8", fontSize: "12px", display: "flex", alignItems: "center", gap: "8px" }}>
+        <span className="dot dot-waiting" style={{ animation: "pulse 1.5s infinite" }} /> Agent geçmişi yükleniyor…
+      </div>
+    );
+  }
 
   return (
     <section className="agent-detail" aria-label="Agent geçmişi">
@@ -66,6 +72,33 @@ export function AgentDetail({ projectId, agentId, ports }: {
           ))}
         </ul>
       )}
+
+      <div style={{ marginTop: '16px', borderTop: '1px solid rgba(255,255,255,0.08)', paddingTop: '12px' }}>
+        <h5 style={{ fontSize: '12px', color: '#94a3b8', marginBottom: '8px', fontWeight: 600 }}>Çift Yönlü Konuşma Geçmişi</h5>
+        {!detail.conversations || detail.conversations.length === 0 ? (
+          <p className="hint" style={{ fontSize: '11px' }}>Bu agent için henüz kayıtlı mesajlaşma yok.</p>
+        ) : (
+          <div className="agent-conversations-list" style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+            {detail.conversations.map((msg) => (
+              <div
+                key={msg.id}
+                style={{
+                  padding: '6px 8px',
+                  borderRadius: '6px',
+                  background: msg.direction === 'outgoing' ? 'rgba(56, 189, 248, 0.1)' : 'rgba(15, 23, 42, 0.6)',
+                  borderLeft: `3px solid ${msg.direction === 'outgoing' ? '#38bdf8' : '#10b981'}`,
+                  fontSize: '11px',
+                }}
+              >
+                <div style={{ display: 'flex', justifyContent: 'space-between', color: '#64748b', fontSize: '10px', marginBottom: '2px' }}>
+                  <span>{msg.direction === 'outgoing' ? '→ Gönderildi:' : '← Alındı:'} <strong style={{ color: '#cbd5e1' }}>{msg.counterpart}</strong></span>
+                </div>
+                <div style={{ color: '#e2e8f0', lineHeight: 1.35 }}>{msg.summary}</div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
     </section>
   );
 }

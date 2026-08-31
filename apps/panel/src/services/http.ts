@@ -23,12 +23,20 @@ export function apiUrl(baseUrl: string | undefined, path: string): string {
 }
 
 function sessionToken(options: RequestOptions): string {
-  return options.sessionToken ?? import.meta.env['VITE_SESSION_TOKEN'] ?? '';
+  const token = options.sessionToken ?? import.meta.env['VITE_SESSION_TOKEN'];
+  if (token === undefined || token.trim() === '') {
+    throw new Error('VITE_SESSION_TOKEN ayarlı değil; server WW_LOCAL_SESSION_TOKEN ile aynı olmalıdır');
+  }
+  return token;
 }
 
 /** WebSocket gibi Authorization başlığı taşıyamayan kanallar için oturum tokenı. */
 export function currentSessionToken(): string {
-  return import.meta.env['VITE_SESSION_TOKEN'] ?? '';
+  const token = import.meta.env['VITE_SESSION_TOKEN'];
+  if (token === undefined || token.trim() === '') {
+    throw new Error('VITE_SESSION_TOKEN ayarlı değil; server WW_LOCAL_SESSION_TOKEN ile aynı olmalıdır');
+  }
+  return token;
 }
 
 export function authHeaders(options: RequestOptions, withBody: boolean): Record<string, string> {
@@ -40,9 +48,18 @@ export function authHeaders(options: RequestOptions, withBody: boolean): Record<
 async function ensureOk(response: Response, what: string): Promise<void> {
   if (response.ok) return;
   if (response.status === 401) {
-    throw new Error(`${what}: yetkisiz — panel oturum tokenı (VITE_SESSION_TOKEN) server'ın WW_LOCAL_SESSION_TOKEN değeriyle aynı olmalı`);
+    throw new Error(`${what}: yetkisiz oturum (401)`);
   }
-  throw new Error(`${what}: ${response.status}`);
+  if (response.status === 404) {
+    throw new Error(`${what}: kayıt bulunamadı (404)`);
+  }
+  if (response.status === 400) {
+    throw new Error(`${what}: geçersiz istek (400)`);
+  }
+  if (response.status >= 500) {
+    throw new Error(`${what}: sunucu hatası (${response.status})`);
+  }
+  throw new Error(`${what}: işlem tamamlanamadı (${response.status})`);
 }
 
 // Yanlış hedefe giden istek HTML döndürür; ham JSON.parse hatası yerine nedeni söylenir.

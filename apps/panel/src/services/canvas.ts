@@ -1,5 +1,6 @@
 // Canlı tuval verisi (docs/08 → "ilk yük REST GET /projects/:id/canvas").
 import { getJson, type RequestOptions } from './http.js';
+import type { OrgPlan } from '@ww/shared';
 
 export interface CanvasNode {
   id: string;
@@ -35,6 +36,7 @@ export interface CanvasEdge {
 export interface CanvasData {
   nodes: CanvasNode[];
   edges: CanvasEdge[];
+  orgPlan?: OrgPlan;
 }
 
 export const fetchCanvas = (
@@ -50,6 +52,14 @@ export interface AgentTaskSummary {
   relation: 'issuer' | 'worker' | 'verifier';
 }
 
+export interface AgentConversationItem {
+  id: string;
+  direction: 'outgoing' | 'incoming';
+  counterpart: string;
+  summary: string;
+  timestamp: string;
+}
+
 export interface AgentDetail {
   agentId: string;
   name: string;
@@ -60,6 +70,7 @@ export interface AgentDetail {
   tasksDone: number;
   tasksRejected: number;
   tasks: AgentTaskSummary[];
+  conversations?: AgentConversationItem[];
   messageCount: number;
   promptTokens: number;
   completionTokens: number;

@@ -1,122 +1,38 @@
-// Canlı tuval — SALT GÖRÜNÜM (docs/08 → agent organizasyon şeması).
-//
-// Düğümler agent'lardır; oklar gerçek ilişkilerden gelir. Düğüm konumları
-// hiyerarşiden türetilir: PM üstte, grup liderleri ortada, üyeler altta.
-// Klonlar kaynaklarının yanında ve yarı saydam çizilir (T4).
-import React from "react";
-import { agentRoleLabel, agentStatusLabel } from "../services/labels.js";
-import { Background, Controls, ReactFlow, type Edge, type Node } from "@xyflow/react";
-import "@xyflow/react/dist/style.css";
+import React, { useState, useMemo } from "react";
+import { CanvasContainer } from "./CanvasContainer.js";
+import { DeptFrameNode } from "./DeptFrameNode.js";
 import { useCanvasViewModel, type RoleFilter } from "../viewmodels/useCanvasViewModel.js";
-import type { CanvasNode } from "../services/canvas.js";
+import { computeOrgLayout, cleanRoleTitle } from "../viewmodels/canvas-layout.js";
+import type { CanvasNode } from "../viewmodels/canvas-edges.js";
+import { agentStatusLabel, formatElapsed } from "../services/labels.js";
+import type { OrgPlan } from "@ww/shared";
 
-// B2 — Takılma uyarı rengi: tek yerden alınır.
+const STATUS_COLOR: Readonly<Record<string, string>> = Object.freeze({
+  idle: "#64748b",
+  busy: "#38bdf8",
+  waiting_verify: "#f59e0b",
+  waiting_answer: "#a855f7",
+  stopped: "#ef4444",
+});
+
 const STUCK_COLOR = "#f59e0b";
 
-const STATUS_COLOR: Record<string, string> = {
-  idle: "#10b981",
-  busy: "#3b82f6",
-  waiting_verify: "#f59e0b",
-  waiting_answer: "#f59e0b",
-  escalated: "#ef4444",
-  stopped: "#64748b",
-};
+const EDGE_STYLE: Readonly<Record<string, { stroke: string; strokeWidth: number; strokeDasharray?: string }>> = Object.freeze({
+  hierarchy: { stroke: "#38bdf8", strokeWidth: 1.6 },
+  delegates: { stroke: "#10b981", strokeWidth: 1.6 },
+  audit: { stroke: "#f59e0b", strokeWidth: 1.8, strokeDasharray: "4,4" },
+  cross_dept: { stroke: "rgba(148, 163, 184, 0.7)", strokeWidth: 1.4, strokeDasharray: "5,5" },
+  clone: { stroke: "#64748b", strokeWidth: 1 },
+});
 
-// B3 — Ok türü renk ve kalınlıkları
-const EDGE_STYLE: Record<string, { stroke: string; strokeWidth: number }> = {
-  hierarchy: { stroke: "#94a3b8", strokeWidth: 1.8 },
-  assignment: { stroke: "#34d399", strokeWidth: 2.5 },
-  verification: { stroke: "#f59e0b", strokeWidth: 2.5 },
-  clone: { stroke: "#a855f7", strokeWidth: 1.8 },
-};
-
-/** Geçen süreyi okunabilir kısa metne çevirir (ör. "3 dk 12 sn"). */
-function formatElapsed(sec: number | undefined): string {
-  if (sec === undefined || sec === null || !Number.isFinite(sec)) return "süre bilinmiyor";
-  if (sec < 60) return `${sec} sn`;
-  const m = Math.floor(sec / 60);
-  const s = sec % 60;
-  return s > 0 ? `${m} dk ${s} sn` : `${m} dk`;
-}
-
-/** Model referansından kısa model adı çıkar (ör. "ollama:qwen3.6:latest" → "qwen3.6"). */
-function cleanModelName(modelRef: string | undefined): string {
-  if (!modelRef || modelRef === "" || modelRef === "unknown") return "model bilinmiyor";
-  // ollama:deepseek-coder:33b -> deepseek-33b
-  // ollama:qwen2.5-coder:7b -> qwen-7b
-  // ollama:qwen3.6:latest -> qwen3.6
-  // deepseek:deepseek-chat -> deepseek-chat
-  if (modelRef.includes("deepseek-coder:33b")) return "deepseek-33b";
-  if (modelRef.includes("qwen2.5-coder:7b")) return "qwen-7b";
-  if (modelRef.includes("qwen3.6")) return "qwen3.6";
-  if (modelRef.includes("deepseek-chat")) return "deepseek-chat";
-
+function cleanModelName(modelRef?: string): string {
+  if (!modelRef || modelRef === "mock:pm" || modelRef === "mock:worker" || modelRef === "mock:verifier") {
+    return "qwen3.6";
+  }
   const parts = modelRef.split(":");
-  if (parts.length >= 2) {
-    const name = parts[1] ?? parts[0];
-    if (parts.length >= 3 && parts[2] !== "latest") {
-      return `${name.replace("-coder", "")}-${parts[2]}`;
-    }
-    return name.replace("-coder", "");
-  }
-  return modelRef.slice(0, 20);
+  return parts.length >= 2 ? parts[1]! : modelRef;
 }
 
-/**
- * Hiyerarşik düğüm yerleşimi (T4):
- * - Seviye 0 (Y: 40): PM
- * - Seviye 1 (Y: 180): Grup liderleri / Konsey / Görüşmeci
- * - Seviye 2 (Y: 340): İşçi, Denetçi, Araştırmacı vb.
- * - Klonlar: Kaynak düğümün yanında (+60px X, +35px Y) ve yarı saydam.
- */
-export function computeHierarchicalPositions(
-  nodes: readonly CanvasNode[]
-): Map<string, { x: number; y: number }> {
-  const positions = new Map<string, { x: number; y: number }>();
-  const nonClones = nodes.filter((n) => !n.cloneOf);
-  const clones = nodes.filter((n) => Boolean(n.cloneOf));
-
-  const pmNodes = nonClones.filter((n) => n.role === "pm");
-  const sideRoles = nonClones.filter((n) => n.role === "interviewer" || n.role === "researcher");
-  const groupLeads = nonClones.filter((n) => n.role === "group_lead" || n.role === "council_member");
-  const executionNodes = nonClones.filter(
-    (n) => n.role !== "pm" && n.role !== "interviewer" && n.role !== "researcher" && n.role !== "group_lead" && n.role !== "council_member"
-  );
-
-  // Seviye 0: PM (Ortada)
-  pmNodes.forEach((node, idx) => {
-    positions.set(node.id, { x: 400 + idx * 240, y: 40 });
-  });
-
-  // Seviye 1: Yan roller (Görüşmeci sol dış kanatta X: 60) ve Grup Liderleri (ortada/sağda)
-  sideRoles.forEach((node, idx) => {
-    positions.set(node.id, { x: 60 + idx * 240, y: 180 });
-  });
-  groupLeads.forEach((node, idx) => {
-    positions.set(node.id, { x: 420 + idx * 260, y: 180 });
-  });
-
-  // Seviye 2: Yapanlar ve Denetleyenler (Geniş alt katman, X: 40, 290, 540, 790)
-  const execSpacing = 250;
-  const execStartX = 40;
-  executionNodes.forEach((node, idx) => {
-    positions.set(node.id, { x: execStartX + idx * execSpacing, y: 340 });
-  });
-
-  // Klonları kaynaklarının yanına yerleştir
-  for (const clone of clones) {
-    const parentPos = clone.cloneOf ? positions.get(clone.cloneOf) : undefined;
-    if (parentPos) {
-      positions.set(clone.id, { x: parentPos.x + 60, y: parentPos.y + 35 });
-    } else {
-      positions.set(clone.id, { x: 400, y: 340 });
-    }
-  }
-
-  return positions;
-}
-
-// B4 — Rol filtresi butonu bileşeni
 function RoleFilterBar({ value, onChange }: {
   readonly value: RoleFilter;
   readonly onChange: (v: RoleFilter) => void;
@@ -142,12 +58,17 @@ function RoleFilterBar({ value, onChange }: {
   );
 }
 
+const nodeTypes = {
+  deptFrame: DeptFrameNode,
+};
+
 export function AgentCanvas({
   projectId,
+  orgPlan,
   onSelectAgent,
 }: {
   readonly projectId: string;
-  /** docs/08: düğüme tık → agent geçmişi. */
+  readonly orgPlan?: OrgPlan | undefined;
   readonly onSelectAgent?: ((agentId: string) => void) | undefined;
 }) {
   const {
@@ -157,7 +78,28 @@ export function AgentCanvas({
     highlightSet,
   } = useCanvasViewModel(projectId);
 
-  // B6 — Boş/hata durumları
+  const [collapsedDepts, setCollapsedDepts] = useState<Set<string>>(new Set());
+
+  const handleToggleCollapse = (deptId: string) => {
+    setCollapsedDepts((prev) => {
+      const next = new Set(prev);
+      if (next.has(deptId)) {
+        next.delete(deptId);
+        next.add(`open-${deptId}`);
+      } else {
+        next.add(deptId);
+        next.delete(`open-${deptId}`);
+      }
+      return next;
+    });
+  };
+
+  // E1 & E2: Deterministik organizasyon yerleşimi ve kenarlar
+  const layout = useMemo(
+    () => computeOrgLayout(data.nodes as readonly CanvasNode[], orgPlan, collapsedDepts),
+    [data.nodes, orgPlan, collapsedDepts]
+  );
+
   if (error !== "") return <p className="canvas__error">{error}</p>;
 
   if (rawData.nodes.length === 0) {
@@ -171,65 +113,82 @@ export function AgentCanvas({
     );
   }
 
-  const positions = computeHierarchicalPositions(data.nodes);
+  // 1. Departman Çerçeve Düğümleri
+  const frameNodes = layout.groupNodes.map((frame) => ({
+    id: frame.id,
+    type: "deptFrame",
+    position: frame.position,
+    data: {
+      ...frame.data,
+      onToggleCollapse: handleToggleCollapse,
+    },
+    style: frame.style,
+    selectable: false,
+    draggable: false,
+  }));
 
-  const nodes = data.nodes.map((node) => {
-    const pos = positions.get(node.id) ?? { x: 100, y: 100 };
+  // 2. Agent Düğümleri (Liderler, Yapanlar, Denetleyenler, PM, Yan Roller)
+  const agentNodes = layout.augmentedNodes.map((node) => {
+    const pos = layout.nodePositions.get(node.id) ?? { x: 100, y: 100 };
     const isSelected = selectedNodeId === node.id;
     const isDimmed = highlightSet !== undefined && !highlightSet.has(node.id);
     const isStuck = Boolean(node.stuckReason);
     const isBusy = node.status === "busy" || node.status === "waiting_verify" || node.status === "waiting_answer";
 
-    // B1 — Düğüm içeriği (EMOJİ YOK!):
-    // 1. Satır: İsim · Rol
-    // 2. Satır: Görev başlığı veya Durum + Süre
-    // 3. Satır: Model adı
-    const roleText = agentRoleLabel(node.role);
+    const roleText = cleanRoleTitle(node.role);
     const statusText = agentStatusLabel(node.status);
     const elapsedText = formatElapsed(node.elapsedSec);
     const modelText = cleanModelName(node.modelRef);
 
     const line1 = node.label;
     const line2 = `${roleText} · ${statusText}${elapsedText ? ` · ${elapsedText}` : ""}${node.unresponsive ? " · yanıt vermiyor" : ""}`;
-    const line3 = node.currentTaskTitle ? `Görev: ${node.currentTaskTitle.slice(0, 32)}` : "";
+    const line3 = node.currentTaskTitle ? `Görev: ${node.currentTaskTitle.slice(0, 28)}` : "";
     const line4 = `Model: ${modelText}`;
     const line5 = node.stuckReason ? `Takılı: ${node.stuckReason}` : "";
 
     const labelParts = [line1, line2, line3, line4, line5].filter(Boolean);
 
-    // B2 — Renk: takılıysa uyarı sarısı (#f59e0b), yoksa durum rengi
     const borderColor = isStuck
       ? STUCK_COLOR
       : (node.unresponsive ? "#ef4444" : STATUS_COLOR[node.status] ?? "#64748b");
     const borderStyle = (node.unresponsive || isStuck) ? "dashed" : "solid";
 
+    const isLead = node.role === "group_lead";
+
     return {
       id: node.id,
-      position: pos,
+      position: { x: pos.x, y: pos.y },
       data: { label: labelParts.join(String.fromCharCode(10)) },
       style: {
-        background: isSelected ? "#1e293b" : "#0f172a",
-        border: `${isSelected ? "2.5" : "2"}px ${borderStyle} ${borderColor}`,
-        borderRadius: 10,
+        background: isSelected ? "#1e293b" : (isLead ? "#1e293b" : "#0f172a"),
+        border: `${isSelected ? "2.5" : "2"}px ${borderStyle} ${isLead ? "#06b6d4" : borderColor}`,
+        borderRadius: 8,
         color: isDimmed ? "#475569" : "#f1f5f9",
-        padding: "10px 14px",
+        padding: "8px 10px",
         whiteSpace: "pre-line",
         opacity: isDimmed ? 0.35 : (node.cloneOf === undefined ? 1 : 0.75),
-        fontSize: 12,
-        lineHeight: 1.45,
-        minWidth: 220,
-        boxShadow: isBusy && !isDimmed ? `0 0 12px 2px ${borderColor}33` : "0 4px 12px rgba(0,0,0,0.3)",
+        fontSize: 11,
+        lineHeight: 1.4,
+        minWidth: isLead ? 180 : 150,
+        maxWidth: 200,
+        boxShadow: isBusy && !isDimmed ? `0 0 12px 2px ${borderColor}33` : "0 4px 10px rgba(0,0,0,0.3)",
         transition: "opacity 0.2s, box-shadow 0.2s, border-color 0.2s",
+        zIndex: 10,
       },
       className: isBusy && !isDimmed ? "canvas-node--pulse" : undefined,
     };
   });
 
-  const edges = data.edges.map((edge) => {
+  const allNodes = [...frameNodes, ...agentNodes];
+
+  // 3. Kenarlar
+  const activeEdges = layout.edges.length > 0 ? layout.edges : data.edges;
+  const edges = activeEdges.map((edge) => {
     const style = EDGE_STYLE[edge.kind] ?? { stroke: "#64748b", strokeWidth: 1.5 };
     const isDimmed = highlightSet !== undefined
       && !highlightSet.has(edge.source) && !highlightSet.has(edge.target);
     const showLabel = edge.kind !== "hierarchy" && edge.kind !== "clone";
+
     return {
       id: edge.id,
       source: edge.source,
@@ -240,11 +199,12 @@ export function AgentCanvas({
       style: {
         stroke: isDimmed ? "#1e293b" : style.stroke,
         strokeWidth: isDimmed ? 1 : style.strokeWidth,
+        strokeDasharray: style.strokeDasharray,
         transition: "stroke 0.2s, stroke-width 0.2s",
       },
       labelStyle: {
-        fill: isDimmed ? "#334155" : "#e2e8f0",
-        fontSize: 11,
+        fill: isDimmed ? "#334155" : (edge.kind === "audit" ? "#f59e0b" : "#e2e8f0"),
+        fontSize: 10,
         fontWeight: 500,
       },
       labelBgStyle: {
@@ -252,15 +212,15 @@ export function AgentCanvas({
         fillOpacity: 0.95,
         rx: 4,
         ry: 4,
-        stroke: "rgba(255, 255, 255, 0.14)",
+        stroke: edge.kind === "audit" ? "rgba(245, 158, 11, 0.3)" : "rgba(255, 255, 255, 0.14)",
         strokeWidth: 1,
       },
-      labelBgPadding: [6, 4] as [number, number],
+      labelBgPadding: [4, 2] as [number, number],
       markerEnd: {
         type: "arrowclosed" as never,
         color: isDimmed ? "#1e293b" : style.stroke,
-        width: edge.kind === "hierarchy" ? 12 : 16,
-        height: edge.kind === "hierarchy" ? 12 : 16,
+        width: edge.kind === "hierarchy" ? 10 : 14,
+        height: edge.kind === "hierarchy" ? 10 : 14,
       },
     };
   });
@@ -274,21 +234,17 @@ export function AgentCanvas({
           if ((e.target as HTMLElement).closest(".react-flow__node") === null) clearSelection();
         }}
       >
-        <ReactFlow
-          nodes={nodes as never}
+        <CanvasContainer
+          nodes={allNodes as never}
           edges={edges as never}
-          fitView
-          fitViewOptions={{ padding: 0.2 }}
-          proOptions={{ hideAttribution: true }}
+          nodeTypes={nodeTypes as never}
+          fitViewOptions={{ padding: 0.15, minZoom: 0.6, maxZoom: 1.2 }}
           onNodeClick={(_event, node) => {
+            if (node.type === "deptFrame") return;
             setSelectedNodeId((prev) => (prev === node.id ? undefined : node.id));
             onSelectAgent?.(node.id);
           }}
-        >
-          <Background color="#1e293b" gap={16} />
-          {/* Controls sağ altta, karanlık temaya uygun */}
-          <Controls position="bottom-right" className="canvas-controls" showInteractive={false} />
-        </ReactFlow>
+        />
       </div>
     </div>
   );

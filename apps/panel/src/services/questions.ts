@@ -57,6 +57,7 @@ export const answerQuestion = (
 
 export interface ChatMessage {
   messageId: string;
+  from?: string;
   kind: string;
   taskId?: string;
   payload?: { text?: string; [key: string]: unknown };

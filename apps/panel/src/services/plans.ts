@@ -6,6 +6,8 @@ export interface Plan {
   readonly title: string;
   readonly content_md: string;
   readonly status: "proposed" | "approved" | "rejected" | "superseded";
+  readonly team_json?: unknown;
+  readonly scenarios_json?: unknown;
   readonly plan_version?: number;
   readonly version?: number;
   readonly approved_by?: string;

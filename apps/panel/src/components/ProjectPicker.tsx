@@ -35,7 +35,7 @@ export function ProjectPicker({
       {onExpressCreate && onExpressPrompt ? (
         <div className="express-create">
           <div className="express-create__head">
-            <span className="express-badge">⚡ HIZLI BAŞLAT</span>
+            <span className="express-badge"> HIZLI BAŞLAT</span>
             <h3>Tek Cümleyle Hızlı Başlat (Express Modu)</h3>
           </div>
           <p className="hint">Ne tür bir uygulama istediğinizi tek cümleyle yazın, sistem gereksinimleri ve planı anında hazırlasın.</p>

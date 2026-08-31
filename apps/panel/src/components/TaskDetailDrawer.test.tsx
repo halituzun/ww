@@ -27,7 +27,7 @@ describe("TaskDetailDrawer", () => {
     expect(screen.getByText("Kullanıcı Oturumu Açma")).toBeDefined();
     expect(screen.getByText("JWT tabanlı oturum yönetimi ekle")).toBeDefined();
     expect(screen.getByText("JWT üretilmeli")).toBeDefined();
-    expect(screen.getByText("📄 src/auth.ts")).toBeDefined();
+    expect(screen.getByText("src/auth.ts")).toBeDefined();
     expect(screen.getByText("çalışıyor")).toBeDefined();
 
     fireEvent.click(screen.getByLabelText("Kapat"));

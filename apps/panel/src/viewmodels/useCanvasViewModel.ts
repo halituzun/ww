@@ -82,6 +82,7 @@ export function useCanvasViewModel(projectId: string, ports: CanvasViewModelPort
   return {
     data: filteredData,
     rawData: data,
+    orgPlan: data.orgPlan,
     error,
     roleFilter, setRoleFilter,
     selectedNodeId, setSelectedNodeId, clearSelection,

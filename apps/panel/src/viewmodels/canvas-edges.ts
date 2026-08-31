@@ -14,14 +14,30 @@ export interface CanvasTask {
   readonly parent_task_id?: string;
 }
 
-export type CanvasEdgeKind = 'depends' | 'delegates';
+export type CanvasEdgeKind = 'depends' | 'delegates' | 'hierarchy' | 'clone' | 'audit' | 'cross_dept';
 
 export interface CanvasEdge {
   readonly id: string;
   readonly source: string;
   readonly target: string;
   readonly kind: CanvasEdgeKind;
-  readonly animated: boolean;
+  readonly animated?: boolean;
+  readonly label?: string;
+}
+
+export interface CanvasNode {
+  readonly id: string;
+  readonly label: string;
+  readonly role: string;
+  readonly status: string;
+  readonly currentTaskId?: string;
+  readonly currentTaskTitle?: string;
+  readonly modelRef: string;
+  readonly elapsedSec: number;
+  readonly stuckReason?: string;
+  readonly cloneOf?: string;
+  readonly unresponsive?: boolean;
+  readonly departmentId?: string;
 }
 
 const NIL = '00000000-0000-0000-0000-000000000000';

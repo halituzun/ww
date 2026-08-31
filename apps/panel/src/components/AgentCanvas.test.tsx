@@ -51,7 +51,36 @@ describe('AgentCanvas', () => {
 
     render(<AgentCanvas projectId="p1" />);
     // Etiketler TÜRKÇE (karar K6): tuval kullanıcıya iç kimlik göstermez.
-    await waitFor(() => expect(screen.getByText(/yapan · meşgul/)).toBeDefined());
+    await waitFor(() => expect(screen.getByText(/yapan · meşgul/i)).toBeDefined());
+  });
+
+  it('departman çerçevesini ve grup etiketini render eder', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(respond({
+      nodes: [
+        { id: 'pm1', label: 'PM Agent', role: 'pm', modelRef: 'ollama:qwen3.6', status: 'busy' },
+        { id: 'w1', label: 'Worker 1', role: 'worker', group: 'coding', modelRef: 'deepseek:deepseek-chat', status: 'busy' },
+      ],
+      edges: [],
+    }) as never);
+
+    render(<AgentCanvas projectId="p1" orgPlan={{
+      departments: [{
+        id: 'dept-ui',
+        name: 'Kullanıcı Arayüzü & Sunum',
+        group: 'design',
+        lead_role: 'group_lead',
+        members: [{ role: 'worker', count: 1, model_tier: 'light' }],
+        responsibility_patterns: ['src/views/**'],
+        rationale: 'Arayüz',
+      }],
+      non_department_roles: [],
+      concurrency_limit: 2,
+      estimated_tokens: 1000,
+      estimated_cost_usd: 0.01,
+    }} />);
+
+    await waitFor(() => expect(screen.getByText(/Kullanıcı Arayüzü & Sunum/)).toBeDefined());
+    expect(screen.getByText(/src\/views\/\*\*/)).toBeDefined();
   });
 });
 

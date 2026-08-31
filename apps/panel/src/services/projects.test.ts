@@ -1,10 +1,12 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
   askNarrator,
+  createProjectMapSnapshot,
   createProject,
   createExpressProject,
   fetchApiArtifacts,
   fetchFiles,
+  fetchProjectMap,
   fetchProjects,
   fetchTasks,
   fetchProviderHealth,
@@ -59,6 +61,7 @@ describe('okuma uçları', () => {
     ['tasks', fetchTasks, '/projects/p1/tasks'],
     ['usage', fetchUsage, '/projects/p1/usage'],
     ['files', fetchFiles, '/projects/p1/files'],
+    ['project-map', fetchProjectMap, '/projects/p1/files/map'],
     ['artifacts', fetchApiArtifacts, '/projects/p1/artifacts?type=api_endpoint'],
   ] as const)('%s ucunu proje kapsamında çağırır', async (_name, call, expected) => {
     const mock = vi.fn(async () => jsonResponse([]));
@@ -86,6 +89,15 @@ describe('okuma uçları', () => {
 });
 
 describe('yazma uçları', () => {
+  it('proje haritası snapshotini yetkili POST ile kaydeder', async () => {
+    const mock = vi.fn(async () => jsonResponse({ snapshot: { project_map_id: 'm1' }, sourceRef: null }));
+    await createProjectMapSnapshot('p1', {
+      fetchImpl: mock as unknown as typeof fetch, sessionToken: 'tok',
+    });
+    expect(urlOf(mock)).toBe(`${DEFAULT_API_BASE}/projects/p1/files/map/snapshots`);
+    expect(initOf(mock).method).toBe('POST');
+  });
+
   it('proje durumunu yetkili PATCH ile günceller', async () => {
     const mock = vi.fn(async () => jsonResponse({ status: 'paused' }));
     await updateProjectStatus('p1', 'paused', {

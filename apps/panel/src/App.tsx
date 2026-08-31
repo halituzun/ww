@@ -75,7 +75,7 @@ function AppContent() {
     onNavigate: navigate,
     projects: vm.projects,
     onSelectProject: vm.setProjectId,
-    onApprovePlan: vm.activePlan?.status === "proposed" ? handleApprovePlan : undefined,
+    ...(vm.activePlan?.status === "proposed" ? { onApprovePlan: handleApprovePlan } : {}),
   });
 
   useKeyboardShortcuts({
@@ -112,9 +112,15 @@ function AppContent() {
           />
         );
       case "canvas":
+        const parsedTeam = typeof vm.activePlan?.team_json === "string"
+          ? (() => { try { return JSON.parse(vm.activePlan.team_json); } catch { return undefined; } })()
+          : vm.activePlan?.team_json;
+        const currentOrgPlan = (parsedTeam as { org_plan?: any } | undefined)?.org_plan;
         return (
           <CanvasPanel
             projectId={vm.projectId}
+            orgPlan={currentOrgPlan}
+            planContentMd={vm.activePlan?.content_md || vm.plans[0]?.content_md}
             events={vm.events}
             cursor={vm.timelineCursor}
             onCursor={vm.setTimelineCursor}
@@ -234,7 +240,7 @@ function AppContent() {
         onClose={() => vm.setSelectedTaskId(undefined)}
         findings={vm.auditReport.recordFindings}
         artifacts={vm.apiArtifacts}
-        agents={vm.replay.nodes}
+        agents={[]}
         onSelectFile={(path) => {
           vm.setSelectedFile(path);
           navigate("files");

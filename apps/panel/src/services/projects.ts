@@ -11,14 +11,28 @@ export interface Project {
 
 export interface Task {
   task_id: string;
+  project_id?: string;
+  plan_id?: string;
+  parent_task_id?: string;
   title: string;
+  description?: string;
+  acceptance_criteria?: string[];
   status: string;
   priority: number;
+  created_at?: string;
   updated_at: string;
   target_files?: string[];
   /** Tuval oklarının gerçek kaynağı: bağımlılık ve delegasyon (docs/08). */
   depends_on?: string[];
-  parent_task_id?: string;
+  issuer_agent_id?: string;
+  worker_agent_id?: string;
+  verifier_agent_id?: string;
+  group?: string;
+  attempt?: number;
+  max_attempts?: number;
+  token_budget?: number;
+  tokens_spent?: number | string;
+  version?: string | number;
 }
 
 export interface Usage {
@@ -41,6 +55,66 @@ export interface FileIndex {
   last_commit_hash: string;
   change_count: number;
   updated_at: string;
+}
+
+export interface ProjectMapFunction {
+  name: string;
+  filePath: string;
+  line: number;
+  exported: boolean;
+  async: boolean;
+  kind: 'function' | 'arrow_function' | 'method';
+  parent: string;
+}
+
+export interface ProjectMapRoute {
+  controller: string;
+  methodName: string;
+  httpMethod: string;
+  routePath: string;
+  filePath: string;
+  line: number;
+}
+
+export interface ProjectMapFile {
+  filePath: string;
+  layer: string;
+  exports: string[];
+  functions: ProjectMapFunction[];
+  routes: ProjectMapRoute[];
+}
+
+export interface ProjectMap {
+  root: string;
+  generatedAt: string;
+  fileCount: number;
+  functionCount: number;
+  routeCount: number;
+  files: ProjectMapFile[];
+  functions: ProjectMapFunction[];
+  routes: ProjectMapRoute[];
+}
+
+export interface VersionedSourceRef {
+  sourceType: string;
+  sourceId: string;
+  version: number;
+  hash: string;
+}
+
+export interface ProjectMapSnapshotResult {
+  snapshot: {
+    project_map_id: string;
+    project_id: string;
+    map_json: ProjectMap;
+    file_count: number;
+    function_count: number;
+    route_count: number;
+    generated_at: string;
+    created_at: string;
+    version: string;
+  };
+  sourceRef: VersionedSourceRef | null;
 }
 
 export interface ArtifactDetail {
@@ -133,6 +207,19 @@ export const fetchUsage = (projectId: string, options: RequestOptions = {}): Pro
 
 export const fetchFiles = (projectId: string, options: RequestOptions = {}): Promise<FileIndex[]> =>
   getJson<FileIndex[]>(scope(projectId, '/files'), options);
+
+export const fetchProjectMap = (projectId: string, options: RequestOptions = {}): Promise<ProjectMap> =>
+  getJson<ProjectMap>(scope(projectId, '/files/map'), options);
+
+export const createProjectMapSnapshot = (
+  projectId: string,
+  options: RequestOptions = {},
+): Promise<ProjectMapSnapshotResult> =>
+  requestJson<ProjectMapSnapshotResult>(
+    scope(projectId, '/files/map/snapshots'),
+    { ...options, method: 'POST' },
+    'Proje haritası snapshot kaydedilemedi',
+  );
 
 // HATAYI YUTMAZ: boş dizi hiç rozet çizdirmiyordu ve rozetin YOKLUĞU
 // "her şey yolunda" diye okunuyordu — docs/04 düşen sağlayıcının panelde

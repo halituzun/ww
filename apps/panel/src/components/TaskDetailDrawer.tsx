@@ -1,10 +1,9 @@
 import React from "react";
 import { taskStatusLabel, isTaskRunning, isTaskDone } from "../services/task-status.js";
 import { agentRoleLabel, agentGroupLabel, taskGroupLabel, messageKindLabel } from "../services/labels.js";
-import type { Task } from "../services/projects.js";
-import type { AuditFinding } from "../services/audit.js";
+import type { ApiArtifact, Task } from "../services/projects.js";
+import type { AuditFinding, RecordFinding } from "../services/audit.js";
 import type { ChatMessage } from "../services/questions.js";
-import type { Artifact } from "../services/files.js";
 import type { CanvasNode } from "../services/canvas.js";
 
 export function TaskDetailDrawer({
@@ -18,9 +17,9 @@ export function TaskDetailDrawer({
 }: {
   readonly task: Task | undefined;
   readonly onClose: () => void;
-  readonly findings?: readonly AuditFinding[];
+  readonly findings?: readonly (AuditFinding | RecordFinding)[];
   readonly messages?: readonly ChatMessage[];
-  readonly artifacts?: readonly Artifact[];
+  readonly artifacts?: readonly ApiArtifact[];
   readonly agents?: readonly CanvasNode[];
   readonly onSelectFile?: (path: string) => void;
 }) {
@@ -29,7 +28,7 @@ export function TaskDetailDrawer({
   const isRunning = isTaskRunning(task.status);
   const isDone = isTaskDone(task.status);
   const taskMessages = messages.filter((m) => m.taskId === task.task_id);
-  const taskFindings = findings.filter((f) => f.task_id === task.task_id);
+  const taskFindings = findings.filter((f) => ('taskId' in f ? f.taskId : undefined) === task.task_id);
   const targetFiles = Array.isArray(task.target_files) ? task.target_files : [];
   const acceptanceCriteria = Array.isArray(task.acceptance_criteria) ? task.acceptance_criteria : [];
 
@@ -72,7 +71,7 @@ export function TaskDetailDrawer({
             <code className="drawer-id">ID: {task.task_id}</code>
           </div>
           <button type="button" className="btn-close" onClick={onClose} aria-label="Kapat">
-            ✕
+            Kapat
           </button>
         </div>
 
@@ -88,7 +87,7 @@ export function TaskDetailDrawer({
             <section className="drawer-section">
               <h4 className="drawer-section-title">KABUL KRİTERLERİ</h4>
               <ul className="drawer-list">
-                {acceptanceCriteria.map((c, i) => (
+                {acceptanceCriteria.map((c: string, i: number) => (
                   <li key={i}>{c}</li>
                 ))}
               </ul>
@@ -145,7 +144,7 @@ export function TaskDetailDrawer({
                     className="drawer-tag-file"
                     onClick={() => onSelectFile?.(file)}
                   >
-                    📄 {file}
+                     {file}
                   </button>
                 ))}
               </div>
@@ -158,8 +157,8 @@ export function TaskDetailDrawer({
               <div className="drawer-findings">
                 {taskFindings.map((f, i) => (
                   <div key={i} className={`drawer-finding-item drawer-finding--${f.severity}`}>
-                    <strong>[{f.severity.toUpperCase()}] {f.title}</strong>
-                    <p>{f.description}</p>
+                    <strong>[{f.severity.toUpperCase()}] {'ruleId' in f ? f.ruleId : f.profile}</strong>
+                    <p>{f.summary}</p>
                   </div>
                 ))}
               </div>

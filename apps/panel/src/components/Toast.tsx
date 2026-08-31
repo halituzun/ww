@@ -45,7 +45,7 @@ export function ToastProvider({ children }: { readonly children: React.ReactNode
         {vm.toasts.map((t) => (
           <div key={t.id} className={`toast toast--${t.type}`} role="status">
             <div className="toast-icon" aria-hidden="true">
-              {t.type === "success" ? "✓" : t.type === "error" ? "✕" : "ℹ"}
+              {t.type === "success" ? "OK" : t.type === "error" ? "ERR" : "INFO"}
             </div>
             <div className="toast-content">
               {t.title ? <strong className="toast-title">{t.title}</strong> : null}

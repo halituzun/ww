@@ -1,5 +1,6 @@
 import type { NotificationSignals } from "../services/notifications.js";
 import { useNotificationsViewModel } from "../viewmodels/useNotificationsViewModel.js";
+import type React from "react";
 
 export function NotificationBell({ signals }: { signals: NotificationSignals }) {
   const {
@@ -7,7 +8,7 @@ export function NotificationBell({ signals }: { signals: NotificationSignals }) 
   } = useNotificationsViewModel(signals);
 
   return (
-    <div className="bell" ref={containerRef}>
+    <div className="bell" ref={containerRef as React.RefObject<HTMLDivElement>}>
       <button
         type="button"
         className="bell__button"

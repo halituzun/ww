@@ -28,7 +28,8 @@ export function TimelineScrubber({ events, cursor, onCursor, at }: {
 }) {
   const total = events.length;
   if (total === 0) return <p className="hint">Henüz olay yok.</p>;
-  const live = cursor >= total;
+  const safeCursor = Number.isFinite(cursor) ? cursor : total;
+  const live = safeCursor >= total;
 
   const windowed = total >= TIMELINE_LIMIT;
 
@@ -61,7 +62,7 @@ export function TimelineScrubber({ events, cursor, onCursor, at }: {
             className="btn btn-secondary scrubber__live-btn"
             onClick={() => onCursor(total)}
           >
-            ⚡ Canlıya Dön
+             Canlıya Dön
           </button>
         </div>
       )}
@@ -71,7 +72,7 @@ export function TimelineScrubber({ events, cursor, onCursor, at }: {
           type="range"
           min={0}
           max={total}
-          value={Math.min(cursor, total)}
+          value={Math.min(safeCursor, total)}
           aria-label="Geçmişte konum"
           onChange={(changeEvent) => onCursor(Number(changeEvent.target.value))}
         />
@@ -96,7 +97,7 @@ export function TimelineScrubber({ events, cursor, onCursor, at }: {
       <div className="scrubber__meta">
         {/* Canlı mı geçmiş mi olduğu METİNLE yazılır; yalnız renk yeterli değil. */}
         <strong className={live ? "scrubber__badge scrubber__badge--live" : "scrubber__badge scrubber__badge--past"}>{live ? 'CANLI' : 'GEÇMİŞ'}</strong>
-        <span>{Math.min(cursor, total)} / {total} olay</span>
+        <span>{Math.min(safeCursor, total)} / {total} olay</span>
         {windowed ? <span title="Daha eski olaylar panel belleğinde tutulmuyor">
           (pencere: son {TIMELINE_LIMIT})
         </span> : null}

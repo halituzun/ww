@@ -39,14 +39,34 @@ const SIGNAL_POLL_MS = 15_000;
 const errorText = (reason: unknown, fallback: string): string =>
   reason instanceof Error ? reason.message : fallback;
 
-const queryParam = (name: string): string | null =>
-  typeof window === 'undefined' ? null : new URLSearchParams(window.location.search).get(name);
+const queryParam = (name: string): string | null => {
+  if (typeof window === 'undefined') return null;
+  const searchParams = new URLSearchParams(window.location.search);
+  if (searchParams.get(name)) return searchParams.get(name);
+  const hash = window.location.hash;
+  const qIdx = hash.indexOf('?');
+  if (qIdx !== -1) {
+    const hashParams = new URLSearchParams(hash.slice(qIdx));
+    if (hashParams.get(name)) return hashParams.get(name);
+  }
+  return null;
+};
+
+const getStoredProjectId = (): string => {
+  if (typeof window === 'undefined') return '';
+  try {
+    if (typeof localStorage !== 'undefined' && typeof localStorage.getItem === 'function') {
+      return localStorage.getItem('ww:last-project-id') || localStorage.getItem('ww_last_project') || '';
+    }
+  } catch {}
+  return '';
+};
 
 export function useWorkspaceViewModel() {
   const [page, setPage] = useState<'workspace' | 'providers'>(
     () => queryParam('page') === 'providers' ? 'providers' : 'workspace',
   );
-  const [projectId, setProjectId] = useState(() => queryParam('project') ?? '');
+  const [projectId, setProjectId] = useState(() => queryParam('project') || getStoredProjectId());
   const [budgetReport, setBudgetReport] = useState<BudgetReport>(EMPTY_BUDGET_REPORT);
   const [pendingQuestionsCount, setPendingQuestionsCount] = useState<number>(0);
   const [plans, setPlans] = useState<readonly Plan[]>([]);

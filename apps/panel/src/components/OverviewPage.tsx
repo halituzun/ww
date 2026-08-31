@@ -202,10 +202,14 @@ export function OverviewPage({
             ) : (
               <ul className="timeline-event-list">
                 {recentEvents.map((ev) => (
-                  <li key={ev.id} className="timeline-event-item">
-                    <span className="pill pill--mini">{ev.kind}</span>
-                    <span className="event-summary">{ev.summary}</span>
-                    <small className="chat-time">{new Date(ev.timestamp).toLocaleTimeString("tr-TR")}</small>
+                  <li key={ev.cursor} className="timeline-event-item">
+                    <span className="pill pill--mini">{ev.event}</span>
+                    <span className="event-summary">
+                      {typeof ev.data === 'object' && ev.data !== null && 'summary' in ev.data
+                        ? String((ev.data as { summary?: unknown }).summary ?? ev.event)
+                        : ev.event}
+                    </span>
+                    <small className="chat-time">{new Date(ev.ts).toLocaleTimeString("tr-TR")}</small>
                   </li>
                 ))}
               </ul>
@@ -215,7 +219,7 @@ export function OverviewPage({
 
         {/* Sağ Ray */}
         <aside className="overview-sidebar">
-          {/* Eylem Odaklı Soru Kutusu (Sayı tekrarı kaldırıldı - BULGU 10) */}
+          {/* Eylem Odaklı Soru Kutusu (Sayı tekrarı yok, doğrudan eylem sunar) */}
           {questionsCount > 0 ? (
             <div className="sidebar-warning-card">
               <div className="sidebar-warning-head">
@@ -223,10 +227,10 @@ export function OverviewPage({
                   <path d="M8 1.75l5.5 2.5v4c0 3-2.4 5.3-5.5 6-3.1-.7-5.5-3-5.5-6v-4z" />
                   <path d="M8 5.5v3M8 11.5h.01" />
                 </svg>
-                <strong>Bekleyen Soruları İncele</strong>
+                <strong>Agent Soruları Bekliyor</strong>
               </div>
               <p className="hint">
-                Agent soruları cevap bekliyor. Görevlerin durmaması için yanıtlayın.
+                Görevlerin devam edebilmesi için soruları yanıtlayın.
               </p>
               <button
                 type="button"
