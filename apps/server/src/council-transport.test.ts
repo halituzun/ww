@@ -29,12 +29,14 @@ describe('konsey taşıması', () => {
       async ({ kind }) => ({ text: `${kind} metni` }),
     );
 
-    // 3 öneri + 3 itiraz + 1 sentez
-    expect(sent).toHaveLength(7);
+    // Faz D2 (5 Tur): 3 öneri + 3 itiraz + 1 birleşik taslak + 1 kırmızı takım + 1 nihai sentez = 9 mesaj
+    expect(sent).toHaveLength(9);
     expect(sent.filter((turn) => turn.kind === 'proposal')).toHaveLength(3);
     expect(sent.filter((turn) => turn.kind === 'objection')).toHaveLength(3);
-    expect(sent.filter((turn) => turn.kind === 'synthesis')).toHaveLength(1);
-    expect(result.synthesis.text).toBe('synthesis metni');
+    expect(sent.filter((turn) => turn.kind === 'draft_synthesis')).toHaveLength(1);
+    expect(sent.filter((turn) => turn.kind === 'red_team')).toHaveLength(1);
+    expect(sent.filter((turn) => turn.kind === 'final_synthesis')).toHaveLength(1);
+    expect(result.finalSynthesis.text).toBe('final_synthesis metni');
   });
 
   // Yarısı kayıtlı bir tartışma, kaydı hiç olmayandan daha yanıltıcıdır:

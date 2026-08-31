@@ -1,89 +1,306 @@
-// Konseyin ÜRETİM yolu (docs/03 → Konsey, docs/11 → Faz 4).
-//
-// NEDEN VAR: `CouncilService` protokolü packages/agents içinde yazılmış ve
-// testliydi ama `apps/` içinde tek bir referansı yoktu — yani Faz 4'ün kalbi
-// hiçbir yerden çağrılamıyordu. Bu modül onu gerçek modellere, gerçek mesaj
-// kanalına ve gerçek plan kaydına bağlar.
-//
-// Konsey turları `purpose: 'council'` ile çağrılır: gerçek ve paralı çağrılardır,
-// `api_usage`'a yazılırlar, ama göreve bağlı olmadıkları için 'completion'ın
-// brief/attempt provenance'ını taşımazlar.
+import { CommunicationWakeupPublisher } from '@ww/db';
 import { randomUUID } from 'node:crypto';
 import { Inject, Injectable, Logger, Optional } from '@nestjs/common';
-import {
-  createPlan,
-  getLatestProject,
-  listLatestAgents,
-  listLatestApiProviders,
-  listLatestPlansByStatus,
-} from '@ww/db';
 import {
   CommunicationService,
   CouncilService as CouncilProtocol,
   PrincipalResolver,
+  type CouncilMember,
+  type CouncilTurn,
+  type CouncilTurnKind,
 } from '@ww/agents';
-import { CommunicationWakeupPublisher, createRedis } from '@ww/db';
-import { buildAgentCapabilities } from './agent-capabilities.js';
 import {
-  Keystore, ModelRouter, ProviderRateLimiter, buildProviderRegistry, chUsageSink,
-  resolveKeystoreFile,
-} from '@ww/providers';
-import { providerRequestsPerMinute } from './provider-rate.js';
-import type { EntityId } from '@ww/shared';
-import { composeCouncil } from './council-members.js';
-import { buildCouncilPlan } from './council-plan.js';
+  createPlan,
+  createDecision,
+  listDecisions,
+  getLatestProject,
+  listLatestAgents,
+  listLatestApiProviders,
+  listLatestPlansByStatus,
+    type ClickHouseClient,
+} from '@ww/db';
+import { buildProviderRegistry, chUsageSink, Keystore, ModelRouter, ProviderRateLimiter, resolveKeystoreFile } from '@ww/providers';
+import { NIL_UUID, type EntityId, type OrgPlan } from '@ww/shared';
+import { buildAgentCapabilities } from './agent-capabilities.js';
 import { loadRoutingIndex } from './routing.loader.js';
+import { buildCouncilPlan, deriveOrgPlan } from './council-plan.js';
+import { composeCouncil } from './council-members.js';
+import { providerRequestsPerMinute } from './provider-rate.js';
 import { SERVER_DATABASE, type ServerDatabase } from './orchestration.module.js';
+import { createRedis } from '@ww/db';
+import type { MessageKind, MessagePayloadV1 } from '@ww/shared';
 
-export class CouncilRunError extends Error {}
+export class CouncilRunError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'CouncilRunError';
+  }
+}
 
-/** Konsey turunu kalıcı yazan taşıma; testte sahte, üretimde mesaj kanalı. */
-export type CouncilTransportSend = (turn: Readonly<{
-  sessionId: EntityId;
-  speakerId: EntityId;
-  recipientId: EntityId;
-  kind: string;
-  text: string;
-}>) => Promise<{ messageId: string }>;
+export interface CouncilTransportTurn {
+  readonly sessionId: EntityId;
+  readonly speakerId: EntityId;
+  readonly recipientId: EntityId;
+  readonly kind: CouncilTurnKind;
+  readonly turnNumber: number;
+  readonly turnTitle: string;
+  readonly text: string;
+  readonly dissenting?: boolean;
+}
+
+export type CouncilTransportSend = (turn: CouncilTransportTurn) => Promise<{ messageId: string }>;
 
 export interface CouncilRunResult {
-  readonly planId: EntityId;
-  readonly sessionId: EntityId;
+  readonly planId: string;
+  readonly sessionId: string;
   readonly memberModelRefs: readonly string[];
   readonly distinctProviders: number;
   readonly diversityWarning: string;
   readonly turns: number;
+  readonly status?: 'converged' | 'uncoordinated';
+  readonly totalRounds?: number;
+  readonly decisions?: readonly any[];
+  readonly convergenceLog?: readonly any[];
+  readonly orgPlan: OrgPlan;
 }
 
-/** Konsey turunun modele gönderilen istemi; her tur öncekileri görür. */
-function turnPrompt(
-  kind: string,
+export function councilMessageForTurn(turn: Pick<CouncilTransportTurn, 'kind' | 'text'>): {
+  readonly kind: MessageKind;
+  readonly payload: MessagePayloadV1;
+} {
+  if (turn.kind === 'objection' || turn.kind === 'red_team') {
+    return {
+      kind: 'objection',
+      payload: { type: 'objection', markdown: turn.text, evidenceRefs: [] },
+    };
+  }
+  if (turn.kind === 'draft_synthesis' || turn.kind === 'final_synthesis') {
+    return {
+      kind: 'synthesis',
+      payload: { type: 'synthesis', markdown: turn.text },
+    };
+  }
+  if (turn.kind === 'research' || turn.kind === 'debate_round' || turn.kind === 'uncoordinated_report') {
+    return {
+      kind: 'proposal',
+      payload: { type: 'proposal', markdown: turn.text },
+    };
+  }
+  return {
+    kind: 'proposal',
+    payload: { type: 'proposal', markdown: turn.text },
+  };
+}
+
+function cleanLlmResponse(raw: string): string {
+  let text = raw.trim();
+  text = text.replace(/<think>[\s\S]*?<\/think>/gi, '').replace(/<thought>[\s\S]*?<\/thought>/gi, '').trim();
+  // SADECE emoji/dingbat blokları (U+1F300–1FAFF, U+2600–27BF, U+FE0F, U+200D). Latin-1 Supplement ve Latin Extended-A asla silinmez!
+  text = text.replace(/[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}\u{FE0F}\u{200D}]/gu, '');
+  
+  const lines = text.split('\n');
+  const cleanedLines: string[] = [];
+  let skippingEcho = true;
+  for (const line of lines) {
+    const withoutSpeakerEcho = line.replace(/^\s*(?:[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}|[0-9a-f]{8})\s*\*{0,2}:\s*/i, '');
+    const trimmed = withoutSpeakerEcho.trim();
+    if (skippingEcho) {
+      if (
+        trimmed.startsWith('Hedef:') ||
+        trimmed.startsWith('Önceki Müzakere Turları:') ||
+        trimmed.startsWith('Bağlam:') ||
+        trimmed.startsWith('(Henüz önceki tur yok)') ||
+        trimmed.startsWith('Talimat:') ||
+        trimmed.startsWith('Yönerge:') ||
+        trimmed.startsWith('Rolün:') ||
+        trimmed.startsWith('Görevin:') ||
+        trimmed === ''
+      ) {
+        continue;
+      }
+      skippingEcho = false;
+    }
+    cleanedLines.push(withoutSpeakerEcho);
+  }
+  return cleanedLines.join('\n').trim();
+}
+
+function summarizeTurnForContext(t: CouncilTurn, maxChars: number = 300): string {
+  const text = t.text.replace(/\s+/g, ' ').trim();
+  if (text.length <= maxChars) return text;
+  return text.slice(0, maxChars) + '...';
+}
+
+function isEnglishOrObserverText(text: string): boolean {
+  const englishPatterns = /\b(based on|provided information|the team|identified|risk|mitigated|developers are required|discussing a project|in their project plan)\b/i;
+  return englishPatterns.test(text);
+}
+
+export function buildCouncilTurnPrompt(
+  kind: CouncilTurnKind,
   goal: string,
-  prior: readonly { readonly kind: string; readonly text: string }[],
+  prior: readonly CouncilTurn[],
+  memberRole: string = 'Grup Lideri'
 ): string {
-  const history = prior.length === 0
-    ? '(henüz tur yok)'
-    : prior.map((turn) => `[${turn.kind}] ${turn.text}`).join('\n\n');
-  const instruction = kind === 'proposal'
-    ? 'Hedef için somut bir plan öner. Kısa ve uygulanabilir yaz.'
-    : kind === 'objection'
-      ? 'Önceki önerilerin EN ZAYIF noktasını göster. Katılıyorsan bile bir risk yaz.'
-      : 'Tüm turları tek bir karara sentezle. Kararı ve gerekçesini yaz.';
-  return [`Hedef: ${goal}`, '', 'Önceki turlar:', history, '', instruction].join('\n');
+  let contextSection = '';
+  let roleInstruction = '';
+
+  switch (kind) {
+    case 'proposal': {
+      contextSection = 'Henüz önceki tur yok.';
+      roleInstruction = `Sen ${memberRole} rolündesin. Hedefe ulaşmak için bağımsız plan önerini Türkçe yaz. Teknoloji seçimi, gereken departmanlar, görevler ve kabul kriterlerini belirt.
+KAPSAM KURALI: SADECE verilen kullanıcı isteğindeki özellikleri planla. İstekte olmayan seslendirme, AI botu, ekstra harici servis veya uydurma özellikleri KESİNLİKLE ekleme. Gerekli gördüğün ek fikirleri plana koyma, 'Öneri/Soru' başlığı altında belirt.
+Kısa, somut ve net ol (maksimum 150 kelime). Kesinlikle standart Türkçe karakterler (ç, ğ, ı, ö, ş, ü) kullan.`;
+      break;
+    }
+
+    case 'research': {
+      const lastPrior = prior[prior.length - 1];
+      const issueText = lastPrior ? lastPrior.text : goal;
+      contextSection = `Araştırılacak Teknik İhtiyaç / Belirsizlik:\n${issueText}`;
+      roleInstruction = `Sen ARAŞTIRMA VE KOD İNCELEME LİDERİSİN (Researcher). Görevin projenin teknik fizibilitesini, bağımlılıklarını ve yerel kod tabanını incelemektir.
+Eğer dış kaynak veya kütüphane doğrulaması internet olmadan yapılamıyorsa bunu DÜRÜSTÇE belirt ("dış kaynak doğrulanamadı, varsayım: ...").
+Doğrudan şu formatta Türkçe araştırma raporu üret:
+1. Teknik Bulgular ve Uyumluluk: ...
+2. Yerel Kod ve Bağımlılık İncelemesi: ...
+3. Konseye Öneri ve Çözüm Yolu: ...
+Kesinlikle standart Türkçe karakterler (ç, ğ, ı, ö, ş, ü) kullan.`;
+      break;
+    }
+
+    case 'debate_round': {
+      const priorSummaries = prior.slice(-3).map((p) => `- ${p.turnTitle}: ${summarizeTurnForContext(p, 180)}`).join('\n');
+      contextSection = `Açık Kalan İtirazlar ve Çelişkiler:\n${priorSummaries}`;
+      roleInstruction = `Sen MÜZAKERE ELEŞTİRMENİSİN. Görevin açık kalan zıt talepleri ve çelişkileri masaya yatırıp uzlaşma için net alternatifler sunmaktır.
+1. Çelişki / İtiraz Analizi: Neden uzlaşılamadı?
+2. Taviz ve Çözüm Önerisi: Hangi taraf nasıl esnemeli?
+3. Sentez Önerisi: ...
+Kesinlikle standart Türkçe karakterler (ç, ğ, ı, ö, ş, ü) kullan.`;
+      break;
+    }
+
+    case 'objection': {
+      // Tur 2: Yalnızca Tur 1 tekliflerinin özetlerini al
+      const propList = prior
+        .filter((p) => p.kind === 'proposal')
+        .map((p, i) => `Teklif ${i + 1} (Grup Lideri ${i + 1}): ${summarizeTurnForContext(p, 250)}`)
+        .join('\n\n');
+
+      contextSection = `Tur 1 Plan Önerileri:\n${propList}`;
+      roleInstruction = `Sen ${memberRole} rolündesin. Görevin Tur 1'deki önerileri ELEŞTİRMEK ve somut İTİRAZLAR sunmaktır. Asla genel asistan konuşması yapma!
+
+ÖNEMLİ: İtirazların SADECE yukarıdaki plan önerilerindeki gerçek sorunlara dayanmalıdır. Planda olmayan sorunları uydurmak yasaktır.
+
+Doğrudan şu 3 başlıkta Türkçe itiraz et (her birini plandaki gerçek metne dayandır):
+1. Teknik Riskler: Plandaki teknoloji seçimleri veya mimari kararlardan doğan somut riskler.
+2. Kapsam ve Rol İsrafı: Brief'e göre fazladan olan veya eksik olan unsurlar.
+3. Önerin: Daha sade ve güvenli bir alternatif.
+Kesinlikle standart Türkçe karakterler (ç, ğ, ı, ö, ş, ü) kullan.`;
+      break;
+    }
+
+    case 'draft_synthesis': {
+      // Tur 3: Tur 1 önerileri + Tur 2 itiraz noktaları
+      const propSummary = prior
+        .filter((p) => p.kind === 'proposal')
+        .map((p) => `- ${summarizeTurnForContext(p, 150)}`)
+        .join('\n');
+      const objSummary = prior
+        .filter((p) => p.kind === 'objection')
+        .map((p) => `- ${summarizeTurnForContext(p, 180)}`)
+        .join('\n');
+
+      contextSection = `Öneriler:\n${propSummary}\n\nİtirazlar:\n${objSummary}`;
+      roleInstruction = `Sen PROJE YÖNETİCİSİ (PM) rolündesin. Jenerik selamlaşma yapma. Tur 2'deki itirazları tek tek çözerek tek bir BİRLEŞİK TASLAK PLAN hazırla:
+1. İtiraz Değerlendirmesi: Her itiraz için alınan somut karar. Kararlar yalnızca bu projenin brief'i ve önceki turlardaki gerçek itirazlardan türesin.
+2. Kapsam Arındırması: Brief dışı uydurma eklentilerin elenmesi.
+3. Birleşik Taslak Plan: Teknoloji, Departmanlar (küçük projede en fazla 2 departman) ve Görevler.
+Kesinlikle standart Türkçe karakterler (ç, ğ, ı, ö, ş, ü) kullan.`;
+      break;
+    }
+
+    case 'red_team': {
+      // Tur 4: Kırmızı Takım SADECE Tur 3 Birleşik Taslağını inceler!
+      const draft = prior.find((p) => p.kind === 'draft_synthesis');
+      const draftText = draft ? draft.text : prior.map((p) => p.text).join('\n');
+
+      contextSection = `İncelenecek Taslak Plan:\n${draftText}\n\nAsıl Kullanıcı İsteği (Brief):\n${goal}`;
+      roleInstruction = `Sen KIRMIZI TAKIM LİDERİSİN. Görevin taslak planı SAVUNMAK DEĞİL, KIRMAKTIR.
+
+ÖNEMLİ KURAL: Bulgularını SADECE yukarıdaki taslak plan metnine ve brief'e dayandır. Planda geçmeyen kavramları ekleme.
+Brief'teki gerçek çelişkileri ve plandaki gerçek sorunları bul:
+- Brief 'hem X hem Y' istiyorsa bunların mimaride aynı anda mümkün olup olmadığını sorgula.
+- Taslakta belirsiz kalan, araştırılmamış veya riskli unsurları somutlaştır.
+- Planda testlenmemiş veya edge case'leri atlanmış alanları işaret et.
+
+En az 3 somut zafiyet yaz, her birini taslak plandaki somut bir cümle veya karara bağla.
+Kesinlikle standart Türkçe karakterler (ç, ğ, ı, ö, ş, ü) kullan.`;
+      break;
+    }
+
+    case 'final_synthesis':
+    default: {
+      // Tur 5: Taslak + Kırmızı Takım Raporu + Başlıca İtirazlar
+      const draft = prior.find((p) => p.kind === 'draft_synthesis');
+      const red = prior.find((p) => p.kind === 'red_team');
+      const objections = prior.filter((p) => p.kind === 'objection').map((p) => `- ${summarizeTurnForContext(p, 120)}`).join('\n');
+
+      const research = prior.filter((p) => p.kind === 'research').map((p) => `- ${summarizeTurnForContext(p, 220)}`).join('\n');
+      const debate = prior.filter((p) => p.kind === 'debate_round').map((p) => `- ${summarizeTurnForContext(p, 220)}`).join('\n');
+      contextSection = `Taslak Plan:\n${draft ? draft.text : ''}\n\nKırmızı Takım Raporu:\n${red ? red.text : ''}\n\nAraştırma Bulguları:\n${research || '(Araştırma turu yok)'}\n\nEk Müzakere:\n${debate || '(Ek müzakere yok)'}\n\nİtiraz Özeti:\n${objections}`;
+      roleInstruction = `DİL VE KİMLİK KURALI:
+- YANITINI KESİNLİKLE VE YALNIZCA TÜRKÇE YAZ. İngilizce veya başka dil KESİNLİKLE YASAKTIR.
+- Sen konseyin nihai karar merciisisin (Proje Yöneticisi). Dışarıdan durum anlatan bir gözlemci asla olmayacaksın.
+- Kararlarını birinci çoğul şahısla ('Kabul ediyoruz', 'Reddediyoruz') yaz.
+
+GÖREVİN: Kırmızı takımın BU PROJEYİ inceleyen gerçek bulgularından her birini ele al. Brief'teki her çelişkiyi çöz veya 'uzlaşılamadı' de.
+
+ZORUNLU FORMAT (her kırmızı takım bulgusu için):
+BULGU N: [Kırmızı takımın bu projeye özgü somut bulgusu]
+KARAR: KABUL / RED / KISMI
+GEREKÇE: [Bu projenin bağlamında neden bu karar]
+PLANA YANSIMASI: [Planda nasıl değişti]
+
+Eğer brief'teki iki gereksinim aynı anda sağlanamıyorsa:
+BULGU N: [Çelişki adı]
+KARAR: UZLAŞILAMADI
+GEREKÇE: [Neden çözümsüz]
+ÖNERİ: [Kullanıcıya sunulacak seçenek]
+
+Son olarak NİHAİ DEPARTMANLAR ve GENEL DURUM satırını ekle.`;
+      break;
+    }
+  }
+
+  return `DİL KURALI: SADECE VE YALNIZCA TÜRKÇE YAZ.
+
+Hedef: ${goal}
+
+Bağlam:
+${contextSection}
+
+Talimat:
+${roleInstruction}
+
+Cevap:`;
 }
 
-@Injectable()
+function roleNameFor(member: CouncilMember, members: readonly CouncilMember[]): string {
+  const index = members.findIndex((item) => item.agentId === member.agentId);
+  const ordinal = index >= 0 ? index + 1 : 1;
+  if (member.role === 'pm' || index === 0) return 'Proje Yöneticisi';
+  if (member.role === 'researcher') return 'Araştırma Lideri';
+  if (member.role === 'red_team') return 'Kırmızı Takım Lideri';
+  return `Grup Lideri ${ordinal}`;
+}
+
 export class CouncilApplicationService {
   readonly #logger = new Logger(CouncilApplicationService.name);
   readonly #database: ServerDatabase;
-
   readonly #transport: CouncilTransportSend | undefined;
 
   constructor(
     @Inject(SERVER_DATABASE) database: ServerDatabase,
-    // Testler gerçek modele gitmeden taşımayı doğrulayabilsin diye enjekte
-    // edilebilir; üretimde varsayılan mesaj kanalı kurulur. @Optional()
-    // olmadan Nest bu parametreyi çözmeye çalışıp tüm modülü düşürüyordu.
     @Optional() transport?: CouncilTransportSend,
   ) {
     this.#database = database;
@@ -113,22 +330,31 @@ export class CouncilApplicationService {
       if (credential === undefined) {
         throw new CouncilRunError(`konsey uyesi kimlik bilgisi yok: ${turn.speakerId}`);
       }
+      const message = councilMessageForTurn(turn);
+
       const envelope = await communication.send(
-        { type: 'agent', credential, issuedAt: new Date().toISOString() } as never,
+        { type: 'agent_capability', credential, issuedAt: new Date().toISOString() } as never,
         {
           projectId,
           sessionId: turn.sessionId,
           recipient: { type: 'agent', id: turn.recipientId },
-          kind: turn.kind,
-          payload: { type: turn.kind, text: turn.text },
-          idempotencyKey: `council:${turn.sessionId}:${turn.speakerId}:${turn.kind}:${turn.text.length}`,
+          kind: message.kind,
+          payload: message.payload,
+          provenance: { class: 'agent_message', sourceId: `turn-${turn.turnNumber}`, sourceVersion: turn.kind },
+          priority: 'normal',
+          createdAt: new Date().toISOString(),
+          idempotencyKey: `council:${turn.sessionId}:${turn.speakerId}:${turn.kind}:${turn.turnNumber}`,
         } as never,
       );
       return { messageId: String((envelope as { messageId: string }).messageId) };
     };
   }
 
-  async run(projectId: string, goal: string): Promise<CouncilRunResult> {
+  async run(
+    projectId: string,
+    goal: string,
+    overrideCompleter?: (input: { member: { agentId: string; modelRef: string }; kind: string; prompt: string }) => Promise<{ text: string }>,
+  ): Promise<CouncilRunResult> {
     const trimmedGoal = goal.trim();
     if (trimmedGoal === '') throw new CouncilRunError('konsey hedefi bos olamaz');
 
@@ -137,8 +363,6 @@ export class CouncilApplicationService {
 
     const routing = await loadRoutingIndex(this.#database.ch);
     const providerRows = await listLatestApiProviders(this.#database.ch);
-    // base_url'ü boş sağlayıcı ağ çağrısı yapmaz: taklittir ve konsey üyesi
-    // olamaz (bkz. council-members.ts).
     const stubProviders = providerRows
       .filter((row) => row.base_url.trim() === '')
       .map((row) => row.provider_id);
@@ -146,8 +370,6 @@ export class CouncilApplicationService {
     const active = agents.filter((agent) => agent.status !== 'stopped');
     const composition = composeCouncil(active.map((agent) => ({
       agentId: agent.agent_id as EntityId,
-      // Rol eşlemesi yoksa agent'ın kendi modeli kullanılır; ikisi de yoksa
-      // composeCouncil onu saymaz ve eksiklik açık hata olur.
       modelRef: routing.modelForRole(agent.role) ?? agent.model_ref,
     })), { stubProviders });
     if (composition.diversityWarning !== '') {
@@ -161,64 +383,108 @@ export class CouncilApplicationService {
     })), store);
     const router = new ModelRouter(registry.providers, {
       fallbacks: (modelRef) => routing.fallbacks(modelRef),
-      // Konsey turları da paralıdır: kontör panosunda görünmeleri gerekir.
       usageSink: chUsageSink(this.#database.ch),
-      // docs/04 + docs/07: sağlayıcı başına istek/dakika. Varsayılan
-      // WW_PROVIDER_RPM (0 = sınırsız). Pompa görevleri eşzamanlı işlediğinden
-      // beri sınırsız çıkış gerçek bir 429 riski; 429'lar fallback'i tetikleyip
-      // yükü daha da artırır.
       rateLimiter: new ProviderRateLimiter(() => providerRequestsPerMinute()),
     });
 
     const sessionId = randomUUID() as EntityId;
-    // TURLAR KALICI YAZILIR. Önceki hâli yalnızca bellekte bir diziye
-    // topluyordu: plan `council_session_id` ile oturuma bağlanıyor ama o
-    // oturumun HİÇBİR mesajı yoktu, yani "bu karar nasıl alındı" zinciri
-    // (plan → oturum → mesajlar) boşa çıkıyordu.
-    //
-    // Mesaj yazımı düşerse konsey DURUR: yarısı kayıtlı bir tartışma,
-    // kaydı hiç olmayandan daha yanıltıcıdır.
-    const transcript: { kind: string; text: string; memberId: string }[] = [];
+    const transcript: { kind: string; text: string; memberId: string; turnNumber: number }[] = [];
     const chair = composition.members[0]!;
     const send = this.#transport ?? await this.#defaultTransport(
       project.project_id as EntityId, active,
     );
+
     const protocol = new CouncilProtocol({
       send: async (input) => {
         transcript.push({
-          kind: input.kind, text: input.text, memberId: String(input.recipient),
+          kind: input.kind,
+          text: input.text,
+          memberId: String(input.recipient),
+          turnNumber: input.turnNumber,
         });
-        // Konuşan üye kendi adına yazar; alıcı başkandır (sentezi o üretir).
         return send({
           sessionId: input.sessionId,
           speakerId: input.recipient as EntityId,
           recipientId: chair.agentId,
           kind: input.kind,
+          turnNumber: input.turnNumber,
+          turnTitle: input.turnTitle,
           text: input.text,
+          dissenting: input.dissenting ?? false,
         });
       },
     });
 
     const result = await protocol.run(
-      { sessionId, members: composition.members, prompt: trimmedGoal, maxCycles: 1 },
-      async ({ kind, member, prior }) => {
+      { sessionId, members: composition.members, prompt: trimmedGoal },
+      async ({ kind, turnNumber, turnTitle, member, prior }) => {
+        if (overrideCompleter !== undefined) {
+          const comp = await overrideCompleter({ member, kind, prompt: buildCouncilTurnPrompt(kind, trimmedGoal, prior, roleNameFor(member as CouncilMember, composition.members)) });
+          return { text: comp.text, dissenting: kind === 'red_team' };
+        }
         const routed = await router.complete(member.modelRef, {
-          messages: [{ role: 'user', content: turnPrompt(kind, trimmedGoal, prior) }],
+          messages: [{ role: 'user', content: buildCouncilTurnPrompt(kind, trimmedGoal, prior, roleNameFor(member as CouncilMember, composition.members)) }],
+          maxTokens: 600, // Yerel model bütçe kontrolü (Faz D2)
           meta: {
             purpose: 'council',
             projectId: project.project_id,
             agentId: member.agentId,
           },
         });
-        // Boş içerik konseyi sessizce bozar: protokol boş turu reddeder ama
-        // sebebi görünmez olur. Burada AÇIKÇA söylenir.
-        const text = routed.result.content;
+        let text = cleanLlmResponse(routed.result.content ?? '');
         if (text === null || text.trim() === '') {
           throw new CouncilRunError(`konsey turu bos dondu: ${member.modelRef} (${kind})`);
         }
-        return { text };
+
+        // Dil ve Şablon Doğrulaması (Tur 5 / final_synthesis)
+        if (kind === 'final_synthesis') {
+          if (isEnglishOrObserverText(text) || !text.includes('BULGU') || !text.includes('KARAR:')) {
+            // Tekrar dene
+            const retryRouted = await router.complete(member.modelRef, {
+              messages: [
+                { role: 'user', content: buildCouncilTurnPrompt(kind, trimmedGoal, prior, roleNameFor(member as CouncilMember, composition.members)) },
+                { role: 'assistant', content: text },
+                { role: 'user', content: "Lütfen yanıtını SADECE TÜRKÇE yaz ve verilen BULGU/KARAR/GEREKÇE/PLANA YANSIMASI şablonunu aynen doldur." }
+              ],
+              maxTokens: 600,
+              meta: { purpose: 'council', projectId: project.project_id, agentId: member.agentId }
+            });
+            const retryText = cleanLlmResponse(retryRouted.result.content ?? '');
+            if (retryText && !isEnglishOrObserverText(retryText) && retryText.includes('BULGU')) {
+              text = retryText;
+            } else {
+              // Model iki denemede de başarısız — sabit metin YASAK, failed_synthesis işareti koy.
+              // Yakınsama döngüsü bunu tespit ederek ek tur açar (H1).
+              this.#logger.warn(`[H1] final_synthesis model basarisiz (tur=${turnNumber}), failed_synthesis isaretlendi`);
+              text = `[SENTEZLEME_BASARISIZ] Model bu tur için projeye özgü Türkçe sentez üretemedi. Yakınsama döngüsü ek tur açacak.`;
+            }
+          }
+        }
+        return { text, dissenting: kind === 'red_team' };
       },
     );
+
+    // H3 — Karar Defterine (ww.decisions) Kaydet
+    if (result.decisions && result.decisions.length > 0) {
+      for (const item of result.decisions) {
+        try {
+          await createDecision(this.#database.ch, {
+            decision_id: randomUUID() as EntityId,
+            project_id: project.project_id as EntityId,
+            topic: item.topic,
+            decision: item.decision,
+            rationale: item.rationale,
+            dissent: item.dissent || "",
+            turn_number: item.turnNumber,
+            created_at: new Date().toISOString(),
+          });
+        } catch (err) {
+          this.#logger.warn(`Karar defteri kaydı başarısız: ${err instanceof Error ? err.message : String(err)}`);
+        }
+      }
+    }
+
+    const orgPlan = deriveOrgPlan(project.name, trimmedGoal);
 
     const existing = [
       ...await listLatestPlansByStatus(this.#database.ch, project.project_id, 'approved'),
@@ -226,21 +492,37 @@ export class CouncilApplicationService {
     ];
     const planVersion = existing.reduce((max, plan) => Math.max(max, plan.plan_version), 0) + 1;
     const planId = randomUUID() as EntityId;
-    await createPlan(this.#database.ch, buildCouncilPlan({
-      projectId: project.project_id as EntityId,
-      projectName: project.name,
-      planId,
-      planVersion,
-      sessionId,
-      chairAgentId: composition.members[0]!.agentId,
-      goal: trimmedGoal,
-      proposals: result.proposals,
-      objections: result.objections,
-      synthesis: result.synthesis,
-      memberModelRefs: composition.members.map((member) => member.modelRef),
-      diversityWarning: composition.diversityWarning,
-      createdAt: new Date().toISOString(),
-    }) as never);
+
+    try {
+      const planPayload = buildCouncilPlan({
+        projectId: project.project_id as EntityId,
+        projectName: project.name,
+        planId,
+        planVersion,
+        sessionId,
+        chairAgentId: composition.members[0]!.agentId,
+        goal: trimmedGoal,
+        proposals: result.proposals.map(p => ({ ...p, dissenting: Boolean(p.dissenting) })),
+        objections: result.objections.map(o => ({ ...o, dissenting: Boolean(o.dissenting) })),
+        draftSynthesis: result.draftSynthesis as never,
+        redTeam: result.redTeam as never,
+        finalSynthesis: result.finalSynthesis as never,
+        synthesis: { ...result.finalSynthesis, dissenting: Boolean(result.finalSynthesis.dissenting) },
+        allTurns: result.allTurns as never,
+        convergenceLog: result.convergenceLog as never,
+        status: result.status,
+        memberModelRefs: composition.members.map((member) => member.modelRef),
+        diversityWarning: composition.diversityWarning,
+        orgPlan,
+        createdAt: new Date().toISOString(),
+      });
+      this.#logger.log(`createPlan cagriliyor: planId=${planId}`);
+      await createPlan(this.#database.ch, planPayload as never);
+      this.#logger.log(`createPlan basarili: planId=${planId}`);
+    } catch (err) {
+      this.#logger.error(`createPlan basarisiz: ${err}`);
+      throw err;
+    }
 
     return Object.freeze({
       planId,
@@ -249,6 +531,11 @@ export class CouncilApplicationService {
       distinctProviders: composition.distinctProviders,
       diversityWarning: composition.diversityWarning,
       turns: transcript.length,
+      status: result.status,
+      totalRounds: result.totalRounds,
+      decisions: result.decisions,
+      convergenceLog: result.convergenceLog,
+      orgPlan,
     });
   }
 }

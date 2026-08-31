@@ -44,10 +44,28 @@ describe('buildCouncilPlan', () => {
     expect(body).toContain('Durum yönetimi eksik');
   });
 
-  it('uye modellerini plana yazar', () => {
+  it('uye modellerini ve org_plan yapisini plana yazar', () => {
     const plan = buildCouncilPlan(input);
     expect(plan.content_md).toContain('deepseek:deepseek-chat');
-    expect(plan.team_json).toEqual({ members: input.memberModelRefs });
+    expect(plan.team_json).toMatchObject({
+      members: input.memberModelRefs,
+      org_plan: expect.objectContaining({
+        departments: expect.any(Array),
+        concurrency_limit: expect.any(Number),
+      }),
+    });
+  });
+
+  it('deriveOrgPlan kucuk projede (Tetris, Pomodoro) 2 departman onerir', () => {
+    const org = buildCouncilPlan({ ...input, projectName: 'Tetris' }).team_json.org_plan;
+    expect(org.departments).toHaveLength(2);
+    expect(org.concurrency_limit).toBe(2);
+  });
+
+  it('deriveOrgPlan buyuk projede 4 departman onerir', () => {
+    const org = buildCouncilPlan({ ...input, projectName: 'E-Ticaret Paneli' }).team_json.org_plan;
+    expect(org.departments).toHaveLength(4);
+    expect(org.concurrency_limit).toBe(3);
   });
 
   // ÇEŞİTLİLİK UYARISI plana yazılmazsa, tek modelin kendini onayladığı bir
