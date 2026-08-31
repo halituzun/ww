@@ -2,12 +2,14 @@
 //
 // Konsey bu uç olmadan hiçbir yerden tetiklenemiyordu.
 import { BadRequestException, Body, Controller, Get, Inject, Param, Post, Req } from '@nestjs/common';
-import { listMessagesBySession, listDecisions } from '@ww/db';
+import { listLatestPlansByStatus, listMessagesBySession, listDecisions } from '@ww/db';
 import { SERVER_DATABASE, type ServerDatabase } from './orchestration.module.js';
 import { z } from 'zod';
 import { parseLocalSession, type LocalSessionRequest } from './auth/local-session.js';
 import { CouncilApplicationService, CouncilRunError } from './council.service.js';
 import { CouncilMemberError } from './council-members.js';
+import { goalFromPlanMarkdown } from './council-plan.js';
+import type { EntityId } from '@ww/shared';
 
 const CouncilInput = z.strictObject({ goal: z.string().trim().min(1).max(4_000) });
 
@@ -54,6 +56,18 @@ export class CouncilController {
     @Inject(SERVER_DATABASE) private readonly database: ServerDatabase,
   ) {}
 
+  /** Projenin en güncel planındaki hedef; ek tur bunu taşır. */
+  async #activeGoal(projectId: string): Promise<string> {
+    const plans = (await Promise.all(
+      (['approved', 'proposed', 'debating', 'superseded'] as const).map((status) =>
+        listLatestPlansByStatus(this.database.ch, projectId as EntityId, status),
+      ),
+    )).flat();
+    const latest = plans
+      .sort((left, right) => right.observed_at.localeCompare(left.observed_at))[0];
+    return latest === undefined ? '' : goalFromPlanMarkdown(latest.content_md);
+  }
+
   /**
    * H3 — Projenin müzakere karar defteri kayıtları
    */
@@ -81,7 +95,16 @@ export class CouncilController {
     });
     const { focusTopic } = schema.parse(body);
     try {
-      return await this.council.run(projectId, `Kullanıcı Ek Tur Talebi (Odak: ${focusTopic})`);
+      // EK TUR, PROJENİN HEDEFİNİ TAŞIR. Eskiden yalnız odak cümlesiyle
+      // koşuluyordu: konsey projenin ne olduğunu bilmeden yeniden müzakere
+      // ediyor ve ortaya "ek tur" değil hedefsiz yeni bir plan çıkıyordu.
+      const goal = await this.#activeGoal(projectId);
+      if (goal === '') {
+        throw new BadRequestException(
+          'ek tur icin aktif plan bulunamadi: once konsey oturumu kosulmali',
+        );
+      }
+      return await this.council.run(projectId, `${goal}\n\nEk müzakere odağı: ${focusTopic}`);
     } catch (reason) {
       if (reason instanceof CouncilRunError || reason instanceof CouncilMemberError) {
         throw new BadRequestException(reason.message);

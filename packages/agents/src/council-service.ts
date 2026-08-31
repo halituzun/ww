@@ -319,7 +319,12 @@ export class CouncilService {
       throw new CouncilProtocolError("konsey 3-4 uye olmalidir");
     }
 
-    const maxTurns = input.maxTurns ?? 9;
+    // maxCycles: docs/03 "en çok 2 itiraz-sentez döngüsü" der. Alan
+    // tanımlıydı ama HİÇ OKUNMUYORDU; döngü her koşuda 9 tura kadar
+    // gidiyordu. Her döngü iki tur harcar (müzakere/araştırma + yeni sentez),
+    // sabit beş tur da baştan koşulur.
+    const maxTurns = input.maxTurns
+      ?? (input.maxCycles === undefined ? 9 : 5 + input.maxCycles * 2);
     const allTurns: CouncilTurn[] = [];
     const convergenceLog: ConvergenceCheckResult[] = [];
     const chair = input.members[0]!;

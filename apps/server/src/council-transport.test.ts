@@ -92,4 +92,22 @@ describe('konsey taşıması', () => {
       async () => ({ text: '   ' }),
     )).rejects.toThrow(/hicbir/i);
   });
+
+  // maxCycles TANIMLIYDI ama hiç okunmuyordu: döngü her koşuda 9 tura kadar
+  // gidiyordu (docs/03 en çok 2 döngü der).
+  it('maxCycles tur limitini gercekten daraltir', async () => {
+    const send = vi.fn(async () => ({ messageId: 'm1' as never }));
+    const protocol = new CouncilProtocol({ send });
+
+    // Kasten yakınsamayan cevap: döngü limite kadar gider.
+    const uzun = await protocol.run(
+      { sessionId, members: [member(1), member(2), member(3)], prompt: 'hedef', maxCycles: 2 },
+      async () => ({ text: 'uzlasilamadi, celiski giderilemedi' }),
+    );
+    const kisa = await protocol.run(
+      { sessionId, members: [member(1), member(2), member(3)], prompt: 'hedef', maxCycles: 1 },
+      async () => ({ text: 'uzlasilamadi, celiski giderilemedi' }),
+    );
+    expect(kisa.totalTurns).toBeLessThan(uzun.totalTurns);
+  });
 });

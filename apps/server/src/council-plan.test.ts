@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { NIL_UUID } from '@ww/shared';
-import { buildCouncilPlan } from './council-plan.js';
+import { buildCouncilPlan, goalFromPlanMarkdown } from './council-plan.js';
 
 const turn = (memberId: string, kind: string, text: string) => ({ memberId, kind, text });
 
@@ -120,5 +120,13 @@ describe('buildCouncilPlan', () => {
     expect(buildCouncilPlan({ ...input, supersedesPlanId: previous, planVersion: 2 })
       .supersedes_plan_id).toBe(previous);
     expect(buildCouncilPlan(input).supersedes_plan_id).toBe(NIL_UUID);
+  });
+
+  // EK TUR ucu projenin hedefini plandan okur; eskiden hedefi atıp konseyi
+  // yalnız odak cümlesiyle sıfırdan koşturuyordu.
+  it('plan govdesinden hedefi okur', () => {
+    const body = buildCouncilPlan(input).content_md;
+    expect(goalFromPlanMarkdown(body)).toBe('Basit bir yapılacaklar listesi');
+    expect(goalFromPlanMarkdown('# plan\n\nhedef satiri yok')).toBe('');
   });
 });

@@ -132,6 +132,17 @@ export function fallbackOrgPlan(): OrgPlan {
   };
 }
 
+/**
+ * Plan gövdesindeki `**Hedef:**` satırı.
+ *
+ * NEDEN VAR: ek müzakere turu ucu projenin gerçek hedefini ATIYOR ve konseyi
+ * yalnız "Kullanıcı Ek Tur Talebi (Odak: ...)" cümlesiyle sıfırdan
+ * koşturuyordu. Bir "ek tur" değil, hedefsiz yeni bir plan üretiyordu.
+ */
+export function goalFromPlanMarkdown(contentMd: string): string {
+  return /^\*\*Hedef:\*\*\s*(.+)$/mu.exec(contentMd)?.[1]?.trim() ?? '';
+}
+
 export function buildCouncilPlan(input: CouncilPlanInput) {
   const finalTurn = input.finalSynthesis ?? input.synthesis;
   // Ayrıştırma hatası YUTULMAZ ama planın yazılmasını da engellemez: görevsiz
