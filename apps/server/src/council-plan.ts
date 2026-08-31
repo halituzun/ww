@@ -54,12 +54,6 @@ const speakerLabel = (turn: CouncilTurnLike, index: number): string => {
   return `Grup Lideri ${index + 1}`;
 };
 
-const section = (title: string, turns: readonly CouncilTurnLike[]): string => [
-  `## ${title}`,
-  '',
-  ...turns.flatMap((turn, index) => [`- **${speakerLabel(turn, index)}**: ${turn.text.trim()}`, '']),
-].join('\n');
-
 const dynamicTranscript = (turns: readonly CouncilTurnLike[], memberModelRefs: readonly string[]): string => {
   if (turns.length === 0) return '';
   return turns.map((turn) => [

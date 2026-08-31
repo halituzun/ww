@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useMemo } from "react";
-import { useToastViewModel, type ToastType, type ToastMessage } from "../viewmodels/useToastViewModel.js";
+import { useToastViewModel, type ToastMessage } from "../viewmodels/useToastViewModel.js";
 
 interface ToastContextType {
   showToast: (toast: Omit<ToastMessage, "id">) => void;

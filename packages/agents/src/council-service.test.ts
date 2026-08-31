@@ -120,3 +120,82 @@ GEREKÇE: Aynı anda mutlak çevrimdışı ve gerçek zamanlı küresel skor sa�
     expect(decisions[0]?.rationale).not.toContain("GEREKÇE:");
   });
 });
+
+// H1 yakınsama ölçümü. NEDEN BU TESTLER: checkConvergence bu dosyada
+// import EDİLİYORDU ama hiç çağrılmıyordu — konseyin "durabilir miyim"
+// kararını veren mantığın sıfır testi vardı ve lint bunu yalnız
+// "kullanılmayan import" olarak gösteriyordu.
+describe("checkConvergence (H1)", () => {
+  const turn = (
+    kind: Parameters<typeof checkConvergence>[0][number]["kind"],
+    text: string,
+    turnNumber = 1,
+  ) => ({
+    memberId: randomUUID() as EntityId,
+    kind,
+    turnNumber,
+    turnTitle: `Tur ${turnNumber}`,
+    text,
+    evidenceRefs: [] as readonly string[],
+  });
+
+  it("nihai sentez yokken yakınsamaz", () => {
+    const result = checkConvergence([turn("proposal", "Basit bir plan önerisi.")], 1);
+    expect(result.converged).toBe(false);
+    expect(result.unresolvedCount).toBeGreaterThan(0);
+    expect(result.reasons.join(" ")).toContain("Nihai sentez");
+  });
+
+  it("itirazsız ve temiz nihai sentezde yakınsar", () => {
+    const result = checkConvergence(
+      [
+        turn("proposal", "Tetris oyunu icin plan.", 1),
+        turn("final_synthesis", "Plan kabul edildi ve tum maddeler karara baglandi.", 2),
+      ],
+      2,
+    );
+    expect(result.converged).toBe(true);
+    expect(result.openObjectionCount).toBe(0);
+    expect(result.needsResearch).toBe(false);
+  });
+
+  it("nihai turda ele alınmayan itirazı açık sayar", () => {
+    const result = checkConvergence(
+      [
+        turn("objection", "Ciddi bir güvenlik zafiyeti var.", 1),
+        turn("final_synthesis", "Renk paleti ve yerlesim onaylandi.", 2),
+      ],
+      2,
+    );
+    expect(result.openObjectionCount).toBe(1);
+    expect(result.converged).toBe(false);
+  });
+
+  it("bilgi eksikliği araştırma turu ister, araştırma yapılınca istemez", () => {
+    const withGap = [
+      turn("proposal", "Kutuphane destegi belirsiz, arastirma gerekiyor.", 1),
+      turn("final_synthesis", "Plan tamam.", 2),
+    ];
+    expect(checkConvergence(withGap, 2).needsResearch).toBe(true);
+
+    const afterResearch = [
+      withGap[0]!,
+      turn("research", "Kutuphane uyumlu, dogrulandi.", 2),
+      turn("final_synthesis", "Plan tamam.", 3),
+    ];
+    const done = checkConvergence(afterResearch, 3);
+    expect(done.needsResearch).toBe(false);
+    // splice(-1,1) korumasi: arastirma gerekcesi yokken son gerekce SİLİNMEZ.
+    expect(done.reasons).not.toContain(undefined);
+  });
+
+  it("brief'teki çevrimdışı/canlı çelişkisi açıkça karara bağlanmazsa çelişki sayar", () => {
+    const result = checkConvergence(
+      [turn("final_synthesis", "Oyun tarayicida calisir.", 1)],
+      1,
+      "Cevrimdisi calisan ve canli skor tablosu olan bir oyun",
+    );
+    expect(result.contradictionCount).toBeGreaterThan(0);
+    expect(result.converged).toBe(false);
+  });
+});

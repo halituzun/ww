@@ -11,7 +11,6 @@ export function TaskDetailDrawer({
   onClose,
   findings = [],
   messages = [],
-  artifacts = [],
   agents = [],
   onSelectFile,
 }: {

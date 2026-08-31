@@ -17,7 +17,6 @@ import {
 import {
   RepositoryConflictError,
   RepositoryNotFoundError,
-  StoredRecordError,
   assertExpectedVersion,
   nextRepositoryVersion,
   readRowsAfterAcknowledgedWrite,

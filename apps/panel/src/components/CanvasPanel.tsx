@@ -5,7 +5,12 @@ import type { Task } from "../services/projects.js";
 import { AgentCanvas } from "./AgentCanvas.js";
 import { TaskCanvas } from "./TaskCanvas.js";
 import { GanttChart } from "./GanttChart.js";
-import { CouncilTranscriptViewer, parseTranscriptFromMarkdown } from "./CouncilTranscriptViewer.js";
+import {
+  CouncilTranscriptViewer,
+  parseTranscriptFromMarkdown,
+  type CouncilRoundData,
+} from "./CouncilTranscriptViewer.js";
+import type { Plan } from "../services/plans.js";
 import { TimelineScrubber } from "./TimelineScrubber.js";
 import { AgentDetail } from "./AgentDetail.js";
 import { ProjectMapPanel } from "./ProjectMapPanel.js";
@@ -20,8 +25,8 @@ export interface CanvasPanelProps {
   readonly projectId: string;
   readonly orgPlan?: OrgPlan | undefined;
   readonly tasks?: readonly Task[] | undefined;
-  readonly transcript?: any[] | undefined;
-  readonly plans?: readonly any[] | undefined;
+  readonly transcript?: readonly CouncilRoundData[] | undefined;
+  readonly plans?: readonly Plan[] | undefined;
   readonly planContentMd?: string | undefined;
   readonly events?: readonly ReplayEvent[] | undefined;
   readonly cursor?: number | undefined;
@@ -32,7 +37,10 @@ export interface CanvasPanelProps {
   readonly onSelectAgent?: ((agentId: string | undefined) => void) | undefined;
 }
 
-export function buildTranscriptFromPlan(plan: any, contentMd?: string): any[] | undefined {
+export function buildTranscriptFromPlan(
+  plan: Plan | undefined,
+  contentMd?: string,
+): readonly CouncilRoundData[] | undefined {
   if (contentMd) {
     const fromMd = parseTranscriptFromMarkdown(contentMd);
     if (fromMd && fromMd.length > 0) return fromMd;

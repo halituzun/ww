@@ -3,7 +3,6 @@ import { describe, it, expect, afterEach } from "vitest";
 import React from "react";
 import { render, screen, cleanup } from "@testing-library/react";
 import { GanttChart } from "./GanttChart.js";
-import { useGanttViewModel } from "../viewmodels/useGanttViewModel.js";
 import type { Task } from "../services/projects.js";
 import type { OrgPlan } from "@ww/shared";
 

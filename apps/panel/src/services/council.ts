@@ -6,6 +6,26 @@ import { getJson, requestJson, type RequestOptions } from './http.js';
  * View'da veri erişimini yasaklar (STD-001) ve tek HTTP katmanı http.ts'tir.
  */
 
+export interface CouncilEntry {
+  readonly speaker: string;
+  readonly role: string;
+  readonly model: string;
+  readonly stance: "proposal" | "objection" | "draft" | "red_team" | "final" | "research" | "debate";
+  readonly text: string;
+}
+
+export interface CouncilRoundData {
+  readonly round: number;
+  readonly title: string;
+  readonly badge: string;
+  readonly summary: string;
+  readonly entries: readonly CouncilEntry[];
+  readonly decision?: string | undefined;
+  readonly dissent?: string | undefined;
+  readonly isResearch?: boolean | undefined;
+  readonly isUncoordinated?: boolean | undefined;
+}
+
 export interface CouncilDecision {
   readonly topic: string;
   readonly decision: 'accepted' | 'rejected' | 'modified';

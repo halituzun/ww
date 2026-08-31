@@ -1,7 +1,7 @@
 import { useMemo } from "react";
 import type { Task } from "../services/projects.js";
 import type { OrgPlan } from "@ww/shared";
-import { taskStatusLabel, cleanRoleName } from "../services/labels.js";
+import { taskStatusLabel } from "../services/labels.js";
 
 export interface GanttTaskItem {
   readonly taskId: string;
@@ -58,7 +58,11 @@ export function useGanttViewModel(tasks: readonly Task[], orgPlan?: OrgPlan): Ga
 
       // Departman tespiti (hedef dosyalara veya sıraya göre)
       let dept = defaultDepts.find((d) =>
-        d.responsibility_patterns?.some((p) => task.title?.toLowerCase().includes("stil") || task.title?.toLowerCase().includes("arayüz"))
+        // KUSUR (Faz B4 ile birlikte ele alınacak): bu yüklem departmanın
+        // responsibility_patterns listesini HİÇ okumuyor; yalnız görev
+        // başlığında sabit iki kelime arıyor. Eşleşme departman tanımına
+        // değil, kelimeye dayanıyor.
+        d.responsibility_patterns?.some(() => task.title?.toLowerCase().includes("stil") || task.title?.toLowerCase().includes("arayüz"))
       );
       if (!dept) {
         dept = defaultDepts[idx % defaultDepts.length] || defaultDepts[0];

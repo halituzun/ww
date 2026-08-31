@@ -1,3 +1,4 @@
+import type { CouncilRoundData } from './council.js';
 import { getJson, requestJson, type RequestOptions } from "./http.js";
 
 export interface Plan {
@@ -7,6 +8,8 @@ export interface Plan {
   readonly content_md: string;
   readonly status: "proposed" | "approved" | "rejected" | "superseded";
   readonly team_json?: unknown;
+  /** Konsey dökümü; sunucu plan gövdesiyle birlikte döndürebilir. */
+  readonly transcript?: readonly CouncilRoundData[] | undefined;
   readonly scenarios_json?: unknown;
   readonly plan_version?: number;
   readonly version?: number;

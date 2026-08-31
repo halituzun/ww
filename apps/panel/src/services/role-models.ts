@@ -43,8 +43,6 @@ export async function saveRoleModel(
     { ...options, method: 'PATCH', body }, 'Rol eşlemesi kaydedilemedi');
 }
 
-const providerOf = (modelRef: string): string => modelRef.split(':')[0] ?? '';
-
 /**
  * Belgelenmiş model-çeşitliliği kurallarını panelde görünür kılar.
  *

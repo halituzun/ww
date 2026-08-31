@@ -140,7 +140,12 @@ export function checkConvergence(
   if (hasResearchTurn) {
     needsResearch = false;
     researchQuery = undefined;
-    reasons.splice(reasons.findIndex(r => r.includes('bilgi eksikliği')), 1);
+    // GİZLİ HATA KORUMASI: findIndex -1 dönerse splice(-1, 1) dizinin SON
+    // elemanını siler. Bugün zararsız (reasons bu noktada en çok bir eleman
+    // taşıyor), ama bu satırdan önce başka bir push eklendiği an sessizce
+    // YANLIŞ gerekçeyi silerdi.
+    const researchReasonIndex = reasons.findIndex((r) => r.includes('bilgi eksikliği'));
+    if (researchReasonIndex !== -1) reasons.splice(researchReasonIndex, 1);
   }
 
   // H1 — Çelişki sayacı: final_synthesis turlarına bak

@@ -1,5 +1,6 @@
 import React from "react";
 import { useCouncilTranscriptViewModel } from "../viewmodels/useCouncilTranscriptViewModel.js";
+import type { CouncilEntry, CouncilRoundData } from "../services/council.js";
 import type { OrgPlan } from "@ww/shared";
 
 function getStoredPid(): string | null {
@@ -10,25 +11,7 @@ function getStoredPid(): string | null {
   }
 }
 
-export interface CouncilEntry {
-  readonly speaker: string;
-  readonly role: string;
-  readonly model: string;
-  readonly stance: "proposal" | "objection" | "draft" | "red_team" | "final" | "research" | "debate";
-  readonly text: string;
-}
-
-export interface CouncilRoundData {
-  readonly round: number;
-  readonly title: string;
-  readonly badge: string;
-  readonly summary: string;
-  readonly entries: readonly CouncilEntry[];
-  readonly decision?: string | undefined;
-  readonly dissent?: string | undefined;
-  readonly isResearch?: boolean | undefined;
-  readonly isUncoordinated?: boolean | undefined;
-}
+export type { CouncilEntry, CouncilRoundData } from "../services/council.js";
 
 export interface DecisionRowData {
   readonly topic: string;
@@ -220,7 +203,6 @@ export function parseTranscriptFromMarkdown(contentMd: string): CouncilRoundData
 
 export function CouncilTranscriptViewer({
   projectId,
-  orgPlan,
   transcript: initialTranscript,
   planContentMd: initialPlanContentMd,
 }: {

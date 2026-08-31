@@ -4,8 +4,6 @@ import {
   Background,
   Controls,
   type ReactFlowProps,
-  type Node,
-  type Edge,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 
@@ -20,7 +18,7 @@ export interface CanvasContainerProps extends Omit<ReactFlowProps, "children"> {
  * - Karanlık tema ayarları merkezidir: koyu ızgara (#1e293b), sağ alt kontroller, filigran gizli.
  * - Tüm tuvaller (Agent Organizasyonu, Görev Akışı, Gantt vb.) bu sarmalayıcıyı kullanır.
  */
-export function CanvasContainer<NodeType extends Node = Node, EdgeType extends Edge = Edge>({
+export function CanvasContainer({
   children,
   className = "",
   style,

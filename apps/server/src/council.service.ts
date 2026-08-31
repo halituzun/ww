@@ -1,6 +1,6 @@
 import { CommunicationWakeupPublisher } from '@ww/db';
 import { randomUUID } from 'node:crypto';
-import { Inject, Injectable, Logger, Optional } from '@nestjs/common';
+import { Inject, Logger, Optional } from '@nestjs/common';
 import {
   CommunicationService,
   CouncilService as CouncilProtocol,
@@ -8,19 +8,19 @@ import {
   type CouncilMember,
   type CouncilTurn,
   type CouncilTurnKind,
+  type ParsedDecisionItem,
+  type ConvergenceCheckResult,
 } from '@ww/agents';
 import {
   createPlan,
   createDecision,
-  listDecisions,
   getLatestProject,
   listLatestAgents,
   listLatestApiProviders,
   listLatestPlansByStatus,
-    type ClickHouseClient,
 } from '@ww/db';
 import { buildProviderRegistry, chUsageSink, Keystore, ModelRouter, ProviderRateLimiter, resolveKeystoreFile } from '@ww/providers';
-import { NIL_UUID, type EntityId, type OrgPlan } from '@ww/shared';
+import { type EntityId, type OrgPlan } from '@ww/shared';
 import { buildAgentCapabilities } from './agent-capabilities.js';
 import { loadRoutingIndex } from './routing.loader.js';
 import { buildCouncilPlan, deriveOrgPlan } from './council-plan.js';
@@ -59,8 +59,8 @@ export interface CouncilRunResult {
   readonly turns: number;
   readonly status?: 'converged' | 'uncoordinated';
   readonly totalRounds?: number;
-  readonly decisions?: readonly any[];
-  readonly convergenceLog?: readonly any[];
+  readonly decisions?: readonly ParsedDecisionItem[];
+  readonly convergenceLog?: readonly ConvergenceCheckResult[];
   readonly orgPlan: OrgPlan;
 }
 
@@ -417,7 +417,7 @@ export class CouncilApplicationService {
 
     const result = await protocol.run(
       { sessionId, members: composition.members, prompt: trimmedGoal },
-      async ({ kind, turnNumber, turnTitle, member, prior }) => {
+      async ({ kind, turnNumber, member, prior }) => {
         if (overrideCompleter !== undefined) {
           const comp = await overrideCompleter({ member, kind, prompt: buildCouncilTurnPrompt(kind, trimmedGoal, prior, roleNameFor(member as CouncilMember, composition.members)) });
           return { text: comp.text, dissenting: kind === 'red_team' };

@@ -1,4 +1,4 @@
-    const plans: any[] = [];
+    const plans: unknown[] = [];
 import { describe, expect, it } from 'vitest';
 import { randomUUID } from 'node:crypto';
 import { buildCouncilTurnPrompt, councilMessageForTurn, CouncilApplicationService } from './council.service.js';
@@ -8,8 +8,8 @@ describe('CouncilApplicationService — 5 Tur ve Org Plan (Faz D)', () => {
   it('5 turluk müzakereyi ve org_plan çıktısını başarıyla üretir', async () => {
     const sentTurns: Array<{ turnNumber: number; kind: string; text: string }> = [];
 
-    const fakeCh: any = {
-      query: async ({ query, query_params }: { query: string; query_params?: any }) => {
+    const fakeCh = {
+      query: async ({ query, query_params }: { query: string; query_params?: Record<string, unknown> }) => {
         if (query.includes('FROM projects')) {
           return { json: async () => [{
             project_id: '00000000-0000-4000-8000-000000000001',
@@ -136,10 +136,10 @@ describe('CouncilApplicationService — 5 Tur ve Org Plan (Faz D)', () => {
         }
         return { json: async () => [] };
       },
-      insert: async ({ values }: any) => {
+      insert: async ({ values }: { values?: readonly unknown[] }) => {
         if (values) plans.push(...values);
       },
-      command: async ({ query_params }: any) => {
+      command: async ({ query_params }: { query_params?: Record<string, unknown> }) => {
         if (query_params) {
           plans.push({
             plan_id: query_params.planId,
@@ -163,12 +163,16 @@ describe('CouncilApplicationService — 5 Tur ve Org Plan (Faz D)', () => {
       },
     };
 
-    const fakeTransport = async (turn: any) => {
+    const fakeTransport = async (turn: { turnNumber: number; kind: string; text: string }) => {
       sentTurns.push({ turnNumber: turn.turnNumber, kind: turn.kind, text: turn.text });
       return { messageId: randomUUID() };
     };
 
-    const service = new CouncilApplicationService({ ch: fakeCh, redis: null as any } as ServerDatabase, fakeTransport);
+    // redis yolu bu testte hiç kullanılmıyor; `as unknown as` ile susturmak
+    // yerine eksikliği açıkça yazıyoruz. Redis'e dokunan bir yol eklenirse
+    // test derlenmeyi bırakmalı ki gap görünür kalsın.
+    const database = { ch: fakeCh } as unknown as ServerDatabase;
+    const service = new CouncilApplicationService(database, fakeTransport);
 
     const result = await service.run('00000000-0000-4000-8000-000000000001', 'Tetris web oyunu geliştir', async ({ kind }) => ({ text: `${kind} gerekçeli müzakere cevabı` }));
 

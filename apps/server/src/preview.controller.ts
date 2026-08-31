@@ -2,7 +2,7 @@
 //
 // Önizleme bu uçlar olmadan projeye bağlanamıyordu: panel sabit bir env
 // değişkenine bakıyor, yoksa about:blank gösteriyordu.
-import { Inject, BadRequestException, Body, Controller, Get, Param, Post, Req } from '@nestjs/common';
+import { Inject, BadRequestException, Controller, Get, Param, Post, Req } from '@nestjs/common';
 import { parseLocalSession, type LocalSessionRequest } from './auth/local-session.js';
 import { PreviewApplicationService, PreviewError } from './preview.service.js';
 

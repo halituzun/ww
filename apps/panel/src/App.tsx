@@ -1,4 +1,5 @@
 import React, { useMemo, useCallback } from "react";
+import type { OrgPlan } from "@ww/shared";
 import { useHealth } from "./viewmodels/useHealth.js";
 import { useWorkspaceViewModel } from "./viewmodels/useWorkspaceViewModel.js";
 import { useRouterViewModel } from "./viewmodels/useRouterViewModel.js";
@@ -115,7 +116,7 @@ function AppContent() {
         const parsedTeam = typeof vm.activePlan?.team_json === "string"
           ? (() => { try { return JSON.parse(vm.activePlan.team_json); } catch { return undefined; } })()
           : vm.activePlan?.team_json;
-        const currentOrgPlan = (parsedTeam as { org_plan?: any } | undefined)?.org_plan;
+        const currentOrgPlan = (parsedTeam as { org_plan?: OrgPlan } | undefined)?.org_plan;
         return (
           <CanvasPanel
             projectId={vm.projectId}

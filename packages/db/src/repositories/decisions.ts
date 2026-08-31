@@ -4,9 +4,6 @@ import { concreteEntityId, storedUuid } from "./identifiers.js";
 import {
   RepositoryNotFoundError,
   StoredRecordError,
-  assertExpectedVersion,
-  nextRepositoryVersion,
-  readRowsAfterAcknowledgedWrite,
   storedDateTime,
   storedEnum,
   storedRecord,

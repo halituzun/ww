@@ -301,5 +301,19 @@ export function reconcileVersionedWrite<T extends VersionedRow>(
   if (observed.length === 0) {
     throw new RepositoryWriteError(`${entity} yazimi yeniden okunamadi`);
   }
+
+  // GERİ ALINDI (2026-08-31): bu fail-closed kontrol commit'lenmemiş bir
+  // değişiklikte SİLİNMİŞTİ; üstündeki yorum ise hâlâ yaptığını söylüyordu.
+  // Kontrol olmadan aynı (kimlik, sürüm) çiftinde FARKLI içerik sessizce
+  // kabul ediliyor — iyimser eşzamanlılığın tek koruması budur ve beş test
+  // (projects, prompts, tasks, types) tam olarak bunu savunuyordu.
+  const expectedHash = canonicalSha256V1(expected);
+  for (const row of observed) {
+    if (canonicalSha256V1(row) !== expectedHash) {
+      throw new RepositoryConflictError(
+        `${entity} ayni kimlik ve surum icin farkli icerik barindiriyor`,
+      );
+    }
+  }
   return expected;
 }

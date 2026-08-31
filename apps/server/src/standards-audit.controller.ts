@@ -2,7 +2,7 @@
 //
 // Denetim bu uç olmadan hiçbir yerden tetiklenemiyordu: bulguları yalnızca
 // elle POST edebiliyordunuz, yani "denetçi" diye bir şey fiilen yoktu.
-import { Inject, BadRequestException, Body, Controller, Get, Param, Post, Req } from '@nestjs/common';
+import { Inject, BadRequestException, Body, Controller, Param, Post, Req } from '@nestjs/common';
 import { z } from 'zod';
 import { parseLocalSession, type LocalSessionRequest } from './auth/local-session.js';
 import { StandardsAuditApplicationService } from './standards-audit.service.js';

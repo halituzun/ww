@@ -25,7 +25,6 @@ function formatTargetName(target: string): string {
 export function PlanApprovalCard({
   plan,
   onApprove,
-  onReject,
   onReplan,
   loading = false,
 }: {

@@ -83,7 +83,7 @@ export function useSettingsViewModel() {
       } else {
         setTokenValidationResult(`Sunucu yanıtı: ${res.status}`);
       }
-    } catch (err) {
+    } catch {
       setTokenValidationResult("Sunucuya ulaşılamadı veya ağ hatası.");
     } finally {
       setValidating(false);
