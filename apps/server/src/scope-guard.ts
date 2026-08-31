@@ -5,7 +5,6 @@
 // yazmaya kalkabiliyordu. Bu guard, her görevin yalnızca kendi planında
 // tanımlı hedef dosyalar üzerinde işlem yapmasını garanti eder.
 
-export class ScopeDriftError extends Error {}
 
 const FORBIDDEN_PREFIXES = ['.git/', '.env', 'node_modules/', '../', '/'];
 

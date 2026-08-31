@@ -60,7 +60,8 @@ packages/
 └── wiring-check/  # "Bağlantısız kod" denetçisi (aşağıya bakın)
 workspace/         # Platformun ürettiği projeler (gitignore'lu; elle dokunmayın)
 docs/              # Mimari dokümanlar (00–13) + KURULUM.md
-scripts/           # gate.sh (tam kapı), audit-self.mjs (öz-denetim)
+scripts/           # gate.sh (tam kapı), audit-self.mjs (öz-denetim),
+                   #   durum.mjs (docs/DURUM.md ölçümlerini üretir)
 ```
 
 **Bağımlılık yönü (döngü yasak; package.json'lardan doğrulanmış):**
@@ -91,8 +92,10 @@ dosya yazmaz (executor kullanır); `packages/db` iş kuralı içermez.
   Paralel koşu: `pnpm test:parallel`.
 - `pnpm lint` — ESLint (`typescript-eslint` recommended).
 - `pnpm gate` (`./scripts/gate.sh`) — **tam kapı**: sızmış test verisi
-  temizliği + build + entegrasyonlu test (`WW_REQUIRE_INTEGRATION=1`) +
-  lint + wiring-check + öz-denetim. Commit/push öncesi tek komut olarak
+  temizliği + build + öz-denetim + wiring-check + durum kaydı + lint +
+  entegrasyonlu test (`WW_REQUIRE_INTEGRATION=1`). Ucuz denetimler ÖNCE
+  koşar: eskiden en sondaydılar ve operatör hatayı görmek için tüm test
+  bedelini ödüyordu. Commit/push öncesi tek komut olarak
   çalıştırın: `pnpm gate && git commit ... && git push`. Kapı adımlarını
   ayrı ayrı koşturmayın — bu depoda kapı düşerken push atılmışlığı vardır.
 - `pnpm wiring:check` — testi olan ama hiçbir üretim kodunun çağırmadığı

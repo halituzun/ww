@@ -118,5 +118,49 @@
   {
     "symbol": "packages/memory/src/memory-service.ts:MemoryService.appendEmbedding",
     "reason": "docs/04 embedding sağlayıcısını tanımlıyor ama HİÇBİR üretim yolu embedding üretmiyor — docs/06'nın semantik geri getirme katmanı fiilen yok. Gerçek boşluk, görünür kılındı."
+  },
+  {
+    "symbol": "apps/panel/src/components/TimelinePanel.tsx:TimelinePanel",
+    "reason": "GERÇEK BOŞLUK: hiçbir sayfa bu component'i render etmiyor; zaman çizelgesi yüzeyi TimelineScrubber üzerinden akıyor. Ya bir sayfaya bağlanmalı ya silinmeli — Faz E5 (testsiz/bağlantısız panel yüzeyleri turu)."
+  },
+  {
+    "symbol": "apps/panel/src/services/plans.ts:rejectPlan",
+    "reason": "GERÇEK BOŞLUK: plan reddi servis katmanında var ama hiçbir View çağırmıyor; PlanApprovalCard yalnız onay ve revizyon sunuyor. Faz B9'da (panel bildirimleri gerçek işlemi söylesin) ele alınacak."
+  },
+  {
+    "symbol": "apps/server/src/agent-bootstrap.ts:buildAgentsFromOrgPlan",
+    "reason": "GERÇEK BOŞLUK: konseyin org planından agent kadrosu üretiliyor ama üretim yolu hâlâ sabit BOOTSTRAP_AGENTS kullanıyor; group_lead ve professor rolleri bu yüzden hiç doğmuyor ve docs/13 tırmandırma zinciri erişilemez kalıyor. Faz B3'te bağlanacak."
+  },
+  {
+    "symbol": "apps/server/src/budget-limit.ts:checkTaskTokenBudget",
+    "reason": "GERÇEK BOŞLUK ve MUHTEMEL FAZLALIK: token freni zaten packages/scheduler/brake-ports üzerinden sumTaskTokensSpent ile bağlı. Bu, commit 9ebf0a5'te eklenen İKİNCİ ve ölü kopya. Faz C'de ya tek frene indirgenecek ya silinecek."
+  },
+  {
+    "symbol": "apps/server/src/recovery-sweeper.ts:identifyStuckAgents",
+    "reason": "GERÇEK BOŞLUK: asılı agent tespiti yazıldı ama süpürücü yalnız RecoveryService.recoverProject koşuyor. Ayrıca okuduğu status_changed_at alanı AgentRow şemasında yok (yalnız canvas projeksiyon tipinde). Faz C2 (durum gerçeği) ile birlikte ele alınacak."
+  },
+  {
+    "symbol": "apps/server/src/scope-guard.ts:validateTaskScope",
+    "reason": "GERÇEK BOŞLUK: görev kapsam sapması denetimi commit 9ebf0a5'te testiyle eklendi, üretim çağrısı hiç yazılmadı. Faz C'de worker döngüsüne bağlanacak."
+  },
+  {
+    "symbol": "apps/server/src/workspace-sweeper.ts:sweepWorkspaces",
+    "reason": "GERÇEK BOŞLUK: workspace süpürücü servisi yazıldı ama zamanlanmış bir çağrısı yok. Faz C'de periyodik göreve bağlanacak."
+  },
+  {
+    "symbol": "packages/agents/src/interview-service.ts:MAX_INTERVIEW_QUESTIONS",
+    "reason": "GERÇEK BOŞLUK: sihirbaz hâlâ üç SABİT soru soruyor; soru sayısı sınırı ve kalite doğrulaması devrede değil. Faz B1'de (sihirbaz -> konsey bağı) bağlanacak."
+  },
+  {
+    "symbol": "packages/agents/src/interview-service.ts:validateQuestionQuality",
+    "reason": "GERÇEK BOŞLUK: aynı sebep — sihirbazın soru kalitesi doğrulaması üretim yolunda çağrılmıyor. Faz B1."
+  },
+  {
+    "symbol": "packages/db/src/repositories/decisions.ts:getDecision",
+    "reason": "GERÇEK BOŞLUK: karar defteri tekil okuma ucu yazıldı; panel ve API yalnız listDecisions kullanıyor. Tekil karar detayı yüzeyi Faz B'de açılacak."
+  },
+  {
+    "symbol": "packages/db/src/repositories/project-maps.ts:getLatestProjectMapSnapshot",
+    "reason": "GERÇEK BOŞLUK ve TASARIM GEREĞİ: üretim yolu bilinçli olarak as-of varyantını (getLatestProjectMapSnapshotAsOf) kullanıyor; mühürlü brief cutoff'undan sonraki harita bağlama sızmasın diye. Cutoff'suz varyantın üretimde yeri olup olmadığı Faz D'de karara bağlanacak."
   }
 ]

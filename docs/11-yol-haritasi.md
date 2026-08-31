@@ -30,34 +30,21 @@
 - Bir faz, **belgelenmiş kabul senaryosu geçmeden** "tamamlandı" işaretlenmez.
   Atlanan entegrasyon testi kapı sayılmaz.
 
-## Durum Özeti (2026-08-18 doğrulaması)
+## Durum Özeti
 
-> **Faz 4-6'yı kapatan tek şey artık kod değildir.** Kabul senaryoları dış
-> girdi bekliyor: Chrome eklentisi bağlı değil, Android SDK kurulu değil.
-> Bu girdiler geldiğinde koşulacak adımlar her fazın kendi bölümünde tabloyla
-> yazılıdır.
+> **Güncel durum burada tutulmaz.** Tek kayıt: **[docs/DURUM.md](DURUM.md)**
+> (ölçümler üretilir, bayatlarsa kapı düşer). Aşağıdaki tablo fazların
+> DAYANAĞINI gösterir; "şu an ne durumdayız" sorusunun cevabı DURUM.md'dedir.
 >
-> **Not (2026-08-21):** OpenAI ve Mistral sağlayıcıları kaydedildi ve canlı
-> doğrulandı. Mistral bakiyeli ve çalışıyor: "hello modülü yaz" görevi
-> Mistral ile `done` + gerçek commit (`85dd01e`) üretti; worker/verifier/
-> summarizer rolleri `mistral:mistral-large-latest`'e yönlendirildi (yedek:
-> deepseek, openai). OpenAI (`429 credit_balance_exhausted`) ve DeepSeek
-> (`402`) anahtarları geçerli ama **bakiyesiz** — yüklenince fallback
-> zinciri onları kendiliğinden kullanır. Konseyin ≥3 sağlayıcı gereği için
-> hâlâ en az iki bakiyeli sağlayıcı daha gerekli (şu an tek çalışan Mistral).
-> Bu koşu iki kusuru da kapattı: boş `base_url`'lu sağlayıcı "taklit"
-> sanılıp hiç ping'lenmiyordu (açık baseUrl zorunlu) ve `WW_WORKSPACE_ROOT`
-> fallback'i cwd'ye bağlıydı — üretim çıktısı `apps/server/workspace`'e
-> sızıyordu; `resolveWorkspaceBase()` ile düzeltildi.
->
-> **Not (2026-08-20):** `api_usage`'daki `no_key` hatalarının kök nedeni
-> bulundu ve düzeltildi: anahtar kaybolmamıştı; server `.env` yüklü olmayan
-> bir shell'den başlatıldığında cwd'ye bağlı keystore yolu yanlış çözülüyor
-> ve `keystore.readAll()` her okuma hatasını sessizce "boş depo" sayıyordu.
-> Artık yalnızca `ENOENT` boş sayılır, sağlık tarayıcısı çözülen tam yolu
-> log'lar ve Keychain geçici hatasında ana anahtarın üstüne yazılmaz. Anahtar
-> yeniden girildiğinde server'ı `set -a; source .env; set +a; pnpm dev` ile
-> başlatın.
+> NEDEN: bu bölüm 2026-08-18 tarihli bir doğrulamayı 2026-08-31'e kadar
+> "güncel" diye taşıdı ve o sırada dört günlük iş henüz commit'lenmemişti.
+
+**Faz 4 hakkında düzeltme (2026-08-31 taraması):** bu bölüm uzun süre
+"kalan tek engel konseyin ≥3 sağlayıcı gereği" dedi. Ölçüm bunun eksik
+olduğunu gösterdi — kod tarafında da kopukluklar var: sihirbaz ile konsey
+arasında bağ yok, plan onayı görev üretmiyor, `org_plan` agent kadrosuna
+dönüşmüyor, PM döngüsü ölü kod ve gelen kutusu üretimde tüketilmiyor.
+Liste ve kanıtlar `docs/DURUM.md` → "Bilinen Kopukluklar".
 
 | Faz | Durum | Dayanak |
 |---|---|---|

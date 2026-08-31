@@ -49,50 +49,17 @@ checkpoint oluştur ve push edilmemiş commit bırakma nedenini açıkça yaz.
 
 ## Mevcut Devir Noktası
 
-> Bu bölüm her oturum sonunda güncellenmelidir. Güncellenmezse sonraki ajan yanlış
-> yerden başlar — 2026-08-12 → 2026-08-16 arasında tam olarak bu oldu: Codex 72
-> commit ekledi, bu bölüm "sıradaki iş Faz 1" demeye devam etti.
+> **Buranın kendi kopyası YOKTUR.** Güncel durum tek yerde tutulur:
+> **[docs/DURUM.md](DURUM.md)** — ölçümler `node scripts/durum.mjs` ile
+> üretilir, kapı bayatlarsa düşer.
+>
+> NEDEN: bu bölüm elle tutuluyordu ve iki kez bayatladı. 2026-08-12 → 08-16
+> arasında Codex 72 commit ekledi, bölüm "sıradaki iş Faz 1" demeye devam
+> etti; 2026-08-21 → 08-31 arasında ise "remote ile senkron" derken dal 29
+> commit öndeydi ve dört günlük iş hiç commit'lenmemişti. Elle tutulan durum
+> bayatlar; bu yüzden artık üretiliyor.
 
-**Son doğrulama: 2026-08-21, dal `agent/agent-communication-contract`
-(remote ile senkron).**
-
-- **Kapı durumu:** `pnpm gate` (temizlik + build + entegrasyonlu test + lint +
-  wiring-check + öz-denetim) yeşil (2047+3 yeni test). Çalışma ağacı temiz,
-  uzak dal güncel.
-- **Sağlayıcılar (2026-08-21):** `mistral` bakiyeli ve **çalışıyor** (sağlık
-  `ok`); `openai` ve `deepseek` anahtarları geçerli ama bakiyesiz (429/402).
-  Roller mistral'e yönlendirildi; mistral için fiyat satırı eklendi.
-  Mistral ile canlı görev koşusu başarılı (`mistral-entegrasyon-2` projesi,
-  commit `85dd01e`). Konsey ≥3 sağlayıcı gereği hâlâ açık: bakiye yüklenince
-  ya da yeni sağlayıcı gelince Faz 4 kapanış koşusu yapılabilir.
-- **Faz durumu:** Faz 0-3 tamamlandı ✅. Faz 4-6 kod tamam; kapanış dış girdi
-  bekliyor: konsey için bakiyeli 2. ve 3. sağlayıcı (Faz 4), Chrome
-  eklentisiyle gözle izleme (Faz 5), üç gerçek proje koşusu + Android SDK
-  (Faz 6). Ayrıntı ve kanıt tabloları `docs/11-yol-haritasi.md`.
-- **Gerçek API:** Platform 2026-08-17 akşamından beri gerçek LLM API'siyle
-  çalışıyor; orkestrasyon runtime'ı açılışta başlıyor, görevler gerçek
-  commit'ler üretti (`api_usage`'da 1000+ `ok` çağrı). DeepSeek bakiyesi
-  2026-08-18'de bitti (`402`); o zamandan beri canlı koşu yok.
-- **`no_key` olayı (2026-08-19/20, çözüldü):** Sağlık ping'leri `no_key`'e
-  dönmüştü; kök neden anahtar kaybı değil, server'ın `.env` yüklü olmayan
-  shell'den `apps/server` cwd'siyle başlaması ve `keystore.readAll()`'ın her
-  okuma hatasını sessizce "boş depo" saymasıydı. Sertleştirme: yalnız
-  `ENOENT` boş sayılıyor, Keychain geçici hatasında ana anahtarın üstüne
-  yazılmıyor, keystore yolu `resolveKeystoreFile()` ile workspace kökünden
-  çözülüyor (cwd bağımsız), `no_key`'de tam yol log'lanıyor ve açılışta
-  keystore öz-denetimi çalışıyor. Ayrıntı: `docs/04-model-katmani.md` →
-  Anahtar Güvenliği.
-- **Bu oturumda ayrıca:** Mühürlü brief bağlamının ve nedensel mesajların
-  prompt snapshot'ına bağlanması tamamlandı (önceden Context Builder
-  çalışıyor ama çıktısı modele ulaşmıyordu); brief politikası standart ve
-  gereksinim bilgi kimliklerini taşıyor; standart bilgi tohumlama
-  optimistic concurrency ile yazıyor. Hepsi scoped commit'lerle push'landı.
-- **Sıradaki iş:** Sağlayıcı anahtarları geldiğinde Faz 4 kapanış koşusu
-  (sıralama `docs/11-yol-haritasi.md` Durum Özeti'nde). Anahtar girerken
-  dikkat: `.env`'deki `WW_MASTER_KEY` ile Keychain'deki `ww-master` anahtarı
-  FARKLI — server'ı `WW_MASTER_KEY` yüklü başlatın ya da tek kaynağa karar
-  verin; aksi halde mevcut `keys.json` çözülemez (artık sessiz değil,
-  açılışta görünür).
+Dal konumunu her oturumun başında `git status -sb` ile okuyun.
 
 ### 2026-08-17 gecesinde yapılanlar (21 commit)
 

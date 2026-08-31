@@ -42,7 +42,6 @@ export function decideBudgetLimit(value: unknown, spentUsd: number): BudgetLimit
 }
 
 export const DEFAULT_TASK_TOKEN_BUDGET = 32_000;
-export const MAX_TASK_TOKEN_BUDGET = 128_000;
 
 export interface TokenBudgetCheck {
   readonly allowed: boolean;
