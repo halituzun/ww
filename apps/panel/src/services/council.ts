@@ -46,6 +46,29 @@ export function fetchCouncilDecisions(
   );
 }
 
+/**
+ * Konsey oturumunu başlatır ve plan üretir.
+ *
+ * NEDEN VAR: panelde `POST /projects/:id/council` çağıran HİÇBİR fonksiyon
+ * yoktu; konsey yalnız `curl` ile başlatılabiliyordu. docs/11 Faz 4'ün
+ * "sihirbazdan girilir -> konsey planlar" zinciri bu yüzden uçtan uca
+ * yürümüyordu.
+ *
+ * Uzun sürer (turlar gerçek model çağrısıdır); çağıran taraf ilerlemeyi
+ * göstermelidir.
+ */
+export function runCouncil(
+  projectId: string,
+  goal: string,
+  options: RequestOptions = {},
+): Promise<unknown> {
+  return requestJson<unknown>(
+    `/projects/${projectId}/council`,
+    { ...options, method: 'POST', body: { goal } },
+    'Konsey oturumu başlatılamadı',
+  );
+}
+
 /** Odaklı ek müzakere turu açar. */
 export function requestCouncilRound(
   projectId: string,

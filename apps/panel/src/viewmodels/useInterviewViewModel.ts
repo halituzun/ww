@@ -5,21 +5,35 @@ import {
   submitInterview,
   type InterviewQuestion,
 } from '../services/interview.js';
+import { runCouncil } from '../services/council.js';
+
+/**
+ * Sihirbazdan sonra konseyin durumu.
+ *
+ * NEDEN görünür bir durum: konsey turları gerçek model çağrısıdır ve
+ * dakikalar sürer. Sessizce beklemek, kullanıcıya "hiçbir şey olmadı" gibi
+ * görünür — bu deponun tekrar eden kusur sınıfı.
+ */
+export type CouncilState = 'idle' | 'running' | 'done' | 'error';
 
 export interface InterviewPorts {
   loadQuestions?: typeof fetchInterviewQuestions;
   submit?: typeof submitInterview;
+  startCouncil?: typeof runCouncil;
 }
 
 export function useInterviewViewModel(projectId: string, ports: InterviewPorts = {}) {
   const load = ports.loadQuestions ?? fetchInterviewQuestions;
   const send = ports.submit ?? submitInterview;
+  const council = ports.startCouncil ?? runCouncil;
 
   const [questions, setQuestions] = useState<InterviewQuestion[]>([]);
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  const [councilState, setCouncilState] = useState<CouncilState>('idle');
+  const [councilError, setCouncilError] = useState('');
 
   useEffect(() => {
     if (!projectId) { setQuestions([]); setSaved(false); return; }
@@ -45,21 +59,42 @@ export function useInterviewViewModel(projectId: string, ports: InterviewPorts =
     }
     setBusy(true);
     setError('');
+    let requirement = '';
     try {
-      await send(projectId, answers);
+      const outcome = await send(projectId, answers);
+      requirement = outcome.requirement;
       setSaved(true);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'Gereksinimler kaydedilemedi');
+      return;
     } finally {
       setBusy(false);
     }
-  }, [projectId, questions, answers, send]);
+
+    // ZİNCİRİN BAĞLANDIĞI YER: gereksinim yazıldıktan sonra konsey KENDİLİĞİNDEN
+    // koşar. Önceden burada hiçbir şey yoktu; gereksinim knowledge'a yazılıp
+    // kalıyor, plan ancak elle `curl` ile üretilebiliyordu.
+    //
+    // Konsey hatası gereksinimin kaydedildiği gerçeğini geçersiz kılmaz; bu
+    // yüzden ayrı bir durumda raporlanır.
+    setCouncilState('running');
+    setCouncilError('');
+    try {
+      await council(projectId, requirement);
+      setCouncilState('done');
+    } catch (reason) {
+      setCouncilState('error');
+      setCouncilError(reason instanceof Error ? reason.message : 'Konsey oturumu başlatılamadı');
+    }
+  }, [projectId, questions, answers, send, council]);
 
   return {
     questions,
     saved,
     error,
     busy,
+    councilState,
+    councilError,
     answerFor: (id: string) => answers[id] ?? '',
     setAnswer: (id: string, value: string) =>
       setAnswers((current) => ({ ...current, [id]: value })),

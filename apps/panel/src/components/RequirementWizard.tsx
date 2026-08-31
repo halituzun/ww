@@ -7,8 +7,10 @@
 import { useInterviewViewModel } from '../viewmodels/useInterviewViewModel.js';
 
 export function RequirementWizard({ projectId }: { readonly projectId: string }) {
-  const { questions, saved, error, busy, answerFor, setAnswer, submit } =
-    useInterviewViewModel(projectId);
+  const {
+    questions, saved, error, busy, councilState, councilError,
+    answerFor, setAnswer, submit,
+  } = useInterviewViewModel(projectId);
 
   if (projectId === '') {
     return <p className="hint">Gereksinim toplamak için önce bir proje seçin.</p>;
@@ -24,6 +26,20 @@ export function RequirementWizard({ projectId }: { readonly projectId: string })
       {error !== '' ? <p className="wizard__error">{error}</p> : null}
       {/* Kaydedildiği söylenmezse kullanıcı aynı cevapları tekrar yazar. */}
       {saved ? <p className="hint">Gereksinimler kaydedildi.</p> : null}
+
+      {/* Konsey durumu GÖRÜNÜR olmalı: turlar gerçek model çağrısıdır ve
+          dakikalar sürer; sessiz bekleme "hiçbir şey olmadı" gibi görünür. */}
+      {councilState === 'running' ? (
+        <p className="hint" role="status">Konsey müzakeresi başladı; plan üretiliyor…</p>
+      ) : null}
+      {councilState === 'done' ? (
+        <p className="hint" role="status">Konsey planı hazır. Onay için Genel Bakış ekranına geçin.</p>
+      ) : null}
+      {councilState === 'error' ? (
+        <p className="wizard__error" role="alert">
+          Gereksinimler kaydedildi ama konsey başlatılamadı: {councilError}
+        </p>
+      ) : null}
 
       {questions.length === 0 ? <p className="hint">Soru yok.</p> : (
         <ul className="wizard__list">
