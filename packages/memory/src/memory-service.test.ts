@@ -97,4 +97,44 @@ describe('fihrist ilişkilerini birleştirme', () => {
   it('gecersiz siniri fail-closed reddeder', () => {
     expect(() => mergeFileRelations([], [], 0)).toThrow(/sinir/);
   });
+
+// ÇEKİRDEK REZERVASYONU (docs/06 1. katman "HER ZAMAN").
+//
+// Eskiden seçim tek bir skor sıralamasıydı: çekirdek yığınların skoru SABİT
+// (plan 4, görev 4, gereksinim 3, standart 2), anahtar kelime eşleşmelerinin
+// skoru ise ham terim SAYIMI ve sınırsız. "renk" kelimesini dokuz kez içeren
+// bir dosya özeti 9 puan alıp planı bütçeden ATABİLİYORDU — sessizce.
+describe('sabit çekirdek rezervasyonu', () => {
+  const chunk = (over: Partial<Parameters<typeof selectMemoryChunks>[0][number]> & { sourceId: string }) => ({
+    sourceTable: 'knowledge' as const,
+    sourceId: over.sourceId as never,
+    text: over.text ?? 'metin',
+    label: over.label ?? `[${over.sourceId}]`,
+    score: over.score ?? 1,
+    ...(over.required === undefined ? {} : { required: over.required }),
+  });
+
+  it('yuksek skorlu gurultu cekirdegi disari itemez', () => {
+    const gurultu = chunk({ sourceId: 'noise', score: 99, text: 'x '.repeat(40) });
+    const plan = chunk({ sourceId: 'plan', score: 4, required: true, text: 'plan '.repeat(20) });
+
+    const result = selectMemoryChunks([gurultu, plan], 40);
+    expect(result.chunks.map((c) => c.sourceId)).toContain('plan');
+    expect(result.droppedRequired).toEqual([]);
+  });
+
+  it('cekirdek bile sigmazsa SESSIZ kalmaz', () => {
+    const kocaman = chunk({ sourceId: 'plan', score: 4, required: true, text: 'kelime '.repeat(500), label: '[plan]' });
+    const result = selectMemoryChunks([kocaman], 10);
+    expect(result.chunks).toHaveLength(0);
+    expect(result.droppedRequired).toEqual(['[plan]']);
+  });
+
+  it('cekirdekten sonra kalan yeri opsiyoneller alir', () => {
+    const plan = chunk({ sourceId: 'plan', score: 4, required: true, text: 'plan' });
+    const ek = chunk({ sourceId: 'ek', score: 9, text: 'ek' });
+    const result = selectMemoryChunks([ek, plan], 100);
+    expect(result.chunks.map((c) => c.sourceId).sort()).toEqual(['ek', 'plan']);
+  });
+});
 });

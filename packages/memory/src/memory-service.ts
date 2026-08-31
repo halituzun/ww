@@ -13,10 +13,23 @@ export interface MemoryChunk {
   readonly text: string;
   readonly label: string;
   readonly score: number;
+  /**
+   * docs/06 1. katman "Sabit çekirdek (HER ZAMAN)": plan, görev, standartlar,
+   * gereksinimler ve hedef dosyalar.
+   *
+   * NEDEN VAR: seçim tek bir skor sıralamasıydı ve rezervasyon yoktu. Çekirdek
+   * yığınların skoru SABİT (plan 4, görev 4, gereksinim 3, standart 2), oysa
+   * anahtar kelime eşleşmelerinin skoru ham terim SAYIMIDIR ve sınırsızdır —
+   * "renk" kelimesini dokuz kez içeren bir dosya özeti 9 puan alır. Yani
+   * gürültü, sözleşmenin parçası olan planı bütçeden ATABİLİYORDU ve bu
+   * sessizce oluyordu.
+   */
+  readonly required?: boolean;
 }
 
 export interface ContextPack {
   readonly contextPackId: EntityId;
+  readonly droppedRequired?: readonly string[];
   readonly cutoffAt: string;
   readonly estimatedTokens: number;
   readonly chunks: readonly MemoryChunk[];
@@ -93,6 +106,9 @@ function knowledgeChunk(row: KnowledgeRow, score: number): MemoryChunk {
     text: `${row.title}\n${row.content}`,
     label: `[knowledge:${row.kind} #${row.knowledge_id}]`,
     score,
+    // docs/06 1. katman: gereksinimler ve standartlar sabit çekirdektir.
+    // 'decision' kaydı bağlamı zenginleştirir ama sözleşmenin parçası değildir.
+    required: row.kind === 'requirement' || row.kind === 'standard',
   });
 }
 
@@ -223,24 +239,55 @@ export function mergeFileRelations(
   return Object.freeze(merged.slice(Math.max(0, merged.length - limit)));
 }
 
+export interface ChunkSelection {
+  readonly chunks: readonly MemoryChunk[];
+  readonly estimatedTokens: number;
+  /**
+   * Bütçeye SIĞMAYAN çekirdek yığınların etiketleri. Boş olmayan bir liste,
+   * modelin sözleşmenin bir parçasını görmediği anlamına gelir; çağıran taraf
+   * bunu görünür kılmalıdır — sessizce düşürmek eski davranıştı.
+   */
+  readonly droppedRequired: readonly string[];
+}
+
 export function selectMemoryChunks(
   chunks: readonly MemoryChunk[],
   tokenBudget: number,
-): { readonly chunks: readonly MemoryChunk[]; readonly estimatedTokens: number } {
+): ChunkSelection {
   if (!Number.isSafeInteger(tokenBudget) || tokenBudget < 1 || tokenBudget > MAX_TOKEN_BUDGET) throw new Error('context token budget gecersiz');
+
+  const byPriority = (left: MemoryChunk, right: MemoryChunk): number =>
+    right.score - left.score || left.sourceId.localeCompare(right.sourceId);
+  const ordered = chunks.slice().sort(byPriority);
+
   const seen = new Set<string>();
   const selected: MemoryChunk[] = [];
+  const droppedRequired: string[] = [];
   let used = 0;
-  for (const chunk of chunks.slice().sort((left, right) => right.score - left.score || left.sourceId.localeCompare(right.sourceId))) {
+
+  const admit = (chunk: MemoryChunk): boolean => {
     const key = `${chunk.sourceTable}:${chunk.sourceId}:${chunk.text}`;
-    if (seen.has(key)) continue;
+    if (seen.has(key)) return true;
     const tokens = estimateTokens(chunk.text);
-    if (used + tokens > tokenBudget) continue;
+    if (used + tokens > tokenBudget) return false;
     seen.add(key);
     used += tokens;
     selected.push(Object.freeze(chunk));
+    return true;
+  };
+
+  // ÇEKİRDEK ÖNCE: sözleşmenin parçası olan yığınlar bütçeyi ilk alır.
+  for (const chunk of ordered.filter((item) => item.required === true)) {
+    if (!admit(chunk)) droppedRequired.push(chunk.label);
   }
-  return Object.freeze({ chunks: Object.freeze(selected), estimatedTokens: used });
+  // Kalan yer anahtar kelime eşleşmelerine ve taze gelişmelere kalır.
+  for (const chunk of ordered.filter((item) => item.required !== true)) admit(chunk);
+
+  return Object.freeze({
+    chunks: Object.freeze(selected),
+    estimatedTokens: used,
+    droppedRequired: Object.freeze(droppedRequired),
+  });
 }
 
 /**
@@ -331,6 +378,7 @@ export class MemoryService {
       text: `${plan.title}\n${plan.content_md}`,
       label: `[plan:${plan.plan_version} #${plan.plan_id}]`,
       score: 4,
+      required: true,
     })];
     const taskText = `${task.title}\n${task.description}\nKabul: ${task.acceptance_criteria.join('; ')}`;
     // Hedef dosyalar mühürlü görev sözleşmesinin parçasıdır; açıkça
@@ -353,6 +401,8 @@ export class MemoryService {
         text: `${row.file_path}\n${row.summary}`,
         label: `[file:${row.file_path}]`,
         score: 3,
+        // Hedef dosyalar mühürlü görev sözleşmesinin parçasıdır.
+        required: true,
       }));
     const requiredKinds = new Set(input.knowledgeKinds ?? ['requirement', 'standard', 'decision']);
     const knowledge = (await listLatestKnowledgeByStatusAsOf(this.#ch, input.projectId, 'active', cutoffAt))
@@ -408,7 +458,7 @@ export class MemoryService {
     })];
     const chunks = [
       ...planChunk,
-      { sourceTable: 'summaries' as const, sourceId: input.taskId, text: taskText, label: `[task #${input.taskId}]`, score: 4 },
+      { sourceTable: 'summaries' as const, sourceId: input.taskId, text: taskText, label: `[task #${input.taskId}]`, score: 4, required: true },
       ...knowledge,
       ...targetFileChunks,
       ...projectMapChunks,
@@ -423,6 +473,9 @@ export class MemoryService {
       cutoffAt,
       estimatedTokens: selected.estimatedTokens,
       chunks: selected.chunks,
+      // Bütçeye sığmayan ÇEKİRDEK yığınlar görünür kalır: modelin
+      // sözleşmenin bir parçasını görmediğini bilmek gerekir.
+      droppedRequired: selected.droppedRequired,
     });
   }
 

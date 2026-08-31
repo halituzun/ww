@@ -57,6 +57,34 @@ export interface AssemblyResult {
   bindLate(services: LateBoundServices): void;
 }
 
+/**
+ * Bağlam olayını `events`'e yazar. Yutulan hata, olmayan bir bağlamı varmış
+ * gibi gösterir; bu depoda tekrar eden en pahalı kusur sınıfı budur.
+ */
+async function recordContextIncident(
+  ch: ClickHouseClient,
+  scope: Readonly<{ projectId: string; taskId: string }>,
+  kind: 'pack_failed' | 'core_dropped',
+  detail: string,
+): Promise<void> {
+  try {
+    await appendEvent(ch, {
+      event_id: randomUUID(),
+      seq: '0',
+      project_id: scope.projectId,
+      task_id: scope.taskId,
+      agent_id: null,
+      event_type: 'error',
+      tool_name: '',
+      payload: { phase: 'context', reason: kind, detail },
+      duration_ms: 0,
+      created_at: new Date().toISOString(),
+    } as never);
+  } catch (writeError) {
+    console.warn(`[ww] bağlam olayı yazılamadı: ${String(writeError)}`);
+  }
+}
+
 export async function createOrchestrationComposition(
   input: AssemblyInput,
 ): Promise<AssemblyResult> {
@@ -408,11 +436,22 @@ export async function createOrchestrationComposition(
             tokenBudget: contextTokenBudget(scope.tokenBudget, 'worker'),
             ...(scope.goal === undefined ? {} : { query: scope.goal }),
           });
+          // ÇEKİRDEK DÜŞTÜYSE GÖRÜNÜR OLSUN: modelin, mühürlü sözleşmenin bir
+          // parçasını görmediği bilinmelidir (docs/06 1. katman "HER ZAMAN").
+          const dropped = (pack as { droppedRequired?: readonly string[] }).droppedRequired ?? [];
+          if (dropped.length > 0) {
+            await recordContextIncident(input.ch, scope, 'core_dropped', dropped.join(', '));
+          }
           return renderContextPack(pack.chunks as never);
         } catch (reason) {
-          // Bağlam kurulamazsa iş DURMAZ ama sessiz de kalmaz: bağlamsız
-          // çalışan agent daha kötü sonuç üretir, bunu bilmek gerekir.
-          console.warn(`[ww] bağlam paketi kurulamadı: ${String(reason)}`);
+          // Bağlam kurulamazsa iş DURMAZ ama SESSİZ de kalmaz. Eskiden yalnız
+          // console.warn vardı: bağlamsız koşu ile bağlamlı koşu ClickHouse'ta
+          // AYIRT EDİLEMİYORDU — olay yok, denetim bulgusu yok, snapshot'ta
+          // alan yok. Yani "bağlam vardı" varsayımı hiçbir yerde
+          // yanlışlanamıyordu.
+          const detail = reason instanceof Error ? `${reason.name}: ${reason.message}` : String(reason);
+          console.warn(`[ww] bağlam paketi kurulamadı: ${detail}`);
+          await recordContextIncident(input.ch, scope, 'pack_failed', detail);
           return '';
         }
       },

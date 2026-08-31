@@ -20,9 +20,9 @@
 | Ölçüm | Değer |
 |---|---|
 | Paket sayısı | 8 paket + 2 uygulama |
-| Üretim kaynağı | 411 dosya, 57.761 satır |
+| Üretim kaynağı | 411 dosya, 57.853 satır |
 | Test dosyası | 298 |
-| Test durumu (`it(` sayımı) | 2050 |
+| Test durumu (`it(` sayımı) | 2053 |
 | Servis gerektirdiği için atlanabilen test dosyası | 48 (`skipIf`) |
 | Colocation ile testsiz kaynak dosya | 141 / 411 |
 | ClickHouse migration | 12 |
